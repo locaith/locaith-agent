@@ -1,0 +1,50 @@
+name: Publish VS Code extension
+
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: read
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.release.tag_name }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Find the VSIX for this release
+        id: package
+        shell: bash
+        env:
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+        run: |
+          version="${RELEASE_TAG#v}"
+          if [[ ! "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "Release tag must be v<major>.<minor>.<patch> or <major>.<minor>.<patch>." >&2
+            exit 1
+          fi
+
+          vsix="releases/locaith-agent-${version}.vsix"
+          if [[ ! -f "$vsix" ]]; then
+            echo "Missing VSIX at $vsix. Add the versioned package to the release tag first." >&2
+            exit 1
+          fi
+
+          printf 'vsix=%s\n' "$vsix" >> "$GITHUB_OUTPUT"
+
+      - name: Publish with Marketplace Trusted Publishing
+        run: >-
+          npx --yes @vscode/vsce@4.1.0 publish
+          --packagePath "${{ steps.package.outputs.vsix }}"
+          --oidc
+          --skip-license
