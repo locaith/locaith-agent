@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.5.1 - 2026-11-03
+
+Fixes and additions on top of 0.5.0. **0.5.0 as first published did not yet contain "send while the assistant works"; it is in 0.5.1.**
+
+- **Older conversations shown completely.** The history list only showed conversations created in the current workspace folder; it now also lists those from other folders (group "From other folders"). A conversation whose displayed transcript had lost older turns (the model history was intact) is rebuilt from the model history when opened, and the original file is kept next to it as `<id>.healbak.json`. "Back up all" now includes every folder. The root cause of the lost turns was not found.
+- **Images.** Click a pasted image in the input box, or an image in a sent message, to view it full size. Sent messages keep a small thumbnail; the full image is fetched from the history (not available once context was compacted).
+- **MCP connections** (Market → MCP): a catalogue of 35 services (3 marked "not supported yet" because they do not allow automatic OAuth registration or use legacy SSE), one-click OAuth sign-in following the MCP authorization spec (discovery, automatic client registration, PKCE S256, token refresh), "Add by URL", GitHub through the VS Code GitHub account or a personal token (stored in SecretStorage, never in settings). Server-provided instructions are added to the system prompt.
+- **Bio-Memory-Locaith** (Bio-Agent OS) as an MCP server: installs into its own Python environment (`~/.locaith/bio-memory`), ONE data store shared by every conversation and VS Code window. Read-only tools (`recall`, `list_rules`, `memory_status`) run without prompts; `store_memory` still asks. Before a context compaction its summary is saved to the memory. The Anthropic `memory` server is now labelled as such.
+- **Plugin market**: the official Anthropic marketplace (hundreds of plugins) — Install downloads a plugin into `~/.locaith/plugins` (off until enabled); `${CLAUDE_PLUGIN_ROOT}` is expanded. Skills, agents, commands and MCP are used; hooks and LSP are not.
+- **Swarm** reasoning level (after Max; `/thinking swarm`): max reasoning + the `workflow_run` tool always available + instructions to fan work out to many sub-agents and cross-check. Defaults 300 agents / 16 at a time / 5M tokens (hard caps 1,000 / 16 / 20M); every run still needs your approval.
+- **Chrome bridge**: control pages in your real Chrome through the Locaith extension for Chrome 0.4.2 — pairing code, local-only server (127.0.0.1), per-site approval inside Chrome, `chrome` tool (hidden until the `chrome-bridge` skill is loaded; not available to sub-agents).
+- **License.** The extension is now licensed under the **Locaith Freeware License** (free to use, personal or commercial; share the unmodified package; no modification, reverse engineering or resale) instead of "UNLICENSED". `LICENSE.txt` and `THIRD_PARTY_NOTICES.md` (generated from the libraries and fonts actually bundled) are included in the package.
+- Internal: `src/core/mcp/{catalog,oauth,oauthFlow,bioInstall}.ts`, `src/core/plugins/marketplace.ts`, `src/core/chrome/{bridge,tools}.ts`, `src/shared/transcriptRebuild.ts`, `src/host/{connectors,bioMemory,chrome}.ts`; ~110 new tests.
+
 ## 0.5.0 - 2026-11-03
 
 VS Code edition: send messages while the assistant works, multi-AI orchestration, sub-agents and workflows, MCP and plugins, a skills Market, live thinking-token counter, a Locaith-branded animated UI and a layout that adapts to any width.
