@@ -1,4 +1,30 @@
-﻿# Nhật ký thay đổi
+# Changelog
+
+## 0.5.0 - 2026-11-03
+
+VS Code edition: send messages while the assistant works, multi-AI orchestration, sub-agents and workflows, MCP and plugins, a skills Market, live thinking-token counter, a Locaith-branded animated UI and a layout that adapts to any width.
+
+- **Send while the assistant works:** type and press Enter instead of Stop. Messages are queued (up to 20, shown above the input — click one to edit it, ✕ to remove it) and delivered together with the next tool results, so the assistant can change course immediately; if it was about to finish, the queued messages become its next turn in the same run. Stop returns undelivered messages to the input box instead of sending them. Slash commands still need an idle assistant.
+- **Locaith Auto + orchestration** (opt-in, setting `locaithAgent.orchestration.mode`: `off` / `failover` / `auto`). A router picks a model per task by tier (strong / balanced / fast) from the API keys you entered, switches provider on rate limits, overload or outages (only before any output is produced), spreads sub-agent load across providers and tells you whenever it switches.
+- **Sub-agents** (`agent` tool): independent sessions with their own context and narrowed tools, run in parallel, return only a final report. Built-in `explore`, `plan`, `researcher`, `reviewer`, `general`; custom agents from `.md` files (`~/.locaith/agents`, `.locaith/agents`, `.claude/agents`). Permission prompts raised inside a sub-agent surface in the main chat.
+- **Workflows** (`workflow_run`, unlocked by the `multi-agent` skill): the model writes a short JavaScript program that orchestrates up to 1,000 agents (16 at a time); intermediate results stay out of the conversation. Runs in an isolated worker, needs approval every time, bounded by agent count, token budget and time.
+- **MCP client** (stdio and streamable HTTP) with tools registered as `mcp__<server>__<tool>`; user-settings servers start automatically, workspace/plugin servers only after you enable them; every call asks permission; child processes do not inherit secret-looking environment variables.
+- **Plugins** (`plugin.json` or `.claude-plugin/plugin.json` + `skills/`, `agents/`, `commands/`, `.mcp.json`): install from a folder or Git, disabled until enabled; plugin commands become `/<plugin>:<command>`.
+- **Market**: 835 bundled skills (MIT / Apache-2.0 / MPL-2.0 sources only, notices in `market/NOTICE.md`), MCP library, plugins and agents in one screen.
+- **UI**: animated Locaith logo replaces every spinner; brand colours updated to the logo gradient (`#22bcec` → `#625aec`); live thinking-token counter with elapsed time and real reasoning-token count at the end of a turn; container-query layout (content column grows to ~1000 px on wide panels, no horizontal overflow down to ~240 px).
+- Internal: new modules `src/core/orchestration`, `src/core/agents`, `src/core/mcp`, `src/core/plugins`, `src/core/market`; `scripts/build-market.mjs`; 66 new tests.
+
+### Chi tiết (tiếng Việt)
+
+Xem mục **Mới trong 0.5.0** trong `README.vi.md`.
+
+## 0.4.1 - 2026-11-02
+
+- Made the Marketplace summary and primary README English-first.
+- Kept the full Vietnamese guide in README.vi.md.
+- Updated documentation and package metadata; no extension runtime code changes.
+
+## Earlier release notes
 
 ## 0.4.0
 
