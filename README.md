@@ -1,18 +1,16 @@
 # Locaith AI Agent for VS Code
 
-English-first VS Code Marketplace release for `LocaithAI.locaith-agent`, version `0.5.1`.
+English-first VS Code Marketplace release for `LocaithAI.locaith-agent`, version `0.5.2`.
 
 > This repository contains prebuilt release packages and checksums. The original source tree and build scripts are maintained separately.
 
-## What's new in 0.5.1
+## What's new in 0.5.2
 
-- **Send while the assistant works** — type and press Enter instead of Stop; messages queue and reach the assistant at its next step. (0.5.0 as first published did not include this.)
-- **Complete history** — conversations from other workspace folders are listed, and conversations that lost displayed turns are rebuilt from the model history when opened (the original is kept as `.healbak.json`).
-- **Images** — click a pasted or sent image to view it full size.
-- **Connections and memory** — one-click MCP connections (OAuth sign-in), GitHub through your VS Code account, the official plugin market, and **Bio-Memory-Locaith**, a long-term memory shared by every conversation.
-- **Swarm** reasoning level for fan-out work across many sub-agents (opt-in, asks for approval, uses many tokens).
-- **Chrome bridge** — with the Locaith extension for Chrome 0.4.2, read and control the pages you allow in your own browser.
-- **License** — now the Locaith Freeware License (free to use, share the unmodified package), with third-party notices included.
+- **Sign in with your Locaith account (required).** The extension now needs a locaith.ai account: click **Sign in**, the browser opens, click **Allow**, you are back in VS Code (OAuth authorization code + PKCE; no password typed into VS Code). Until you sign in, the extension is locked — enforced in the extension host, not only in the UI. Your API keys and conversations are never sent to Locaith. Revoke any machine from locaith.ai. Details: `docs/ACCOUNT.md`.
+- **Remote control from your phone (on by default once you sign in).** The *Remote VS Code* tab on locaith.ai watches and drives the chat — live messages, tool calls and diffs, approve permissions, stop, queue messages — over an **end-to-end encrypted relay** (scan a QR code, compare a 6-digit code, click Allow in VS Code; the relay only sees ciphertext) or over 127.0.0.1 on the same machine. Until you pair a device nobody can control anything (every pairing needs your Allow in VS Code); a switch in Settings → Remote turns it off; one-time pairing, revocable devices; a paired device can do anything the assistant can do on this machine. Details: `docs/REMOTE.md`, `docs/REMOTE-RELAY.md`.
+- **A tidy queue when the relay is overloaded.** If the Remote relay is at its concurrent-connection limit, the chat shows a slim strip above the input — *Remote is queued · retrying in 0:31* with a progress bar, **Retry now** and **Turn off Remote** — and retries on a growing, jittered schedule instead of looking offline. Nothing is pushed into VS Code's own notifications or status bar, and chat keeps working meanwhile.
+- **Brand logos** for plugins, MCP connectors and skill sources in the Market (bundled as SVG, no network), with a same-size monogram when no logo exists (Oracle, Salesforce, Adobe, Twilio, Slack, Canva, Azure, Playwright, Zoho, Sourcegraph and C# use the monogram: their logos were withdrawn at the brand owners' request).
+- **Notices** — PDF.js (Apache-2.0), `ws` and `uqr` (MIT), Simple Icons (CC0) and Lobe Icons (MIT) are credited in `THIRD_PARTY_NOTICES.md`.
 
 See `CHANGELOG.md` for details.
 
@@ -24,9 +22,9 @@ Search for **Locaith AI Agent** in VS Code Extensions, or run:
 
 ## Install from the VSIX
 
-Download [`locaith-agent-0.5.1.vsix`](releases/locaith-agent-0.5.1.vsix), then choose **Extensions** → **...** → **Install from VSIX...**. From a terminal, run:
+Download [`locaith-agent-0.5.2.vsix`](releases/locaith-agent-0.5.2.vsix), then choose **Extensions** → **...** → **Install from VSIX...**. From a terminal, run:
 
-`code --install-extension releases/locaith-agent-0.5.1.vsix`
+`code --install-extension releases/locaith-agent-0.5.2.vsix`
 
 The package manifest declares VS Code engine `^1.90.0` and publisher `LocaithAI`. The Marketplace README is English-first; the package also includes a Vietnamese guide. The package is about 13 MB because it bundles 835 open-source skills.
 
@@ -42,9 +40,9 @@ The zip carries its own `LICENSE.txt` (Locaith Freeware License) and `THIRD_PART
 
 ## Package integrity
 
-SHA-256 of `locaith-agent-0.5.1.vsix`:
+SHA-256 of `locaith-agent-0.5.2.vsix`:
 
-`306681AA2D97E8A5A3DFBAA358B877CC21315BE2D991E7E72B6C05B92526B2DA`
+`11F00ABE81C4A1E5837B3814C8BB12143049CD6B1E2A874F70DC00BC521E7F57`
 
 All release checksums are listed in `SHA256SUMS.txt`.
 
@@ -56,9 +54,9 @@ Third-party components keep their own licenses: open-source libraries and fonts 
 
 ## Tiếng Việt
 
-Đây là gói cài đặt VSIX đã biên dịch của extension `LocaithAI.locaith-agent`, phiên bản `0.5.1`. Repo này chứa các gói phát hành, không kèm source code hoặc build scripts.
+Đây là gói cài đặt VSIX đã biên dịch của extension `LocaithAI.locaith-agent`, phiên bản `0.5.2`. Repo này chứa các gói phát hành, không kèm source code hoặc build scripts.
 
-Cài từ Marketplace bằng cách tìm **Locaith AI Agent** trong Extensions. Hoặc cài từ VSIX: mở **Extensions** trong VS Code → **...** → **Install from VSIX...**, rồi chọn `locaith-agent-0.5.1.vsix`.
+Cài từ Marketplace bằng cách tìm **Locaith AI Agent** trong Extensions. Hoặc cài từ VSIX: mở **Extensions** trong VS Code → **...** → **Install from VSIX...**, rồi chọn `locaith-agent-0.5.2.vsix`.
 
 `code --install-extension LocaithAI.locaith-agent`
 
