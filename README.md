@@ -30,6 +30,16 @@ Download [`locaith-agent-0.5.1.vsix`](releases/locaith-agent-0.5.1.vsix), then c
 
 The package manifest declares VS Code engine `^1.90.0` and publisher `LocaithAI`. The Marketplace README is English-first; the package also includes a Vietnamese guide. The package is about 13 MB because it bundles 835 open-source skills.
 
+## Chrome and Edge extension
+
+**Locaith AI for Chrome and Edge 0.4.2** — the browser edition of the assistant (side panel, page Watcher, and the bridge that lets the VS Code assistant read and control the pages you allow) — is a separate package: [`locaith-agent-browser-0.4.2.zip`](releases/locaith-agent-browser-0.4.2.zip). It is not on a web store: unzip it into a permanent folder, open `chrome://extensions` (Edge: `edge://extensions`), turn on **Developer mode** and choose **Load unpacked**. To update, unzip the new version over the same folder and click **Reload**. To pair it with VS Code (Locaith AI Agent 0.5.1 or later) use **Market → Chrome**.
+
+SHA-256 of `locaith-agent-browser-0.4.2.zip`:
+
+`F0EC45ACC2E8BCBFED25BEE0F624D50A8491623084D7CA2DC0A5BE7F69A8BBB1`
+
+The zip carries its own `LICENSE.txt` (Locaith Freeware License) and `THIRD_PARTY_NOTICES.md` (the third-party components of the browser bundle).
+
 ## Package integrity
 
 SHA-256 of `locaith-agent-0.5.1.vsix`:
@@ -53,3 +63,5 @@ Cài từ Marketplace bằng cách tìm **Locaith AI Agent** trong Extensions. H
 `code --install-extension LocaithAI.locaith-agent`
 
 **Giấy phép:** miễn phí sử dụng (cá nhân và kinh doanh) theo **Giấy phép Freeware của Locaith** (xem `LICENSE`, bản tiếng Anh là bản có hiệu lực): được cài đặt, dùng và chia sẻ gói nguyên vẹn; không được sửa đổi, dịch ngược, bán lại hay đóng gói lại khi chưa có đồng ý bằng văn bản của Locaith. Thành phần bên thứ ba giữ giấy phép riêng (`THIRD_PARTY_NOTICES.md`).
+
+**Extension Chrome / Edge:** gói riêng `releases/locaith-agent-browser-0.4.2.zip` (SHA-256 `F0EC45ACC2E8BCBFED25BEE0F624D50A8491623084D7CA2DC0A5BE7F69A8BBB1`). Giải nén vào MỘT thư mục cố định, mở `chrome://extensions` (Edge: `edge://extensions`), bật **Chế độ nhà phát triển** rồi chọn **Tải tiện ích đã giải nén**. Cập nhật: giải nén bản mới đè vào cùng thư mục rồi bấm **Tải lại**. Ghép đôi với VS Code (Locaith AI Agent từ 0.5.1) ở **Chợ → Chrome**. Trong gói có sẵn `LICENSE.txt` và `THIRD_PARTY_NOTICES.md`.
