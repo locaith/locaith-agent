@@ -1,13 +1,13 @@
 # Locaith AI Agent for VS Code
 
-English-first VS Code Marketplace release for `LocaithAI.locaith-agent`, version `0.6.4`.
+English-first VS Code Marketplace release for `LocaithAI.locaith-agent`, version `0.6.5`.
 
 > This repository contains prebuilt release packages and checksums. The original source tree and build scripts are maintained separately.
 
-## What's new in 0.6.4
+## What's new in 0.6.5
 
-- **The assistant stops retrying Chrome pages it can never control.** On the Chrome Web Store or `chrome://` pages it now says plainly that this is a limit of Chrome and asks you to do it yourself, instead of trying again.
-- **A command that times out with no output explains itself.** The assistant is told the shell may have started slowly (or the command prints nothing until it ends) and retries once with a longer limit before assuming the command hung.
+- **Open your VS Code from your phone with nothing to pair.** Sign in to locaith.ai with the same account, open *Remote VS Code* and pick the machine — or type **/remote** in the chat. No code, no QR, no “Allow”. The machine keeps a random key in your Locaith account that only you can read back; anyone who can sign in to your account can control the machine, so keep the account safe. Turn it off with `locaithAgent.remote.trustAccount`; *Remote: paired devices → Change the account key* cuts every browser that is in right now.
+- **Pairing by link/QR is still there** for a browser that is not signed in to your account, and as the automatic fallback when the machine list cannot be reached.
 
 See `CHANGELOG.md` for details.
 
@@ -19,9 +19,9 @@ Search for **Locaith AI Agent** in VS Code Extensions, or run:
 
 ## Install from the VSIX
 
-Download [`locaith-agent-0.6.4.vsix`](releases/locaith-agent-0.6.4.vsix), then choose **Extensions** → **...** → **Install from VSIX...**. From a terminal, run:
+Download [`locaith-agent-0.6.5.vsix`](releases/locaith-agent-0.6.5.vsix), then choose **Extensions** → **...** → **Install from VSIX...**. From a terminal, run:
 
-`code --install-extension releases/locaith-agent-0.6.4.vsix`
+`code --install-extension releases/locaith-agent-0.6.5.vsix`
 
 The package manifest declares VS Code engine `^1.90.0` and publisher `LocaithAI`. The Marketplace README is English-first; the package also includes a Vietnamese guide. The package is about 13 MB because it bundles 835 open-source skills.
 
@@ -37,9 +37,9 @@ The zip carries its own `LICENSE.txt` (Locaith Freeware License) and `THIRD_PART
 
 ## Package integrity
 
-SHA-256 of `locaith-agent-0.6.4.vsix`:
+SHA-256 of `locaith-agent-0.6.5.vsix`:
 
-`E6D3339BADBE9091AD749C73E18A0493A496B03C81AD74CC55F63962854996F6`
+`34D8E688A52F23AA6C2AD867C7DAAE5F0942BA30BFBD1AE9D16C56120108987C`
 
 All release checksums are listed in `SHA256SUMS.txt`.
 
@@ -51,9 +51,9 @@ Third-party components keep their own licenses: open-source libraries and fonts 
 
 ## Tiếng Việt
 
-Đây là gói cài đặt VSIX đã biên dịch của extension `LocaithAI.locaith-agent`, phiên bản `0.6.4`. Repo này chứa các gói phát hành, không kèm source code hoặc build scripts.
+Đây là gói cài đặt VSIX đã biên dịch của extension `LocaithAI.locaith-agent`, phiên bản `0.6.5`. Repo này chứa các gói phát hành, không kèm source code hoặc build scripts.
 
-Cài từ Marketplace bằng cách tìm **Locaith AI Agent** trong Extensions. Hoặc cài từ VSIX: mở **Extensions** trong VS Code → **...** → **Install from VSIX...**, rồi chọn `locaith-agent-0.6.4.vsix`.
+Cài từ Marketplace bằng cách tìm **Locaith AI Agent** trong Extensions. Hoặc cài từ VSIX: mở **Extensions** trong VS Code → **...** → **Install from VSIX...**, rồi chọn `locaith-agent-0.6.5.vsix`.
 
 `code --install-extension LocaithAI.locaith-agent`
 
