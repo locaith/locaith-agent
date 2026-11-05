@@ -1,19 +1,13 @@
 # Locaith AI Agent for VS Code
 
-English-first VS Code Marketplace release for `LocaithAI.locaith-agent`, version `0.6.1`.
+English-first VS Code Marketplace release for `LocaithAI.locaith-agent`, version `0.6.2`.
 
 > This repository contains prebuilt release packages and checksums. The original source tree and build scripts are maintained separately.
 
-## What's new in 0.6.1
+## What's new in 0.6.2
 
-- **"Bypass all prompts" is in the mode list from the first run.** No more hunting for a setting: the permission picker always lists it, and choosing it for the first time opens ONE confirmation in the chat (what it does, plus an optional "remember for new conversations" box, off by default) and turns it on. While it is on, a reminder strip sits above the input.
-- **The Locaith logo on every Locaith model.** The model picker used to show a letter for *Locaith AI Local*; it now shows the Locaith "Lo" mark — next to the input, in the list and in Settings — and so does the Chrome / Edge side panel.
-- **Remote is one click, in the chat.** A **Remote** switch with a status dot (grey off · amber connecting · green online) sits in the chat header. Turn it on, open locaith.ai → *Remote VS Code* on the same account, and this machine is there; no code, and each pairing still needs your **Allow**.
-- **Chrome connects without a code.** Turn on the **VS Code** switch in the Chrome extension's chat (Chrome / Edge **0.4.4**) and VS Code shows an **Allow / Deny** card in its chat; click Allow and they are connected. Turning the switch off and on again reconnects instantly. The local bridge (127.0.0.1, browser extensions only) is now open by default so Chrome can ask; switch it off with `locaithAgent.chrome.bridge` = false (pairing with a code in Market → Chrome still works).
-- **Locaith-v5 uses Bio-Memory by default.** The first time Locaith-v5 is used, Bio-Memory-Locaith is installed into its own Python environment and turned on (a status strip shows progress; if it cannot, it says why and offers **Retry** / **Don't ask again**). With the 1M window nearly full a summary is saved into Bio-Memory before compacting, and the model `recall`s instead of guessing.
-- **Market: the tab bar no longer overlaps the list** when you scroll — the tabs are a fixed band and only the list below them scrolls.
-- **The video playbook no longer carries any customer or partner name.**
-- **Chrome / Edge 0.4.4** adds the Locaith "Lo" logo (header, welcome screen, model picker, busy indicator) and the **VS Code** switch.
+- **The content now fills the panel when you make it wider.** Dragging the sidebar, the chat tab or the secondary side bar wide no longer leaves everything in a narrow centred column: the conversation, the input box, Settings, History and the Market all stretch with the panel and keep a small proportional margin.
+- **Bio-Memory sets itself up quietly.** The first time Locaith-v5 turns Bio-Memory on, nothing appears in the chat — no "installing" strip that could stay up for minutes. If it cannot install (no Python 3.10+, no network), the reason is in *Market → MCP*, where you can install it by hand; a stuck install is stopped after 10 minutes.
 
 See `CHANGELOG.md` for details.
 
@@ -25,9 +19,9 @@ Search for **Locaith AI Agent** in VS Code Extensions, or run:
 
 ## Install from the VSIX
 
-Download [`locaith-agent-0.6.1.vsix`](releases/locaith-agent-0.6.1.vsix), then choose **Extensions** → **...** → **Install from VSIX...**. From a terminal, run:
+Download [`locaith-agent-0.6.2.vsix`](releases/locaith-agent-0.6.2.vsix), then choose **Extensions** → **...** → **Install from VSIX...**. From a terminal, run:
 
-`code --install-extension releases/locaith-agent-0.6.1.vsix`
+`code --install-extension releases/locaith-agent-0.6.2.vsix`
 
 The package manifest declares VS Code engine `^1.90.0` and publisher `LocaithAI`. The Marketplace README is English-first; the package also includes a Vietnamese guide. The package is about 13 MB because it bundles 835 open-source skills.
 
@@ -43,9 +37,9 @@ The zip carries its own `LICENSE.txt` (Locaith Freeware License) and `THIRD_PART
 
 ## Package integrity
 
-SHA-256 of `locaith-agent-0.6.1.vsix`:
+SHA-256 of `locaith-agent-0.6.2.vsix`:
 
-`3DBAE9E6E4E0F9CF2967B43C50A682E25B8682C91FB15E4FA239DFDFB536675E`
+`367A7D964F2D07D7AF4E3FE9D92AF83275640F48AA673EBBAA7C9D7D4B7E6EDD`
 
 All release checksums are listed in `SHA256SUMS.txt`.
 
@@ -57,9 +51,9 @@ Third-party components keep their own licenses: open-source libraries and fonts 
 
 ## Tiếng Việt
 
-Đây là gói cài đặt VSIX đã biên dịch của extension `LocaithAI.locaith-agent`, phiên bản `0.6.1`. Repo này chứa các gói phát hành, không kèm source code hoặc build scripts.
+Đây là gói cài đặt VSIX đã biên dịch của extension `LocaithAI.locaith-agent`, phiên bản `0.6.2`. Repo này chứa các gói phát hành, không kèm source code hoặc build scripts.
 
-Cài từ Marketplace bằng cách tìm **Locaith AI Agent** trong Extensions. Hoặc cài từ VSIX: mở **Extensions** trong VS Code → **...** → **Install from VSIX...**, rồi chọn `locaith-agent-0.6.1.vsix`.
+Cài từ Marketplace bằng cách tìm **Locaith AI Agent** trong Extensions. Hoặc cài từ VSIX: mở **Extensions** trong VS Code → **...** → **Install from VSIX...**, rồi chọn `locaith-agent-0.6.2.vsix`.
 
 `code --install-extension LocaithAI.locaith-agent`
 

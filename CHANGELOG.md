@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.6.2 - 2026-11-05
+
+- **The content now fills the panel when you make it wider.** Dragging the sidebar, the chat tab or the secondary side bar wide used to leave the conversation, the input box, Settings, History and the Market in a centred column of at most 1,000 px (and only 58 % of the panel), with empty space on both sides. Every screen now fills the panel and keeps a small proportional margin (3 % of the width, 14–48 px). The Locaith welcome note is no longer squeezed into a narrow column either.
+- **Bio-Memory sets itself up quietly.** When Locaith-v5 turns Bio-Memory on for the first time, nothing appears in the chat any more: no "installing" strip (it could stay up for a long time and look like the extension had hung, and its *Skip* button did not always take effect), no error strip, no toast. If the install cannot finish (no Python 3.10+, no network) the reason is written to the log and shown in *Market → MCP*, where it can be installed by hand; it is not retried on every message (it waits 5 minutes), and a stuck install is stopped after 10 minutes at most.
+- Internal: pip install timeout 15 → 8 minutes; the MCP reload after install is capped at 60 seconds; the old `bio_auto_hide` / `bio_auto_decline` messages are still accepted.
+
 ## 0.6.1 - 2026-11-04
 
 - **"Bypass all prompts" is in the mode list from the first run.** It used to be hidden until you found the setting. Now the permission picker always lists it; choosing it for the first time opens ONE confirmation in the chat (what it does, with an optional "remember for new conversations" box, off by default) and turns it on — no trip to Settings. While it is on, a reminder strip sits above the input. (The setting `locaithAgent.agent.allowBypassPermissions` is still what is stored, in your user settings only.)
