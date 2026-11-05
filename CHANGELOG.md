@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.6.6 - 2026-11-05
+
+- **Swarm now thinks as deeply as you asked.** Picking *Swarm* has always sent the main turn to the provider at *Max*, but each sub-agent kept the level written in its own definition — `explore` at low, `researcher`/`general` at medium, `plan`/`reviewer` at high — so a "maximum" run was quietly a mixed-depth run, and it was impossible to tell from the screen. A sub-agent now never reasons below the session it belongs to: *Swarm* ⇒ every agent in the swarm runs at *Max*; a definition can only raise the level, never lower it. The picker reads **Swarm · Max** and the option's description says it plainly.
+- **The “Bypassing all prompts” strip is gone.** In bypass mode a red bar sat above the input box on every turn, with a *Turn off* button, taking the height that matters most in a narrow panel. Bypass itself is unchanged — the mode picker under the input still shows the mode and still opens the confirmation dialog when you switch to it — only the permanent reminder is removed.
+- Internal: `subAgentThinking()` in `src/core/agents/runner.ts` (parent `swarm` ⇒ `max`; sub-agent level = the higher of its definition and the parent session); `FullAccessBar` and its CSS removed from `webview/src/components/Overlays.tsx`, `webview/src/App.tsx` and `webview/src/styles/components.css`; tests in `test/agents.test.ts` (level matrix, plus an end-to-end swarm turn asserting `thinking.level === 'max'` on both the main request and the sub-agent request — the sub-agent definition there is `explore`, which asks for low) and `test/webview/chatStrips.test.ts` (now asserts the strip is gone).
+
 ## 0.6.5 - 2026-11-05
 
 - **Remote: open your machine from your phone with nothing to pair.** Sign in to locaith.ai with the same account, open *Remote VS Code* and pick the machine — or type **/remote** in the chat: no pairing code, no link or QR to copy, no “Allow” dialog. The machine keeps a random 128-bit *account key*, lists it in your Locaith account's machine list (you can read it back only while signed in to that account), and the page uses it to open the usual end-to-end encrypted session. Nothing else changed: the same allowed commands, “Bypass all prompts” still cannot be switched on from a remote page unless `locaithAgent.remote.allowBypass` is on, and the relay still sees only ciphertext.

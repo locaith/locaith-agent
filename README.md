@@ -1,13 +1,13 @@
 # Locaith AI Agent for VS Code
 
-English-first VS Code Marketplace release for `LocaithAI.locaith-agent`, version `0.6.5`.
+English-first VS Code Marketplace release for `LocaithAI.locaith-agent`, version `0.6.6`.
 
 > This repository contains prebuilt release packages and checksums. The original source tree and build scripts are maintained separately.
 
-## What's new in 0.6.5
+## What's new in 0.6.6
 
-- **Open your VS Code from your phone with nothing to pair.** Sign in to locaith.ai with the same account, open *Remote VS Code* and pick the machine — or type **/remote** in the chat. No code, no QR, no “Allow”. The machine keeps a random key in your Locaith account that only you can read back; anyone who can sign in to your account can control the machine, so keep the account safe. Turn it off with `locaithAgent.remote.trustAccount`; *Remote: paired devices → Change the account key* cuts every browser that is in right now.
-- **Pairing by link/QR is still there** for a browser that is not signed in to your account, and as the automatic fallback when the machine list cannot be reached.
+- **Swarm now thinks as deeply as you asked.** Choosing *Swarm* sent the main turn at *Max*, but sub-agents kept their own definition's level (low, medium, high) — so a "maximum" run was quietly mixed. A sub-agent now never reasons below the conversation it belongs to: *Swarm* means every agent in the swarm runs at *Max*, and a definition can only raise the level. The picker reads **Swarm · Max**.
+- **The “Bypassing all prompts” strip is gone.** The red reminder above the input box in bypass mode — and its *Turn off* button — has been removed to give the chat back its height. Bypass still works the same way, and the mode picker still shows when it is on.
 
 See `CHANGELOG.md` for details.
 
@@ -19,9 +19,9 @@ Search for **Locaith AI Agent** in VS Code Extensions, or run:
 
 ## Install from the VSIX
 
-Download [`locaith-agent-0.6.5.vsix`](releases/locaith-agent-0.6.5.vsix), then choose **Extensions** → **...** → **Install from VSIX...**. From a terminal, run:
+Download [`locaith-agent-0.6.6.vsix`](releases/locaith-agent-0.6.6.vsix), then choose **Extensions** → **...** → **Install from VSIX...**. From a terminal, run:
 
-`code --install-extension releases/locaith-agent-0.6.5.vsix`
+`code --install-extension releases/locaith-agent-0.6.6.vsix`
 
 The package manifest declares VS Code engine `^1.90.0` and publisher `LocaithAI`. The Marketplace README is English-first; the package also includes a Vietnamese guide. The package is about 13 MB because it bundles 835 open-source skills.
 
@@ -37,9 +37,9 @@ The zip carries its own `LICENSE.txt` (Locaith Freeware License) and `THIRD_PART
 
 ## Package integrity
 
-SHA-256 of `locaith-agent-0.6.5.vsix`:
+SHA-256 of `locaith-agent-0.6.6.vsix`:
 
-`34D8E688A52F23AA6C2AD867C7DAAE5F0942BA30BFBD1AE9D16C56120108987C`
+`CC9867B68B7738B7A6BA698B5DE2D6095D09C08D368DA1584CB78747C214CB8D`
 
 All release checksums are listed in `SHA256SUMS.txt`.
 
@@ -51,9 +51,9 @@ Third-party components keep their own licenses: open-source libraries and fonts 
 
 ## Tiếng Việt
 
-Đây là gói cài đặt VSIX đã biên dịch của extension `LocaithAI.locaith-agent`, phiên bản `0.6.5`. Repo này chứa các gói phát hành, không kèm source code hoặc build scripts.
+Đây là gói cài đặt VSIX đã biên dịch của extension `LocaithAI.locaith-agent`, phiên bản `0.6.6`. Repo này chứa các gói phát hành, không kèm source code hoặc build scripts.
 
-Cài từ Marketplace bằng cách tìm **Locaith AI Agent** trong Extensions. Hoặc cài từ VSIX: mở **Extensions** trong VS Code → **...** → **Install from VSIX...**, rồi chọn `locaith-agent-0.6.5.vsix`.
+Cài từ Marketplace bằng cách tìm **Locaith AI Agent** trong Extensions. Hoặc cài từ VSIX: mở **Extensions** trong VS Code → **...** → **Install from VSIX...**, rồi chọn `locaith-agent-0.6.6.vsix`.
 
 `code --install-extension LocaithAI.locaith-agent`
 
