@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.6.9 - 2026-11-06
+
+- **The running turn folds its work away too.** Until now only a finished turn folded into one line (*Worked for 2m 13s · 14 actions*), so while a turn was running the chat filled up with every tool call, every thinking block and every sub-agent row — on a phone the answer was pushed off screen. A live turn now folds the same way as soon as it has three or more steps: one summary line you click to open, with the current activity line still shown underneath, so you can see it is working without scrolling past the whole log. Short turns (one or two steps) stay open as before, and a finished turn folds exactly as it did.
+- Internal: `AssistantTurn.tsx` — `splitWork(…)` is also called for a live item (`endedAt` undefined) and used only when `split.work.length >= 3`; nothing else in the folding path changed.
+
 ## 0.6.8 - 2026-11-06
 
 - **Choose what each MCP tool is allowed to do — per tool, or for a whole group.** Market → MCP now shows, under every running connection, its tools split into *read-only* and *tools that can change things*, each with three buttons like a Claude connector: **✓ always allow**, **? ask every time**, **⊘ turn it off**. A group row at the top sets the default for every tool in that group (`read` / `write`); a tool's own setting wins. Turning a tool off does not uninstall or stop the server — the tool is hidden from the assistant and, if it is called anyway, it answers that you turned it off. Read-only vs write is taken from the server's `annotations` (`readOnlyHint` / `destructiveHint`) and, when absent, guessed from the tool name (`get_`/`list_`/`search_`/`count_`… = read). Choices are stored per server+tool and survive restarts; `ask` is the default, so nothing changes until you set something.
