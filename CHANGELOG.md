@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.6.10 - 2026-11-06
+
+- **The same “read another conversation while it keeps working” now also works in the browser build.** 0.6.7 taught the VS Code host to let you open a different conversation while a turn is running; the controller used by the browser/bridge build still answered *“Stop the running task first.”* It now behaves the same way: opening another conversation only changes what you are looking at, the running turn continues in the background and stays saved, live events are not pushed into the conversation you are reading, and typing there is refused with a clear message until you switch back to the running one. Deleting the running conversation, compacting and retry still require stopping first — those genuinely rewrite the running conversation.
+- Internal: `BrowserController.viewing` + the same gating as `ChatController` (`patch()`/`flush()` update `this.view` but skip posting while `viewing`; `scheduleSave()` still runs). `loadSession()` builds a read-only snapshot (`sessionId`, transcript, `running: false`, `canQueue: false`, title/model/mode/todos, `browser` tab state) instead of going through `swapSession()`; selecting the running conversation again clears `viewing`; `send()` is guarded.
+
 ## 0.6.9 - 2026-11-06
 
 - **The running turn folds its work away too.** Until now only a finished turn folded into one line (*Worked for 2m 13s · 14 actions*), so while a turn was running the chat filled up with every tool call, every thinking block and every sub-agent row — on a phone the answer was pushed off screen. A live turn now folds the same way as soon as it has three or more steps: one summary line you click to open, with the current activity line still shown underneath, so you can see it is working without scrolling past the whole log. Short turns (one or two steps) stay open as before, and a finished turn folds exactly as it did.
