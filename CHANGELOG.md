@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.6.4 - 2026-11-05
+
+- **Chrome pages the extension can never control no longer make the assistant retry.** When the assistant tried to drive the Chrome Web Store or a `chrome://` / `edge://` page, the `chrome` tool passed Chrome's bare English error (*"The extensions gallery cannot be scripted."*) straight through, and the model tried again. It now says plainly that this is a limit of Chrome, not a temporary error, and tells the assistant to stop and ask you to do it yourself. Errors you CAN fix — a missing site permission, a page that failed to load, a closed tab — keep their original message.
+- **A command that times out with no output now explains itself.** When `run_command` ran out of time without printing anything, it only said *"Command stopped after N seconds"*. It now adds that the shell may have started slowly (on some machines Windows PowerShell sometimes needs a minute or more to start) or that the command prints nothing until it finishes, and asks the assistant to retry ONCE with a longer `timeout_seconds` (120 or more) before deciding the command hung. Commands that did print something keep the old message.
+- Both came from reading the error logs of Locaith-v5-flash / SI (4–5 Nov 2026): the Chrome error happened twice, and 9 of the 10 timed-out commands had printed nothing. The hint reduces the damage; it does not remove the cause of a slow shell start, which is still unexplained. If it keeps happening on your machine, `locaithAgent.terminal.shell` lets you pick another shell (`pwsh` or `cmd`).
+- Internal: `friendlyChromeError()` in `src/core/chrome/tools.ts` (only three Chrome messages count as a hard limit); the hint in `src/core/tools/terminal.ts`; tests in `test/loiLocaithV5.test.ts`. Nothing else changed.
+
 ## 0.6.3 - 2026-11-05
 
 - **Results you can see right in the chat.** When an answer mentions an image, GIF, video or audio file (`out/demo.mp4`, `C:\…\cover.png`, a link, a Markdown image), the file now appears right under the paragraph, list or table that mentions it: images and GIFs inline (several in a grid; click to enlarge), video and audio with a player (MP4/H.264, WebM, MOV; MP3, WAV, OGG, M4A, FLAC…), and HTML / PDF / Word / Excel / PowerPoint as a one-line card. Each preview has **Open in VS Code**, **Open with the default app** (HTML: **Open in browser** / **View source**) and **Reveal in folder**. A format the chat cannot play becomes a card; a file that does not exist (yet) shows nothing — never an empty frame; paths inside code blocks (commands) are ignored. VS Code only.
