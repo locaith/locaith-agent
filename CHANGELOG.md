@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.6.7 - 2026-11-06
+
+- **Read another conversation while the assistant keeps working.** Opening a different conversation in the list used to be refused with *“Stop the running task first.”* You can now switch to any conversation while a turn is running: the running turn keeps going in the background — its tool calls, sub-agents and answer are recorded exactly as before — and the list is refreshed when it finishes. While you are reading another conversation the composer refuses to send (with a clear message) instead of quietly pushing your text into the conversation that is actually running; switch back to that conversation to type. Live events of the background turn are deliberately not pushed into the conversation you are reading.
+- Internal: `ChatController.viewing` holds the id of the conversation being read while a run is in flight. `loadSession()` no longer refuses when busy — it builds a read-only snapshot (`sessionId`, transcript via `reconcileTranscript`, `running: false`, `canQueue: false`, that session's title/model/mode/todos) and posts it; selecting the running conversation again clears `viewing` and re-posts the live view. `patch()` and `flush()` keep updating `this.view` (so switching back shows everything) but skip posting while `viewing` is set; `scheduleSave()` still runs, so a background turn is persisted while you read elsewhere. `send` is guarded, and `setRunning(false)` pushes the session list directly because `patch()` is gated at that moment.
+
 ## 0.6.6 - 2026-11-05
 
 - **Swarm now thinks as deeply as you asked.** Picking *Swarm* has always sent the main turn to the provider at *Max*, but each sub-agent kept the level written in its own definition — `explore` at low, `researcher`/`general` at medium, `plan`/`reviewer` at high — so a "maximum" run was quietly a mixed-depth run, and it was impossible to tell from the screen. A sub-agent now never reasons below the session it belongs to: *Swarm* ⇒ every agent in the swarm runs at *Max*; a definition can only raise the level, never lower it. The picker reads **Swarm · Max** and the option's description says it plainly.
