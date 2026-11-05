@@ -1,12 +1,12 @@
 # Locaith AI Agent for VS Code
 
-English-first VS Code Marketplace release for `LocaithAI.locaith-agent`, version `0.6.7`.
+English-first VS Code Marketplace release for `LocaithAI.locaith-agent`, version `0.6.8`.
 
 > This repository contains prebuilt release packages and checksums. The original source tree and build scripts are maintained separately.
 
-## What's new in 0.6.7
+## What's new in 0.6.8
 
-- **Read another conversation while the assistant keeps working.** Opening a different conversation used to be refused with *“Stop the running task first.”* Now you can switch to any conversation while a turn is running: the turn keeps going in the background, its work is recorded as usual, and the list refreshes when it finishes. The composer in the conversation you are only reading refuses to send (with a clear message) — switch back to the running one to type.
+- **Choose what each MCP tool may do.** Under every running connection in Market → MCP, tools are split into *read-only* and *tools that can change things*, each with three buttons: **✓ always allow**, **? ask every time**, **⊘ turn it off**. A group row sets the default for the whole group; a single tool can override it. Turning a tool off hides it from the assistant without stopping the server. Choices are remembered per tool, and `ask` stays the default.
 
 See `CHANGELOG.md` for details.
 
@@ -18,9 +18,9 @@ Search for **Locaith AI Agent** in VS Code Extensions, or run:
 
 ## Install from the VSIX
 
-Download [`locaith-agent-0.6.7.vsix`](releases/locaith-agent-0.6.7.vsix), then choose **Extensions** → **...** → **Install from VSIX...**. From a terminal, run:
+Download [`locaith-agent-0.6.8.vsix`](releases/locaith-agent-0.6.8.vsix), then choose **Extensions** → **...** → **Install from VSIX...**. From a terminal, run:
 
-`code --install-extension releases/locaith-agent-0.6.7.vsix`
+`code --install-extension releases/locaith-agent-0.6.8.vsix`
 
 The package manifest declares VS Code engine `^1.90.0` and publisher `LocaithAI`. The Marketplace README is English-first; the package also includes a Vietnamese guide. The package is about 13 MB because it bundles 835 open-source skills.
 
@@ -36,9 +36,9 @@ The zip carries its own `LICENSE.txt` (Locaith Freeware License) and `THIRD_PART
 
 ## Package integrity
 
-SHA-256 of `locaith-agent-0.6.7.vsix`:
+SHA-256 of `locaith-agent-0.6.8.vsix`:
 
-`3C1663E5070733DBF8FF0856B3E1B776DE237EC7E719FAA07C806A7EC242D8F1`
+`8032B0444F828B98928BE2D2E3ADD41B5918CDFFC68263C532AEB0C8737395F6`
 
 All release checksums are listed in `SHA256SUMS.txt`.
 
@@ -50,9 +50,9 @@ Third-party components keep their own licenses: open-source libraries and fonts 
 
 ## Tiếng Việt
 
-Đây là gói cài đặt VSIX đã biên dịch của extension `LocaithAI.locaith-agent`, phiên bản `0.6.7`. Repo này chứa các gói phát hành, không kèm source code hoặc build scripts.
+Đây là gói cài đặt VSIX đã biên dịch của extension `LocaithAI.locaith-agent`, phiên bản `0.6.8`. Repo này chứa các gói phát hành, không kèm source code hoặc build scripts.
 
-Cài từ Marketplace bằng cách tìm **Locaith AI Agent** trong Extensions. Hoặc cài từ VSIX: mở **Extensions** trong VS Code → **...** → **Install from VSIX...**, rồi chọn `locaith-agent-0.6.7.vsix`.
+Cài từ Marketplace bằng cách tìm **Locaith AI Agent** trong Extensions. Hoặc cài từ VSIX: mở **Extensions** trong VS Code → **...** → **Install from VSIX...**, rồi chọn `locaith-agent-0.6.8.vsix`.
 
 `code --install-extension LocaithAI.locaith-agent`
 
