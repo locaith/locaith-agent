@@ -1,13 +1,13 @@
 # Locaith AI Agent for VS Code
 
-English-first VS Code Marketplace release for `LocaithAI.locaith-agent`, version `0.6.2`.
+English-first VS Code Marketplace release for `LocaithAI.locaith-agent`, version `0.6.3`.
 
 > This repository contains prebuilt release packages and checksums. The original source tree and build scripts are maintained separately.
 
-## What's new in 0.6.2
+## What's new in 0.6.3
 
-- **The content now fills the panel when you make it wider.** Dragging the sidebar, the chat tab or the secondary side bar wide no longer leaves everything in a narrow centred column: the conversation, the input box, Settings, History and the Market all stretch with the panel and keep a small proportional margin.
-- **Bio-Memory sets itself up quietly.** The first time Locaith-v5 turns Bio-Memory on, nothing appears in the chat — no "installing" strip that could stay up for minutes. If it cannot install (no Python 3.10+, no network), the reason is in *Market → MCP*, where you can install it by hand; a stuck install is stopped after 10 minutes.
+- **See results right in the chat.** When an answer mentions an image, GIF, video or audio file it made, the file now shows up right under the paragraph that mentions it: pictures inline (several in a grid, click to enlarge), video and audio with a player, and HTML / PDF / Word / Excel / PowerPoint as a small card. Each one has *Open in VS Code*, *Open with the default app* and *Reveal in folder*.
+- **Finished turns fold the work away.** Thinking, tool calls and the short notes in between fold into one line — *Worked for 2m 13s · 14 actions · 3 files changed* — so you no longer scroll past them to reach the answer. Click it to see every step; changed files, artifacts and errors stay visible.
 
 See `CHANGELOG.md` for details.
 
@@ -19,9 +19,9 @@ Search for **Locaith AI Agent** in VS Code Extensions, or run:
 
 ## Install from the VSIX
 
-Download [`locaith-agent-0.6.2.vsix`](releases/locaith-agent-0.6.2.vsix), then choose **Extensions** → **...** → **Install from VSIX...**. From a terminal, run:
+Download [`locaith-agent-0.6.3.vsix`](releases/locaith-agent-0.6.3.vsix), then choose **Extensions** → **...** → **Install from VSIX...**. From a terminal, run:
 
-`code --install-extension releases/locaith-agent-0.6.2.vsix`
+`code --install-extension releases/locaith-agent-0.6.3.vsix`
 
 The package manifest declares VS Code engine `^1.90.0` and publisher `LocaithAI`. The Marketplace README is English-first; the package also includes a Vietnamese guide. The package is about 13 MB because it bundles 835 open-source skills.
 
@@ -37,9 +37,9 @@ The zip carries its own `LICENSE.txt` (Locaith Freeware License) and `THIRD_PART
 
 ## Package integrity
 
-SHA-256 of `locaith-agent-0.6.2.vsix`:
+SHA-256 of `locaith-agent-0.6.3.vsix`:
 
-`367A7D964F2D07D7AF4E3FE9D92AF83275640F48AA673EBBAA7C9D7D4B7E6EDD`
+`EABBA1AC2B19EE54C36B589DC85417939B1A8573C2EF93A79EF25AB19C941988`
 
 All release checksums are listed in `SHA256SUMS.txt`.
 
@@ -51,9 +51,9 @@ Third-party components keep their own licenses: open-source libraries and fonts 
 
 ## Tiếng Việt
 
-Đây là gói cài đặt VSIX đã biên dịch của extension `LocaithAI.locaith-agent`, phiên bản `0.6.2`. Repo này chứa các gói phát hành, không kèm source code hoặc build scripts.
+Đây là gói cài đặt VSIX đã biên dịch của extension `LocaithAI.locaith-agent`, phiên bản `0.6.3`. Repo này chứa các gói phát hành, không kèm source code hoặc build scripts.
 
-Cài từ Marketplace bằng cách tìm **Locaith AI Agent** trong Extensions. Hoặc cài từ VSIX: mở **Extensions** trong VS Code → **...** → **Install from VSIX...**, rồi chọn `locaith-agent-0.6.2.vsix`.
+Cài từ Marketplace bằng cách tìm **Locaith AI Agent** trong Extensions. Hoặc cài từ VSIX: mở **Extensions** trong VS Code → **...** → **Install from VSIX...**, rồi chọn `locaith-agent-0.6.3.vsix`.
 
 `code --install-extension LocaithAI.locaith-agent`
 
