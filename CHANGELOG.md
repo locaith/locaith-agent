@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.6.12 - 2026-11-06
+
+A denser conversation view — less scrolling, same detail — and two test fixes.
+
+- **Edits grouped:** consecutive file edits collapse into ONE row — "Edited 5 files +30 −5" — instead of one row per file. Click it to see every file with its diff and open-file button; the edit still running stays separate so you can watch progress.
+- **Agent counter:** while sub-agents run, a small "3 agents" pill sits next to the reasoning level. Click it for the list — each agent with its task, elapsed time, tokens, tool calls and current activity. The per-agent rows in the conversation are unchanged.
+- **Quieter controls:** the permission mode is icon-only (full text in its tooltip and menu) and the Swarm label is shortened, so "Bypass all prompts" no longer takes a wide slot; below ~470 px the pickers drop their labels.
+- **Work summary keeps showing** when the whole turn becomes one grouped row.
+- **Tests:** the queue-strip test waits for the first queue event before aborting (no more random failures on a busy machine); the work-summary test matches the new grouping.
+
 ## 0.6.10 - 2026-11-06
 
 - **The same “read another conversation while it keeps working” now also works in the browser build.** 0.6.7 taught the VS Code host to let you open a different conversation while a turn is running; the controller used by the browser/bridge build still answered *“Stop the running task first.”* It now behaves the same way: opening another conversation only changes what you are looking at, the running turn continues in the background and stays saved, live events are not pushed into the conversation you are reading, and typing there is refused with a clear message until you switch back to the running one. Deleting the running conversation, compacting and retry still require stopping first — those genuinely rewrite the running conversation.
