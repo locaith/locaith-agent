@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.6.18 - 2026-11-06
+
+- **Remote (phone/web) now shows sub-agent progress.** `agent_progress` events were deliberately dropped from the stream sent to remote clients (an older client's reducer has a closed switch and would corrupt the transcript on an unknown event), but that meant a phone never saw what a sub-agent was doing until some unrelated event arrived. The host now re-publishes a throttled snapshot (at most every 1.5 s, only while a turn is running) whenever agent progress arrives, so the remote view updates like the VS Code panel — without any protocol change, so old and new clients both keep working.
+- Note: the layout/wrapping bugs on the mobile page (text overlapping) live in the locaith.ai web app (`locaith-ai-v2/src/screens/remote/`), not in this package; that code is not in this workspace.
+
 ## 0.6.17 - 2026-11-06
 
 - **Fixed: attachments were lost when switching tabs.** The composer saved the typed text across a tab switch but deliberately dropped attached images and documents, so coming back showed an empty box. Everything you attach now survives — image data, thumbnails, documents, selections and tab chips — up to ~15 MB of state; beyond that the oldest attachments are dropped and you are told which (so a huge paste cannot silently bloat the state), while the newest stay.
