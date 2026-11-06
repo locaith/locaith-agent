@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.6.15 - 2026-11-06
+
+- **Fixed: sending in the browser/remote UI after opening another conversation.** While a reply was running in conversation A, opening conversation B put the panel in a read-only "viewing" mode that refused to send — and the state survived after the other reply finished, so the message stayed stuck behind the warning. Now: if the other reply is still running you get one short notice instead of a notice on every attempt; once it has finished, your next send **takes B as the current conversation and sends it there** (nothing is lost: A was already saved). Opening B while A runs still lets you read it.
+
 ## 0.6.14 - 2026-11-06
 
 - **Grouped by task:** each task the assistant plans (todo_write) now becomes ONE row — "Task: A. Clean the dataset — 5 actions · 3 files edited" — and every step for that task folds into it: reads, edits, commands, thinking, sub-agents. Click the row for the full detail exactly as before. A task with fewer than 2 tool calls is left expanded. This is the Claude-Code style "one task, one line" view, on top of the per-kind grouping from 0.6.12/0.6.13.
