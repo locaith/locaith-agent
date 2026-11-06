@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.6.19 - 2026-11-06
+
+- **Swarm is a switch, not a reasoning level.** The reasoning picker is back to five levels (off/low/medium/high/max) and Swarm is its own toggle next to it: the level you pick is the level sent to the provider, and the toggle adds fan-out orchestration on top. Old sessions saved with \`thinkingLevel: "swarm"\` keep working — they are read as "swarm on + max".
+- **Swarm prefers many agents for big or hard work.** The swarm instruction now says that for a big or hard job, reaching for many sub-agents is the DEFAULT and it should fan out as widely as the work splits, instead of working step by step. Budget stays 300 agents / 16 at a time / 5M tokens, and every run still asks for approval.
+- **Colour-coded activity rows:** a task row (violet), an edit group (cyan, with bold +/− counts) and a command group (neutral grey) now look different at a glance.
+- **Mobile remote layout hardening:** chat rows can no longer overflow horizontally or collapse into the next card; tool labels and arguments wrap on phones (\\< 860px).
+
 ## 0.6.18 - 2026-11-06
 
 - **Remote (phone/web) now shows sub-agent progress.** `agent_progress` events were deliberately dropped from the stream sent to remote clients (an older client's reducer has a closed switch and would corrupt the transcript on an unknown event), but that meant a phone never saw what a sub-agent was doing until some unrelated event arrived. The host now re-publishes a throttled snapshot (at most every 1.5 s, only while a turn is running) whenever agent progress arrives, so the remote view updates like the VS Code panel — without any protocol change, so old and new clients both keep working.
