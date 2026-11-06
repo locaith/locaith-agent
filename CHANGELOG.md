@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.6.14 - 2026-11-06
+
+- **Grouped by task:** each task the assistant plans (todo_write) now becomes ONE row — "Task: A. Clean the dataset — 5 actions · 3 files edited" — and every step for that task folds into it: reads, edits, commands, thinking, sub-agents. Click the row for the full detail exactly as before. A task with fewer than 2 tool calls is left expanded. This is the Claude-Code style "one task, one line" view, on top of the per-kind grouping from 0.6.12/0.6.13.
+- Internal: `taskgroup` row in `webview/src/timeline.ts` (grouping only, no data change); three more screenshot scenarios.
+
 ## 0.6.13 - 2026-11-06
 
 - **Commands grouped too:** a finished stretch of consecutive `run_command` calls (3 or more) now collapses into "Ran 3 commands" — like file edits — instead of one long row per command. Click it for each command with its full text and output. Mixed sequences still use the generic "N tool calls" summary.
