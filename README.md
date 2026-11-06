@@ -1,12 +1,15 @@
 # Locaith AI Agent for VS Code
 
-English-first VS Code Marketplace release for `LocaithAI.locaith-agent`, version `0.6.10`.
+English-first VS Code Marketplace release for `LocaithAI.locaith-agent`, version `0.6.11`.
 
 > This repository contains prebuilt release packages and checksums. The original source tree and build scripts are maintained separately.
 
-## What's new in 0.6.10
+## What's new in 0.6.11
 
-- **Read another conversation while a turn keeps running — now in the browser build too.** Opening a different conversation no longer answers *“Stop the running task first.”*: the running turn continues in the background, its work is recorded, and the conversation you open is read-only until you switch back to the running one.
+- **Grouped edits** — consecutive file edits collapse into one row ("Edited 5 files +30 −5"); click for every file and its diff.
+- **Agent counter** — a "3 agents" pill next to the reasoning level; click to see each agent's task, time, tokens and current step.
+- **Quieter controls** — permission mode is icon-only and Swarm is shorter, so the composer stays compact at any width.
+- **Fixed** — the queue strip no longer stays on screen when a reply ends abruptly.
 
 See `CHANGELOG.md` for details.
 
@@ -18,9 +21,9 @@ Search for **Locaith AI Agent** in VS Code Extensions, or run:
 
 ## Install from the VSIX
 
-Download [`locaith-agent-0.6.10.vsix`](releases/locaith-agent-0.6.10.vsix), then choose **Extensions** → **...** → **Install from VSIX...**. From a terminal, run:
+Download [`locaith-agent-0.6.11.vsix`](releases/locaith-agent-0.6.11.vsix), then choose **Extensions** → **...** → **Install from VSIX...**. From a terminal, run:
 
-`code --install-extension releases/locaith-agent-0.6.10.vsix`
+`code --install-extension releases/locaith-agent-0.6.11.vsix`
 
 The package manifest declares VS Code engine `^1.90.0` and publisher `LocaithAI`. The Marketplace README is English-first; the package also includes a Vietnamese guide. The package is about 13 MB because it bundles 835 open-source skills.
 
@@ -36,9 +39,9 @@ The zip carries its own `LICENSE.txt` (Locaith Freeware License) and `THIRD_PART
 
 ## Package integrity
 
-SHA-256 of `locaith-agent-0.6.10.vsix`:
+SHA-256 of `locaith-agent-0.6.11.vsix`:
 
-`F89B4C560CC96C25AACCA30C754BDB4DBA24D083F195CA61E5529379C598FB54`
+`F0DAE56097B7490F8AEE18D4D1BD14CAB4915A417A0D9C974923B125E6CB2F32`
 
 All release checksums are listed in `SHA256SUMS.txt`.
 
@@ -50,9 +53,9 @@ Third-party components keep their own licenses: open-source libraries and fonts 
 
 ## Tiếng Việt
 
-Đây là gói cài đặt VSIX đã biên dịch của extension `LocaithAI.locaith-agent`, phiên bản `0.6.10`. Repo này chứa các gói phát hành, không kèm source code hoặc build scripts.
+Đây là gói cài đặt VSIX đã biên dịch của extension `LocaithAI.locaith-agent`, phiên bản `0.6.11`. Repo này chứa các gói phát hành, không kèm source code hoặc build scripts.
 
-Cài từ Marketplace bằng cách tìm **Locaith AI Agent** trong Extensions. Hoặc cài từ VSIX: mở **Extensions** trong VS Code → **...** → **Install from VSIX...**, rồi chọn `locaith-agent-0.6.10.vsix`.
+Cài từ Marketplace bằng cách tìm **Locaith AI Agent** trong Extensions. Hoặc cài từ VSIX: mở **Extensions** trong VS Code → **...** → **Install from VSIX...**, rồi chọn `locaith-agent-0.6.11.vsix`.
 
 `code --install-extension LocaithAI.locaith-agent`
 
