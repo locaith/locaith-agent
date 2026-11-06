@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.6.16 - 2026-11-06
+
+- **Fixed in the VS Code panel too (same as 0.6.15 for the browser):** opening another conversation while a reply runs no longer blocks sending for good. While the other reply runs you get one short notice instead of one per attempt; once it has finished, your next message takes the conversation you have open and sends it there. Tabs in VS Code already had separate controllers, this was the sidebar.
+
 ## 0.6.15 - 2026-11-06
 
 - **Fixed: sending in the browser/remote UI after opening another conversation.** While a reply was running in conversation A, opening conversation B put the panel in a read-only "viewing" mode that refused to send — and the state survived after the other reply finished, so the message stayed stuck behind the warning. Now: if the other reply is still running you get one short notice instead of a notice on every attempt; once it has finished, your next send **takes B as the current conversation and sends it there** (nothing is lost: A was already saved). Opening B while A runs still lets you read it.
