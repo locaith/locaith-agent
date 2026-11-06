@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.6.17 - 2026-11-06
+
+- **Fixed: attachments were lost when switching tabs.** The composer saved the typed text across a tab switch but deliberately dropped attached images and documents, so coming back showed an empty box. Everything you attach now survives — image data, thumbnails, documents, selections and tab chips — up to ~15 MB of state; beyond that the oldest attachments are dropped and you are told which (so a huge paste cannot silently bloat the state), while the newest stay.
+
 ## 0.6.16 - 2026-11-06
 
 - **Fixed in the VS Code panel too (same as 0.6.15 for the browser):** opening another conversation while a reply runs no longer blocks sending for good. While the other reply runs you get one short notice instead of one per attempt; once it has finished, your next message takes the conversation you have open and sends it there. Tabs in VS Code already had separate controllers, this was the sidebar.
