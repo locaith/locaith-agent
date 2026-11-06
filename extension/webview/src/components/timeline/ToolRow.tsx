@@ -11,6 +11,7 @@ import { post } from '../../vscode';
 import { Icon } from '../Icons';
 import { Spinner } from '../ui';
 import { DiffView } from './DiffView';
+import { CollapseFoot } from './CollapseFoot';
 
 const ARGS_LIMIT = 2400;
 
@@ -153,6 +154,7 @@ function ToolRowView({ block, nested = false }: { block: ToolBlock; nested?: boo
               <pre class={cx('tool-pre', block.state === 'error' && 'is-error')}>{block.output || t('tool.noOutput')}</pre>
             </div>
           )}
+          <CollapseFoot onCollapse={() => setUserOpen(false)} label={t('tool.showLess')} />
         </div>
       )}
     </div>
@@ -186,6 +188,7 @@ function ToolGroupView({ name, blocks }: { name: string; blocks: ToolBlock[] }) 
           {blocks.map((b) => (
             <ToolRow key={b.id} block={b} nested />
           ))}
+          <CollapseFoot onCollapse={() => setOpen(false)} label={t('tool.showLess')} />
         </div>
       )}
     </div>
@@ -218,6 +221,7 @@ function EditGroupView({ blocks }: { blocks: ToolBlock[] }) {
           {blocks.map((b) => (
             <ToolRow key={b.id} block={b} nested />
           ))}
+          <CollapseFoot onCollapse={() => setOpen(false)} label={t('tool.showLess')} />
         </div>
       )}
     </div>

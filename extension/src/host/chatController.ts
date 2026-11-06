@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 import { AgentEngine, type QueuedMessage, type QueueState, type RunResult } from '../core/engine/engine';
 import { loadProjectInstructions } from '../core/engine/instructions';
+import { MEMORY_DIR, MEMORY_INDEX, type MemoryScope, type MemorySnapshot } from '../core/engine/memory';
 import { t, type Lang } from '../core/engine/strings';
 import { Summarizer } from '../core/engine/summarizer';
 import { newSession, type PermissionDecision, type SessionState } from '../core/engine/types';
@@ -243,7 +244,7 @@ export class ChatController implements vscode.Disposable {
       secrets: d.secrets,
       logger: d.logger,
       diffs: d.diffs,
-      extraRoots: d.skillDirs,
+      extraRoots: () => [...d.skillDirs(), ...(this.host.homeDir ? [path.join(this.host.homeDir, '.locaith', 'memory')] : [])],
       askPermission: (req, signal) => this.askPermission(req, signal),
     });
     this.registry = createToolRegistry({
@@ -713,6 +714,29 @@ export class ChatController implements vscode.Disposable {
       }
     }
     this.toast('info', vi ? 'Ảnh gốc không còn trong lịch sử (đã nén ngữ cảnh) nên chỉ xem được bản thu nhỏ.' : 'The original image is no longer in the history (context was compacted); showing the thumbnail.');
+  }
+
+  /**
+   * Ký ức bền nạp lại ở mỗi lượt: chỉ mục `.locaith/memory/MEMORY.md` của dự án và `~/.locaith/memory/MEMORY.md`
+   * của người dùng. Đọc lại từ đĩa (không lấy từ lịch sử hội thoại) nên nén bao nhiêu lần cũng còn nguyên,
+   * và áp dụng cho mọi nhà cung cấp — không cần kỹ năng, không cần `recall`.
+   */
+  private async loadMemory(): Promise<MemorySnapshot | null> {
+    const read = async (dir: string, where: string): Promise<MemoryScope | null> => {
+      const index = await fs.promises.readFile(path.join(dir, MEMORY_INDEX), 'utf8').catch(() => null);
+      const names = await fs.promises.readdir(dir).catch(() => [] as string[]);
+      const topics = names.filter((n) => n.endsWith('.md') && n !== MEMORY_INDEX).sort();
+      if (!index && topics.length === 0) return null;
+      return { index: index ?? '', topics, where };
+    };
+    const root = this.host.workspaceRoots()[0];
+    const home = this.host.homeDir;
+    const [project, user] = await Promise.all([
+      root ? read(path.join(root, MEMORY_DIR), `${MEMORY_DIR}/${MEMORY_INDEX}`) : Promise.resolve(null),
+      home ? read(path.join(home, '.locaith', 'memory'), `~/.locaith/memory/${MEMORY_INDEX}`) : Promise.resolve(null),
+    ]);
+    if (!project && !user) return null;
+    return { ...(project ? { project } : {}), ...(user ? { user } : {}) };
   }
 
   /** Bio-Memory-Locaith đang chạy: lưu bản tóm tắt vào bộ nhớ dài hạn TRƯỚC khi chi tiết cũ biến mất khỏi ngữ cảnh (nén ngữ cảnh không làm mất ký ức). */
@@ -1411,6 +1435,7 @@ export class ChatController implements vscode.Disposable {
       onConsentRequired: () => this.onConsentRequired(),
       onAccountInvalid: () => void this.d.account?.recheck?.(),
       loadInstructions: (names) => loadProjectInstructions(this.host, names),
+      loadMemory: () => this.loadMemory(),
       // Model phát <think> thẳng vào chữ (Ollama/LM Studio/OpenRouter…): tách thẻ và nhắc suy nghĩ qua prompt.
       thinkTags: provider.kind === 'openai-chat' && provider.flavor === 'generic',
     });

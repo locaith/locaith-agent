@@ -152,6 +152,8 @@ export class NotUtf8Error extends Error {
 export interface ToolHost {
   readonly platform: { os: 'windows' | 'mac' | 'linux'; shell: string; shellLabel: string };
   workspaceRoots(): string[];
+  /** Thư mục cá nhân của người dùng (`~`), nếu biết — chỗ lưu ký ức dùng chung mọi dự án. */
+  homeDir?: string;
   /** Các thư mục ngoài workspace được phép ĐỌC (thư mục skill, phần mở rộng). */
   extraReadRoots(): string[];
 

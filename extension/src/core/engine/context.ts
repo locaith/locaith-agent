@@ -23,6 +23,8 @@ export interface SystemPromptInput {
   language: 'vi' | 'en';
   /** Nội dung tệp hướng dẫn dự án (đã đọc), kèm tên tệp. */
   projectInstructions?: { file: string; text: string } | null;
+  /** Ký ức bền (chỉ mục dự án + cá nhân) đọc lại từ đĩa ở mỗi lượt — sống sót qua mọi lần nén. */
+  memory?: string | null;
   /** Chỉ dẫn do các server MCP đang chạy gửi kèm (của server, không phải của người dùng). */
   mcpInstructions?: { server: string; text: string }[];
   /** Chế độ Swarm: điều phối bầy agent cho việc không đơn giản. */
@@ -118,6 +120,9 @@ export function buildSystemPrompt(i: SystemPromptInput): string {
         `${i.projectInstructions.text.trim()}\n</project_instructions>`,
     );
   }
+
+  // Ký ức bền: đọc lại từ đĩa mỗi lượt nên không bao giờ bị nén mất, và áp dụng cho MỌI nhà cung cấp.
+  if (i.memory) parts.push(i.memory);
 
   if (i.mcpInstructions?.length) {
     const body = i.mcpInstructions

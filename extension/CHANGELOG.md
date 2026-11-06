@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.6.27 - 2026-11-07
+
+- **Memory is now always in context — for every model, not just Locaith.** The persistent memory index (`.locaith/memory/MEMORY.md` for the project, `~/.locaith/memory/MEMORY.md` for you) is re-read from disk on every turn and injected as a `<memory>` block, so it survives any number of compactions and does not depend on the model deciding to call a tool. A new `remember` tool writes one dated line (`user` / `feedback` / `project` / `reference`), refuses secrets, skips duplicates, and works across providers; the `ghi-nho-memory` skill is no longer limited to Locaith models.
+- **Collapse at the bottom, not only at the top.** Opening a group (the work summary, a command or edit group, a tool body, a thinking block, the task group) now puts a "Collapse" row right under the content, so you close it where you are instead of scrolling back to the header.
 ## 0.6.26 - 2026-11-07
 
 - **A request now runs to the end, and "done" has to be proven.** The engine gained a completion gate instead of a reminder: while the task list still has unfinished work it names the remaining items and keeps going (at most twice), and a run that edited files without running anything that can fail is sent back to run the real check (tests / typecheck / build / the product) before it may report success. It never fires after you press Stop and never loops forever.

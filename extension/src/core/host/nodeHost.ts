@@ -6,6 +6,7 @@
 
 import { spawn, spawnSync } from 'node:child_process';
 import * as fs from 'node:fs';
+import * as os from 'node:os';
 import * as path from 'node:path';
 import * as vm from 'node:vm';
 import type { PermissionRequest } from '../../shared/protocol';
@@ -62,6 +63,8 @@ function createLineScanner(source: string, flags: string): (lines: string[]) => 
 
 export class NodeToolHost implements ToolHost {
   readonly platform: ToolHost['platform'];
+  /** `~` của người dùng: nơi đặt ký ức dùng chung mọi dự án. */
+  readonly homeDir: string = os.homedir();
   protected readonly shell: ShellInfo;
   /** Tệp bắt đầu bằng BOM: nhớ để ghi lại cho đúng (Excel/Notepad ở Việt Nam hay xuất CSV có BOM). */
   private readonly bomFiles = new Set<string>();

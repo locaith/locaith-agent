@@ -29,6 +29,7 @@ import { sha1 } from '../tools/textUtil';
 import { compactIfNeeded, compactedNotice, stripThinking } from './compaction';
 import { completionGate, type GateReason } from './completion';
 import { buildSystemPrompt } from './context';
+import { formatMemoryBlock } from './memory';
 import { ToolDispatcher } from './dispatcher';
 import { StreamInterceptor, type PillBudget } from './interceptor';
 import { t, type Lang } from './strings';
@@ -66,6 +67,8 @@ export interface EngineDeps {
   now?: () => Date;
   /** Đọc tệp hướng dẫn dự án (LOCAITH.md…). Không có → không nạp (bản trình duyệt không có workspace). */
   loadInstructions?(names: string[]): Promise<{ file: string; text: string } | null>;
+  /** Đọc lại ký ức bền (`.locaith/memory/MEMORY.md` của dự án + của người dùng) ở mỗi lượt. */
+  loadMemory?(): Promise<import('./memory').MemorySnapshot | null>;
   /** Hồ sơ prompt: 'ide' (mặc định, VS Code) hoặc 'browser' (trợ lý trong Chrome/Edge). Thông tin hay đổi (tab đang mở) KHÔNG vào system prompt. */
   profile?: 'ide' | 'browser';
   /**
@@ -248,6 +251,8 @@ export class AgentEngine {
         const specs = this.d.registry.specs(session, unlocked);
         const available = new Set(specs.map((s) => s.name));
         const instructions = this.d.loadInstructions ? await this.d.loadInstructions(settings.instructionFiles) : null;
+        // Ký ức đọc lại từ đĩa mỗi lượt: không phụ thuộc lịch sử, nên nén ngữ cảnh bao nhiêu lần cũng còn.
+        const memory = this.d.loadMemory ? formatMemoryBlock(await this.d.loadMemory().catch(() => null), lang) : null;
         const promptedThinking = !!this.d.thinkTags && session.thinkingLevel !== 'off';
         const system = buildSystemPrompt({
           host: this.d.host,
@@ -256,6 +261,7 @@ export class AgentEngine {
           mode: session.mode,
           language: lang,
           projectInstructions: instructions,
+          memory,
           promptedThinking,
           swarm: session.swarm === true || session.thinkingLevel === 'swarm',
           now: this.d.now?.(),

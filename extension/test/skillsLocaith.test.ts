@@ -125,22 +125,29 @@ describe('load_skill / search_skills theo nhà cung cấp của phiên', () => {
   });
 });
 
-describe('hai kỹ năng riêng của Locaith (khi đã có tệp) và đoạn nhắc trong system prompt', () => {
+describe('kỹ năng dựng sẵn: cái nào riêng Locaith, cái nào cho mọi hãng', () => {
   const dir = path.resolve(__dirname, '../skills');
   const NAMES = ['soan-thao-van-ban-nd30', 'ghi-nho-memory'];
   const present = NAMES.every((n) => fs.existsSync(path.join(dir, n, 'SKILL.md')));
 
-  it.runIf(present)('SKILL.md khai báo providers: [locaith] và được đăng ký dựng sẵn: chỉ hiện với Locaith', () => {
+  it.runIf(present)('soạn thảo Nghị định 30 chỉ dành cho họ mô hình Locaith', () => {
     const r = new SkillRegistry(builtinSkills());
-    for (const n of NAMES) {
-      const raw = fs.readFileSync(path.join(dir, n, 'SKILL.md'), 'utf8');
-      expect(parseSkillMarkdown(raw).meta.providers, `${n}: thiếu providers`).toEqual(['locaith']);
-      expect(r.get(n, 'locaith'), `${n} phải nạp được với locaith`).toBeDefined();
-      for (const other of ['anthropic', 'openai', 'gemini', 'deepseek', 'xai', 'locaith-auto', 'demo']) expect(r.get(n, other), `${n} lộ ra với ${other}`).toBeUndefined();
-      expect(r.list().map((s) => s.name)).not.toContain(n);
-      expect(r.catalog('anthropic')).not.toContain(n);
-      expect(r.catalog('locaith')).toContain(n);
-    }
+    const n = 'soan-thao-van-ban-nd30';
+    const raw = fs.readFileSync(path.join(dir, n, 'SKILL.md'), 'utf8');
+    expect(parseSkillMarkdown(raw).meta.providers, `${n}: thiếu providers`).toEqual(['locaith']);
+    expect(r.get(n, 'locaith'), `${n} phải nạp được với locaith`).toBeDefined();
+    for (const other of ['anthropic', 'openai', 'gemini', 'deepseek', 'xai', 'locaith-auto', 'demo']) expect(r.get(n, other), `${n} lộ ra với ${other}`).toBeUndefined();
+    expect(r.list().map((s) => s.name)).not.toContain(n);
+    expect(r.catalog('anthropic')).not.toContain(n);
+    expect(r.catalog('locaith')).toContain(n);
+  });
+
+  it.runIf(present)('ghi nhớ dùng được với MỌI nhà cung cấp (ký ức không phụ thuộc hãng mô hình)', () => {
+    const r = new SkillRegistry(builtinSkills());
+    const n = 'ghi-nho-memory';
+    expect(parseSkillMarkdown(fs.readFileSync(path.join(dir, n, 'SKILL.md'), 'utf8')).meta.providers).toBeUndefined();
+    for (const p of ['locaith', 'anthropic', 'openai', 'gemini', 'deepseek', 'xai', 'locaith-auto']) expect(r.get(n, p), `${n} phải nạp được với ${p}`).toBeDefined();
+    expect(r.catalog('anthropic')).toContain(n);
   });
 
   it.runIf(present)('đoạn nhắc trong system prompt gọi ĐÚNG tên hai kỹ năng thật', () => {

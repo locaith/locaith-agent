@@ -335,6 +335,7 @@ const vi = {
   'tool.openDiff': 'Mở diff trong editor',
   'tool.showMore': 'Hiện thêm {n} dòng',
   'tool.showLess': 'Thu gọn',
+  'collapse.foot': 'Thu gọn',
   'diff.truncated': 'Đã cắt bớt phần còn lại của diff',
   'diff.newFile': 'Tệp mới',
 
@@ -1128,6 +1129,7 @@ const en: Record<I18nKey, string> = {
   'tool.openDiff': 'Open diff in editor',
   'tool.showMore': 'Show {n} more lines',
   'tool.showLess': 'Show less',
+  'collapse.foot': 'Collapse',
   'diff.truncated': 'The rest of the diff was truncated',
   'diff.newFile': 'New file',
 

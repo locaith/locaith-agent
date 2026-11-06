@@ -4,6 +4,7 @@ import { estimateTokens } from '../../../../src/core/engine/tokens';
 import { useApp } from '../../ctx';
 import { formatInt } from '../../format';
 import { useCountUp, useElapsed } from '../../hooks';
+import { CollapseFoot } from './CollapseFoot';
 import type { ActivityRow, PillBlockT, SkillBlockT, TasksBlockT, ThinkingBlockT } from '../../timeline';
 import { groupThinking } from '../../timeline';
 import { cx, memo } from '../../util';
@@ -88,7 +89,12 @@ function ThinkingRowView({ block, live }: { block: ThinkingBlockT; live: boolean
           <Icon name={open ? 'chevron-down' : 'chevron-right'} size={14} class="tool-chevron" />
         </span>
       </button>
-      {open && <div class="thinking-body">{block.text}</div>}
+      {open && (
+        <div class="thinking-body">
+          {block.text}
+          <CollapseFoot onCollapse={() => setOpen(false)} label={t('tool.showLess')} />
+        </div>
+      )}
     </div>
   );
 }
@@ -114,6 +120,7 @@ function PillRunView({ blocks }: { blocks: PillBlockT[] }) {
           {blocks.map((b) => (
             <PillRowView key={b.id} block={b} />
           ))}
+          <CollapseFoot onCollapse={() => setOpen(false)} label={t('tool.showLess')} />
         </div>
       )}
     </div>
@@ -154,6 +161,7 @@ function ThinkingGroupView({ blocks, live }: { blocks: ThinkingBlockT[]; live: b
               <div class="thinking-body">{b.text}</div>
             </div>
           ))}
+          <CollapseFoot onCollapse={() => setOpen(false)} label={t('tool.showLess')} />
         </div>
       )}
     </div>
@@ -180,6 +188,7 @@ function TaskGroupView({ row, live }: { row: Extract<ActivityRow, { kind: 'taskg
       {open && (
         <div class="task-group-body" role="list">
           <ActivitySegment rows={row.rows} live={live} />
+          <CollapseFoot onCollapse={() => setOpen(false)} label={t('tool.showLess')} />
         </div>
       )}
     </div>

@@ -4,6 +4,7 @@
 
 import type { TodoItem, TodoStatus } from '../../shared/protocol';
 import { foldVi, type SkillRegistry } from '../skills/registry';
+import { memoryHeader, memoryIndexPath, memoryLine } from '../engine/memory';
 import type { ToolDef } from '../engine/types';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -148,6 +149,84 @@ export const offerOptionsTool: ToolDef<OfferOptionsInput> = {
     };
   },
 };
+
+// ─────────────────────────────────────────────────────────────────────────────
+// remember — ghi ký ức bền (được tự nạp lại ở mọi lượt, mọi phiên)
+// ─────────────────────────────────────────────────────────────────────────────
+
+interface RememberInput {
+  text: string;
+  type?: 'user' | 'feedback' | 'project' | 'reference';
+  scope?: 'project' | 'user';
+}
+
+const MEMORY_TYPES = ['user', 'feedback', 'project', 'reference'] as const;
+
+export const rememberTool: ToolDef<RememberInput> = {
+  name: 'remember',
+  description:
+    'Save one durable fact the user wants remembered across conversations (a preference, a convention, a decision, where to find something). ' +
+    'The memory file is read automatically at the start of every turn, so what you write here survives compaction and new sessions. ' +
+    'Use it when the user says "remember this" / "nhớ giúp" / "đừng quên", and when they correct you in a way that should not be forgotten. ' +
+    'One idea per call, self-contained, with the absolute date. Never store secrets, credentials or other people\'s personal data.',
+  inputSchema: {
+    type: 'object',
+    properties: {
+      text: { type: 'string', description: 'The memory itself: one self-contained fact, in the user\'s language. Include why it matters when that is not obvious.' },
+      type: { type: 'string', enum: [...MEMORY_TYPES], description: 'user (who they are) | feedback (a correction to keep) | project (a decision or convention) | reference (where to find something).' },
+      scope: { type: 'string', enum: ['project', 'user'], description: 'project = this repository (default); user = follows the person across all projects.' },
+    },
+    required: ['text'],
+  },
+  risk: 'write',
+  concurrencySafe: false,
+  async execute(input, ctx) {
+    const text = String(input.text ?? '').replace(/\s+/g, ' ').trim();
+    if (!text) return { content: 'Thiếu nội dung cần nhớ.', isError: true };
+    if (text.length < 3) return { content: 'Nội dung quá ngắn để thành một ký ức dùng được.', isError: true };
+    if (looksSecret(text)) return { content: 'Không ghi khoá API, mật khẩu, token hay dữ liệu cá nhân của người khác vào ký ức. Hãy nói với người dùng là bạn không lưu phần đó.', isError: true };
+
+    const scope = input.scope === 'user' ? 'user' : 'project';
+    const target = memoryIndexPath(ctx.host, scope);
+    if (!target) {
+      return {
+        content:
+          scope === 'user'
+            ? 'Không xác định được thư mục cá nhân để lưu ký ức. Hãy lưu vào phạm vi dự án (scope: "project") hoặc báo người dùng.'
+            : 'Chưa mở thư mục dự án nào nên không có chỗ lưu ký ức dự án. Hãy hỏi người dùng mở một thư mục, hoặc lưu vào ký ức cá nhân (scope: "user").',
+        isError: true,
+      };
+    }
+
+    const prev = (await ctx.host.readText(target.abs).catch(() => null)) ?? '';
+    const type = input.type && (MEMORY_TYPES as readonly string[]).includes(input.type) ? input.type : 'project';
+    const line = memoryLine(text.slice(0, 600), { date: isoDay(), type });
+    // Ghi trùng (cùng nội dung, khác ngày) là lỗi thường gặp của mô hình: bỏ qua thay vì làm bẩn chỉ mục.
+    const bare = text.slice(0, 600).toLowerCase();
+    if (prev.toLowerCase().split('\n').some((l) => l.includes(bare))) {
+      return { content: `Ký ức này đã có trong ${target.label} — không ghi lặp.`, summary: 'đã có' };
+    }
+    const body = prev.trim() ? `${prev.replace(/\s+$/, '')}\n${line}\n` : `${memoryHeader()}${line}\n`;
+    await ctx.host.writeText(target.abs, body);
+    return {
+      content: `Đã lưu vào ký ức (${target.label}): ${line.slice(2)}. Ký ức này được nạp tự động ở đầu mỗi lượt và mọi phiên sau, kể cả sau khi nén ngữ cảnh.`,
+      summary: target.label,
+      display: line,
+    };
+  },
+};
+
+/** Ngày tuyệt đối theo giờ máy (ký ức phải đọc được về sau, không dùng "hôm nay"). */
+function isoDay(): string {
+  const d = new Date();
+  const p = (n: number) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
+}
+
+/** Chặn ghi bí mật vào tệp ký ức (tệp này có thể được commit hoặc chia sẻ). */
+function looksSecret(s: string): boolean {
+  return /(sk-[A-Za-z0-9]{16,}|ghp_[A-Za-z0-9]{20,}|AKIA[0-9A-Z]{16}|-----BEGIN [A-Z ]*PRIVATE KEY-----|password\s*[:=]\s*\S{6,}|mật\s*khẩu\s*[:=]\s*\S{6,})/i.test(s);
+}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // scratchpad

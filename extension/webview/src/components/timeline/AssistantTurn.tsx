@@ -14,6 +14,7 @@ import { Icon } from '../Icons';
 import { Button } from '../ui';
 import { ActivitySegment } from './Activity';
 import { ArtifactCard } from './ArtifactCard';
+import { CollapseFoot } from './CollapseFoot';
 import { PermissionCard } from './PermissionCard';
 
 export function NoticeView({
@@ -61,8 +62,16 @@ function WorkingIndicator({ empty, blocks }: { empty: boolean; blocks: readonly 
   const secs = useElapsed(true);
   const stat = [tokens > 0 ? t('act.thinkTokens', { n: shown.toLocaleString(lang === 'vi' ? 'vi-VN' : 'en-US') }) : '', secs !== null && secs >= 1 ? `${secs} s` : ''].filter(Boolean).join(' · ');
   return (
-    <div class="working" role="status">
-      <LoSpinner size={20} />
+    <div class="working working-stage" role="status">
+      {/* Mascot: logo Locaith tách thành ba robot nhỏ nhún nhảy — để lúc chờ dài không thấy trống. Thuần CSS, tự dừng khi giảm chuyển động. */}
+      <div class="mascot" aria-hidden="true">
+        <LoSpinner size={18} />
+        <span class="mascot-bots">
+          <span class="mascot-bot b1" />
+          <span class="mascot-bot b2" />
+          <span class="mascot-bot b3" />
+        </span>
+      </div>
       <span>{empty ? t('turn.preparing') : t('act.working')}</span>
       {stat && <span class="work-stat">{stat}</span>}
     </div>
@@ -166,7 +175,8 @@ function AssistantTurnView({ item, live, isLast }: { item: AssistantItem; live: 
     // và dòng "đang làm việc" bên dưới vẫn hiện. Bấm vào dòng tóm tắt để mở lại chi tiết.
     if (live) {
       const s = splitWork(segments, item.blocks, item.ts, undefined);
-      return s && s.work.length >= 3 ? s : null;
+      // Đếm cả `kept`: câu trả lời dài được giữ riêng (hiện ngoài khối gấp) nhưng vẫn là một phần của quá trình.
+      return s && s.work.length + s.kept.length >= 3 ? s : null;
     }
     return null;
   }, [segments, item.done, live, item.blocks, item.ts, item.endedAt]);
@@ -206,7 +216,15 @@ function AssistantTurnView({ item, live, isLast }: { item: AssistantItem; live: 
       {split ? (
         <>
           <WorkSummary stats={split.stats} open={workOpen} onToggle={() => setWorkOpen((v) => !v)} />
-          {workOpen ? <div class="work-body">{split.work.map((seg) => render(seg, false, false))}</div> : split.changes && render(split.changes, false, false)}
+          {workOpen ? (
+            <div class="work-body">
+              {split.work.map((seg) => render(seg, false, false))}
+              {/* Đóng tại chỗ: khối quá trình có thể dài hơn màn hình, không phải cuộn lên đầu để thu gọn. */}
+              <CollapseFoot onCollapse={() => setWorkOpen(false)} label={t('work.collapse')} />
+            </div>
+          ) : (
+            split.changes && render(split.changes, false, false)
+          )}
           {split.kept.map((seg) => render(seg, false, false))}
           {split.tail.map((seg) => render(seg, false, false))}
         </>
