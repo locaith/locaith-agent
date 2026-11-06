@@ -79,7 +79,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<TestAp
 
   const wsPath = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ?? '';
   const workspaceKey = wsPath ? createHash('sha1').update(wsPath.toLowerCase()).digest('hex').slice(0, 16) : 'no-workspace';
-  const store = new SessionStore(context.globalStorageUri, workspaceKey, undefined, vscode.workspace.workspaceFolders?.[0]?.name);
+  const store = new SessionStore(context.globalStorageUri, workspaceKey, undefined, vscode.workspace.workspaceFolders?.[0]?.name, version);
 
   const controllers = new Set<ChatController>();
   const all = () => [...controllers];

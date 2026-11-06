@@ -508,6 +508,7 @@ export class ChatController implements vscode.Disposable {
       title: this.session.title,
       transcript: [],
       todos: this.session.todos,
+      ...(this.session.options?.length ? { options: this.session.options } : {}),
       running: false,
       provider: this.session.provider,
       model: this.session.model,
@@ -779,6 +780,11 @@ export class ChatController implements vscode.Disposable {
         break;
       case 'mode':
         this.patch({ mode: ev.mode });
+        break;
+      case 'options':
+        // Lựa chọn hướng đi: hiện thành nút dưới cuộc trò chuyện (nguồn sự thật là phiên).
+        this.session.options = ev.options.length ? ev.options : undefined;
+        this.patch({ options: ev.options });
         break;
     }
   }
@@ -1517,7 +1523,9 @@ export class ChatController implements vscode.Disposable {
     }
     await this.saveNow();
     this.session = p.session;
-    this.session.historyEdited = false;
+    // `historyEdited` do bước nâng cấp phiên quyết định (đọc từ kho lưu trữ): phiên của bản cũ có system prompt
+    // và bộ công cụ khác nên khối suy luận đã ký phải bị bỏ. KHÔNG đặt lại false ở đây — làm vậy là gửi lại
+    // suy luận cũ dưới một tiền tố mới và phiên cũ chạy bằng "luật" của bản cũ.
     if (!this.d.providers.has(this.session.provider)) {
       const pick = this.pickDefaultProvider();
       this.session.provider = pick.provider;
@@ -1532,6 +1540,11 @@ export class ChatController implements vscode.Disposable {
     if (rec.rebuilt) await this.d.store.backupRaw(p.session.id);
     this.view = { ...this.baseView(), transcript: rec.items, providers: this.view.providers, ...this.carryStrips(), ...(await this.listings()), screen: 'chat' };
     this.post({ type: 'init', state: this.view });
+    if (p.migrated) {
+      const n = rec.rebuilt ? '' : this.lang === 'vi' ? ' Cuộc trò chuyện này đã được nâng cấp theo bản mới — dùng tiếp bình thường.' : ' This conversation was upgraded to the current version — just continue it.';
+      this.toast('info', this.lang === 'vi' ? `Đã áp dụng thay đổi của bản ${String(this.d.context.extension.packageJSON.version ?? '')} cho cuộc trò chuyện cũ.${n}` : `Applied version ${String(this.d.context.extension.packageJSON.version ?? '')} changes to this earlier conversation.${n}`);
+      void this.saveNow();
+    }
     if (rec.rebuilt) {
       this.toast('info', this.lang === 'vi' ? `Đã dựng lại ${rec.added} lượt trò chuyện bị thiếu từ lịch sử. Bản gốc được giữ cạnh tệp (.healbak.json).` : `Rebuilt ${rec.added} missing conversation turn(s) from the history. The original file is kept next to it (.healbak.json).`);
       void this.saveNow();

@@ -2543,3 +2543,97 @@ button.chip-main:hover {
 .mk-pol-label { flex: 1; min-width: 0; }
 .mk-tools li { display: flex; align-items: center; gap: 8px; }
 .mk-tools li > span { flex: 1; min-width: 0; }
+
+/* ── Lựa chọn hướng đi ở cuối lượt (nút, thay cho đoạn "bước tiếp theo" trong chat) ── */
+.options {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0 12px 6px;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--nd-radius, 12px);
+  background: var(--surface-2);
+}
+.options-head {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--fg-faint);
+  font-size: var(--nd-fs-xs);
+}
+.options-title {
+  font-weight: 600;
+  color: var(--fg-muted, var(--fg));
+}
+.options-spacer {
+  flex: 1;
+}
+.options-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.option-chip {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  max-width: 100%;
+  padding: 6px 10px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--surface-1, transparent);
+  color: var(--fg);
+  font-size: var(--nd-fs-sm);
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.12s, border-color 0.12s;
+}
+.option-chip:hover {
+  background: color-mix(in srgb, var(--accent-text) 10%, transparent);
+  border-color: color-mix(in srgb, var(--accent-text) 45%, var(--line));
+}
+.option-text {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+.option-label {
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.option-detail {
+  color: var(--fg-faint);
+  font-size: var(--nd-fs-xs);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.option-go {
+  flex: none;
+  opacity: 0.55;
+}
+
+/* Bảng "việc còn lại": mặc định một dòng gọn, bấm mới mở danh sách */
+.todo-choices.is-collapsed .todo-head {
+  padding-top: 4px;
+  padding-bottom: 4px;
+}
+.todo-expand {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+  padding: 2px 4px;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+.todo-expand:hover .todo-title {
+  color: var(--fg);
+}

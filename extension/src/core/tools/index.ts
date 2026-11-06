@@ -6,7 +6,7 @@ import { ToolRegistry } from '../engine/toolRegistry';
 import type { ToolHost } from '../engine/types';
 import { createArtifactTool, listArtifactTypesTool, updateArtifactTool } from './artifact';
 import { editFileTool, globTool, grepTool, listDirTool, readFileTool, writeFileTool } from './fs';
-import { createSkillTools, exitPlanModeTool, scratchpadTool, todoWriteTool, type MarketSearch } from './meta';
+import { createSkillTools, exitPlanModeTool, offerOptionsTool, scratchpadTool, todoWriteTool, type MarketSearch } from './meta';
 import { createTerminalTool } from './terminal';
 import { fetchUrlTool, webSearchTool } from './web/web';
 
@@ -28,6 +28,7 @@ export function createToolRegistry(opts: ToolRegistryOptions): ToolRegistry {
   const r = new ToolRegistry();
   const [loadSkill, searchSkills] = createSkillTools(opts.skills, opts.market, opts.currentProvider);
   r.register(todoWriteTool)
+    .register(offerOptionsTool)
     .register(loadSkill)
     .register(searchSkills)
     .register(webSearchTool)

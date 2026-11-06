@@ -33,7 +33,7 @@ export function vscodeStoreIO(storageUri: vscode.Uri): StoreIO {
  * Logic chỉ mục/hợp nhất nằm ở `BaseSessionStore` (dùng chung với bản trình duyệt).
  */
 export class SessionStore extends BaseSessionStore {
-  constructor(storageUri: vscode.Uri | undefined, workspaceKey: string, io?: StoreIO, workspaceName?: string) {
-    super(io ?? vscodeStoreIO(storageUri as vscode.Uri), workspaceKey, workspaceName);
+  constructor(storageUri: vscode.Uri | undefined, workspaceKey: string, io?: StoreIO, workspaceName?: string, appVersion?: string) {
+    super(io ?? vscodeStoreIO(storageUri as vscode.Uri), workspaceKey, workspaceName, appVersion);
   }
 }

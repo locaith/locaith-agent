@@ -15,16 +15,23 @@
 
 import type { SessionState } from '../core/engine/types';
 import { TRASH_DAYS, type SessionSummary, type TItem, type TrashSummary } from './protocol';
+import { SESSION_SCHEMA, migrateSession } from './sessionMigrate';
 import { parseBackup, type BackupSession } from './sessionBackup';
 import { trimTranscriptForStorage } from './transcript';
 
 export interface PersistedSession {
   version: 1;
+  /** Hình dạng `SessionState` lúc ghi (xem `SESSION_SCHEMA`). Thiếu = tệp của bản cũ. */
+  schema?: number;
+  /** Phiên bản ứng dụng đã ghi tệp: khác bản đang chạy nghĩa là prompt/bộ công cụ có thể đã đổi. */
+  appVersion?: string;
   workspace: string;
   /** Tên thư mục làm việc lúc lưu (chỉ để hiển thị khi xem cuộc trò chuyện từ thư mục khác). */
   workspaceName?: string;
   session: SessionState;
   transcript: TItem[];
+  /** Chỉ có trong bộ nhớ: lần đọc này đã nâng cấp phiên từ bản cũ. Không được ghi xuống đĩa. */
+  migrated?: boolean;
 }
 
 interface IndexEntry extends SessionSummary {
@@ -76,6 +83,8 @@ export class BaseSessionStore {
     private readonly io: StoreIO,
     private readonly workspaceKey: string,
     private readonly workspaceName?: string,
+    /** Phiên bản ứng dụng đang chạy. Có = phiên ghi bởi bản khác được nâng cấp ngay khi đọc. */
+    private readonly appVersion?: string,
   ) {}
 
   private enqueue<T>(fn: () => Promise<T>): Promise<T> {
@@ -84,11 +93,18 @@ export class BaseSessionStore {
     return next;
   }
 
+  /**
+   * Đọc + NÂNG CẤP một phiên. Đây là chỗ duy nhất mọi đường đọc đi qua (mở phiên, danh sách, sao lưu, khôi phục),
+   * nên phiên của bản cũ luôn được chuẩn hoá theo bản đang chạy — không cần tạo cuộc trò chuyện mới.
+   */
   private async readPersisted(id: string): Promise<PersistedSession | null> {
     if (!SAFE_ID.test(id)) return null;
     try {
       const p = JSON.parse(dec.decode(await this.io.read(`${id}.json`))) as PersistedSession;
-      return p.version === 1 ? p : null;
+      if (p.version !== 1) return null;
+      const m = migrateSession(p.session, { storedAppVersion: p.appVersion, appVersion: this.appVersion });
+      if (!m) return null;
+      return { ...p, session: m.session, schema: SESSION_SCHEMA, ...(m.changed ? { migrated: true } : {}) };
     } catch {
       return null;
     }
@@ -98,7 +114,10 @@ export class BaseSessionStore {
     if (!SAFE_ID.test(id)) return null;
     try {
       const p = JSON.parse(dec.decode(await this.io.read(`trash.${id}.json`))) as PersistedTrash;
-      return p.version === 1 && p.session ? { ...p, deletedAt: typeof p.deletedAt === 'number' ? p.deletedAt : Date.now() } : null;
+      if (p.version !== 1 || !p.session) return null;
+      const m = migrateSession(p.session, { storedAppVersion: p.appVersion, appVersion: this.appVersion });
+      if (!m) return null;
+      return { ...p, session: m.session, schema: SESSION_SCHEMA, deletedAt: typeof p.deletedAt === 'number' ? p.deletedAt : Date.now() };
     } catch {
       return null;
     }
@@ -244,6 +263,8 @@ export class BaseSessionStore {
       if (session.messages.length === 0 && transcript.length === 0) return; // không lưu hội thoại rỗng
       const payload: PersistedSession = {
         version: 1,
+        schema: SESSION_SCHEMA,
+        ...(this.appVersion ? { appVersion: this.appVersion } : {}),
         workspace: this.workspaceKey,
         ...(this.workspaceName ? { workspaceName: this.workspaceName } : {}),
         session,
@@ -320,8 +341,8 @@ export class BaseSessionStore {
     return this.enqueue(async () => {
       const p = await this.readTrashed(id);
       if (!p) return false;
-      const { deletedAt: _d, ...live } = p;
-      await this.io.write(`${id}.json`, enc.encode(JSON.stringify(live satisfies PersistedSession)));
+      const { deletedAt: _d, migrated: _m, ...live } = p;
+      await this.io.write(`${id}.json`, enc.encode(JSON.stringify({ ...live, schema: SESSION_SCHEMA, ...(this.appVersion ? { appVersion: this.appVersion } : {}) } satisfies PersistedSession)));
       await this.io.remove(`trash.${id}.json`);
       const { idx } = await this.syncIndex();
       const entry = this.entryOf(live);

@@ -27,6 +27,7 @@ import { newId } from '../../shared/transcript';
 import type { SkillRegistry } from '../skills/registry';
 import { sha1 } from '../tools/textUtil';
 import { compactIfNeeded, compactedNotice, stripThinking } from './compaction';
+import { completionGate, type GateReason } from './completion';
 import { buildSystemPrompt } from './context';
 import { ToolDispatcher } from './dispatcher';
 import { StreamInterceptor, type PillBudget } from './interceptor';
@@ -104,7 +105,10 @@ export interface RunResult {
 }
 
 /** Công cụ mà việc gọi lặp lại là bình thường (cập nhật trạng thái). */
-const REPEAT_EXEMPT = new Set(['todo_write', 'scratchpad', 'load_skill', 'search_skills']);
+const REPEAT_EXEMPT = new Set(['todo_write', 'scratchpad', 'load_skill', 'search_skills', 'offer_options']);
+
+/** Công cụ tạo/sửa artifact: đầu ra là tài liệu, không phải mã nguồn — không kích hoạt cổng "phải chạy kiểm chứng". */
+const ARTIFACT_TOOLS = new Set(['create_artifact', 'update_artifact', 'list_artifact_types']);
 
 /** Dấu vân tay của phần "tiền tố" mà khối suy luận ký vào: system prompt và định nghĩa công cụ (thứ tự công cụ không quan trọng). */
 function promptFingerprint(system: string, specs: ReadonlyArray<{ name: string; description: string; inputSchema: unknown }>): string {
@@ -146,12 +150,20 @@ export class AgentEngine {
     emit({ t: 'assistant_start', id, provider: this.d.provider.id, model: session.model, ts: Date.now() });
     session.messages.push({ role: 'user', content: input.content, ts: Date.now() });
     session.updatedAt = Date.now();
+    // Lựa chọn của lượt trước chỉ có nghĩa với lượt đó: người dùng đã gửi việc mới thì thu hồi các nút cũ.
+    if (session.options?.length) {
+      session.options = undefined;
+      emit({ t: 'options', options: [] });
+    }
 
     const budget: PillBudget = { seq: 0, count: 0 };
     const recentSigs: string[] = [];
     let turns = 0;
     let continuations = 0;
-    let todoNudges = 0;
+    /** Cổng hoàn thành: số lần đã nhắc + các lý do đã dùng (mỗi lý do một lần). */
+    const gate = { nudges: 0, reasons: [] as GateReason[] };
+    /** Những gì lượt chạy này đã THỰC SỰ làm — căn cứ để biết "xong" có bằng chứng hay không. */
+    const trace = { wrote: false, execs: 0 };
     let emptyNudges = 0;
     let wrapUp = false;
     let compactedForOverflow = false;
@@ -379,7 +391,7 @@ export class AgentEngine {
             const last = calls[calls.length - 1];
             if (!last.parseError) last.parseError = 'đầu ra bị cắt do chạm giới hạn độ dài';
           }
-          const results = await this.runTools(calls, session, id, signal, available, recentSigs, lang);
+          const results = await this.runTools(calls, session, id, signal, available, recentSigs, lang, trace);
           // Tin người dùng gửi lúc công cụ đang chạy đi CHUNG tin nhắn kết quả (mỗi tin assistant chỉ được theo sau bởi MỘT tin user: giữ xen kẽ vai trò ở mọi hãng); tool_result luôn đứng trước.
           const steered = signal.aborted ? [] : takeQueued(true);
           session.messages.push({ role: 'user', content: [...results, ...steered], ts: Date.now() });
@@ -397,7 +409,8 @@ export class AgentEngine {
             lastWasToolResults = false;
             continuations = 0;
             emptyNudges = 0;
-            todoNudges = 0;
+            gate.nudges = 0;
+            gate.reasons.length = 0;
             continue;
           }
         }
@@ -418,10 +431,26 @@ export class AgentEngine {
           session.messages.push(userText(t(lang, 'emptyReplyNudge'), { synthetic: true }));
           continue;
         }
-        const pendingTodos = session.todos.some((x) => x.status !== 'completed');
-        if (pendingTodos && todoNudges < 1 && !wrapUp && !/[?？]\s*$/.test(text)) {
-          todoNudges++;
-          session.messages.push(userText(t(lang, 'todoReminder'), { synthetic: true }));
+        const pendingTodos = session.todos.filter((x) => x.status !== 'completed');
+        const decision = completionGate(
+          {
+            stop,
+            text,
+            pendingTodos,
+            wroteFiles: trace.wrote,
+            execCalls: trace.execs,
+            nudges: gate.nudges,
+            reasons: gate.reasons,
+            wrapUp,
+            aborted: signal.aborted,
+          },
+          lang,
+        );
+        if (decision) {
+          gate.nudges++;
+          gate.reasons.push(decision.reason);
+          // Nhắc cụ thể, không phải "hãy tiếp tục": nêu đúng việc còn lại / đúng phép kiểm tra còn thiếu.
+          session.messages.push(userText(decision.message, { synthetic: true }));
           continue;
         }
         break;
@@ -594,6 +623,7 @@ export class AgentEngine {
     available: ReadonlySet<string>,
     recentSigs: string[],
     lang: Lang,
+    trace: { wrote: boolean; execs: number },
   ): Promise<ToolResultBlock[]> {
     // Chặn vòng lặp vô ích: cùng một lệnh với cùng đối số lặp lại ≥ 3 lần.
     const blocked = new Map<string, ToolResultBlock>();
@@ -618,6 +648,13 @@ export class AgentEngine {
       }
     }
     const ran = toRun.length ? await this.dispatcher.runBatch({ calls: toRun, session, assistantId: id, signal, available }) : [];
+    // Ghi lại việc ĐÃ THẬT SỰ chạy (không phải việc mô hình nói đã làm): căn cứ cho cổng hoàn thành ở cuối lượt.
+    // Artifact (báo cáo, dashboard) không phải mã nguồn phải chạy test — chỉ ghi tệp trong workspace mới cần kiểm chứng.
+    for (const c of toRun) {
+      const risk = this.d.registry.get(c.name)?.risk;
+      if (risk === 'write' && !ARTIFACT_TOOLS.has(c.name)) trace.wrote = true;
+      else if (risk === 'exec') trace.execs++;
+    }
     // Sau khi sửa/ghi tệp hay thao tác lên trang web, thế giới đã đổi: đọc lại tệp, chạy lại `npm test`, chụp lại trang (page_snapshot) là việc chính đáng, không phải vòng lặp.
     if (toRun.some((c) => { const risk = this.d.registry.get(c.name)?.risk; return risk === 'write' || risk === 'act'; })) recentSigs.length = 0;
     const byId = new Map(ran.map((r) => [r.toolUseId, r]));

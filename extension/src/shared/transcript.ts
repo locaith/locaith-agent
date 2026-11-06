@@ -257,6 +257,7 @@ export function applyEvent(items: readonly TItem[], ev: UiEvent): TItem[] {
     case 'run_state':
     case 'mode':
     case 'todos':
+    case 'options':
       return items as TItem[];
   }
 }
@@ -270,6 +271,8 @@ export function reduceView(state: ViewState, ev: UiEvent): ViewState {
       return state.mode === ev.mode ? state : { ...state, mode: ev.mode };
     case 'todos':
       return { ...state, todos: ev.todos };
+    case 'options':
+      return { ...state, options: ev.options };
     case 'tasks':
       return { ...state, todos: ev.todos, transcript: applyEvent(state.transcript, ev) };
     default: {

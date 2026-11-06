@@ -16,6 +16,8 @@ export function TodoPanel({ todos, running }: { todos: TodoItem[]; running: bool
   const [open, setOpen] = useState<boolean>(() => loadUiState().todoOpen ?? true);
   /** Chữ ký của danh sách việc còn lại đã bị người dùng ẩn; danh sách đổi (trợ lý lập kế hoạch mới) thì hiện lại. */
   const [dismissed, setDismissed] = useState('');
+  /** Mở danh sách "việc còn lại" để chọn bước — mặc định đóng, chỉ hiện một dòng gọn. */
+  const [showRemaining, setShowRemaining] = useState(false);
   if (todos.length === 0) return null;
 
   const done = todos.filter((x) => x.status === 'completed').length;
@@ -24,12 +26,17 @@ export function TodoPanel({ todos, running }: { todos: TodoItem[]; running: bool
   if (!running) {
     const signature = remaining.map((x) => `${x.id}:${x.title}`).join('|');
     if (remaining.length === 0 || dismissed === signature) return null;
+    // MẶC ĐỊNH THU GỌN: chỉ một dòng "còn N bước"; muốn xem/chọn bước nào thì mở ra.
+    // (Yêu cầu của chủ dự án: không chiếm chỗ bằng danh sách "việc còn lại" mỗi lần trợ lý dừng.)
     return (
-      <section class="todo todo-choices" aria-label={t('todo.remaining')}>
+      <section class="todo todo-choices is-collapsed" aria-label={t('todo.remaining')}>
         <div class="todo-head todo-head-static">
-          <Icon name="list-checks" size={15} />
-          <span class="todo-title">{t('todo.remaining')}</span>
-          <span class="todo-progress">{t('todo.progress', { done, total: todos.length })}</span>
+          <button type="button" class="todo-expand" aria-expanded={showRemaining} onClick={() => setShowRemaining((v) => !v)} title={showRemaining ? t('todo.collapse') : t('todo.expand')}>
+            <Icon name="list-checks" size={15} />
+            <span class="todo-title">{t('todo.remaining')}</span>
+            <span class="todo-progress">{t('todo.progress', { done, total: todos.length })}</span>
+            <Icon name={showRemaining ? 'chevron-down' : 'chevron-up'} size={13} />
+          </button>
           <span class="todo-spacer" />
           <button type="button" class="todo-all" onClick={() => post({ type: 'send', text: t('todo.continue.all'), attachments: [] })} title={t('todo.continue.all')}>
             <Icon name="send" size={12} />
@@ -39,23 +46,25 @@ export function TodoPanel({ todos, running }: { todos: TodoItem[]; running: bool
             <Icon name="x" size={13} />
           </button>
         </div>
-        <ul class="todo-list">
-          {remaining.map((item) => (
-            <li key={item.id}>
-              <button
-                type="button"
-                class={cx('todo-pick', `is-${item.status}`)}
-                title={t('todo.pick.title')}
-                aria-label={`${t('todo.pick.title')}: ${item.title}`}
-                onClick={() => post({ type: 'send', text: t('todo.continue.one', { title: item.title }), attachments: [] })}
-              >
-                <span class="todo-box" aria-hidden="true" />
-                <span class="todo-text">{item.title}</span>
-                <Icon name="send" size={12} class="todo-go" />
-              </button>
-            </li>
-          ))}
-        </ul>
+        {showRemaining && (
+          <ul class="todo-list">
+            {remaining.map((item) => (
+              <li key={item.id}>
+                <button
+                  type="button"
+                  class={cx('todo-pick', `is-${item.status}`)}
+                  title={t('todo.pick.title')}
+                  aria-label={`${t('todo.pick.title')}: ${item.title}`}
+                  onClick={() => post({ type: 'send', text: t('todo.continue.one', { title: item.title }), attachments: [] })}
+                >
+                  <span class="todo-box" aria-hidden="true" />
+                  <span class="todo-text">{item.title}</span>
+                  <Icon name="send" size={12} class="todo-go" />
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
       </section>
     );
   }

@@ -32,6 +32,20 @@ export interface TodoItem {
   status: TodoStatus;
 }
 
+/**
+ * Một lựa chọn hướng đi mà trợ lý đưa ra ở cuối lượt (thay cho đoạn "bước tiếp theo" viết trong chat).
+ * Bấm một lựa chọn = gửi `prompt` như tin nhắn của người dùng, nên chọn xong là trợ lý làm trọn việc đó.
+ */
+export interface SuggestionOption {
+  id: string;
+  /** Nhãn ngắn hiện trên nút (≤ 60 ký tự). */
+  label: string;
+  /** Câu gửi đi khi bấm — phải đủ rõ để một mình nó là một yêu cầu trọn vẹn. */
+  prompt: string;
+  /** Một dòng giải thích thêm (tuỳ chọn). */
+  detail?: string;
+}
+
 export interface DiffLine {
   /** ' ' giữ nguyên, '+' thêm, '-' xoá */
   t: ' ' | '+' | '-';
@@ -255,7 +269,9 @@ export type UiEvent =
   | { t: 'run_state'; running: boolean }
   | { t: 'mode'; mode: PermissionMode }
   /** Cập nhật bảng tác vụ cố định phía trên ô nhập. */
-  | { t: 'todos'; todos: TodoItem[] };
+  | { t: 'todos'; todos: TodoItem[] }
+  /** Các lựa chọn hướng đi hiện dưới dạng nút (rỗng = thu hồi). Thay cho việc liệt kê "bước tiếp theo" trong chat. */
+  | { t: 'options'; id?: string; options: SuggestionOption[] };
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Trạng thái tổng của giao diện
@@ -705,6 +721,8 @@ export interface ViewState {
   transcript: TItem[];
   /** Bảng tác vụ hiện tại. */
   todos: TodoItem[];
+  /** Lựa chọn hướng đi đang chờ người dùng bấm (nút gọn dưới cuộc trò chuyện). */
+  options?: SuggestionOption[];
   running: boolean;
   /** Host hỗ trợ xếp hàng tin nhắn khi trợ lý đang chạy (bản VS Code). Thiếu = không: giao diện chỉ có nút Dừng như cũ. */
   canQueue?: boolean;

@@ -4,7 +4,7 @@
  */
 
 import type { ChatMessage, ImageBlock, JsonSchema, ThinkingLevel } from '../types';
-import type { DiffInfo, PermissionKind, PermissionMode, PermissionRequest, TodoItem, UiEvent } from '../../shared/protocol';
+import type { DiffInfo, PermissionKind, PermissionMode, PermissionRequest, SuggestionOption, TodoItem, UiEvent } from '../../shared/protocol';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Công cụ
@@ -217,6 +217,11 @@ export interface SessionState {
   swarm?: boolean;
   messages: ChatMessage[];
   todos: TodoItem[];
+  /**
+   * Các lựa chọn hướng đi trợ lý đưa ra ở cuối lượt (nút bấm, không phải đoạn văn trong chat).
+   * Bị xoá mỗi khi có tin nhắn mới của người dùng — một lựa chọn chỉ có nghĩa với lượt vừa xong.
+   */
+  options?: SuggestionOption[];
   scratchpad: Record<string, string>;
   loadedSkills: string[];
   /** Các khoá "cho phép trong phiên này" đã được người dùng chọn. */
@@ -279,7 +284,7 @@ export interface EngineSettings {
 }
 
 export const DEFAULT_ENGINE_SETTINGS: EngineSettings = {
-  maxTurns: 30,
+  maxTurns: 60,
   maxOutputTokens: 32000,
   parallelToolCalls: true,
   language: 'vi',

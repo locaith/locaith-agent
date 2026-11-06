@@ -213,6 +213,10 @@ const vi = {
   'ctx.compact': 'Nén cuộc trò chuyện',
   'ctx.compactHint': 'Tóm tắt các tin nhắn cũ để giải phóng ngữ cảnh',
 
+  // ── lựa chọn hướng đi (nút, thay cho đoạn "bước tiếp theo" trong chat) ──
+  'options.title': 'Làm tiếp việc nào?',
+  'options.hide': 'Ẩn các lựa chọn',
+
   // ── bảng tác vụ ──
   'todo.title': 'Tác vụ',
   'todo.remaining': 'Việc còn lại',
@@ -1007,6 +1011,8 @@ const en: Record<I18nKey, string> = {
   'ctx.compactHint': 'Summarize older messages to free up context',
 
   'todo.title': 'Tasks',
+  'options.title': 'What next?',
+  'options.hide': 'Hide these options',
   'todo.remaining': 'Remaining steps',
   'todo.runAll': 'Continue all',
   'todo.dismiss': 'Hide this list',

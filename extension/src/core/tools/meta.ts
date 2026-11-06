@@ -75,6 +75,81 @@ export const todoWriteTool: ToolDef<TodoInput> = {
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
+// offer_options — lựa chọn hướng đi dưới dạng NÚT, thay cho đoạn "bước tiếp theo"
+// ─────────────────────────────────────────────────────────────────────────────
+
+interface OfferOptionsInput {
+  options: { label: string; prompt: string; detail?: string }[];
+}
+
+/** Tối đa 4 nút; nhãn ngắn để không vỡ hàng. */
+const MAX_OPTIONS = 4;
+
+export const offerOptionsTool: ToolDef<OfferOptionsInput> = {
+  name: 'offer_options',
+  description:
+    'Offer the user 2–4 concrete options as BUTTONS under the conversation, instead of writing a "next steps" or "you could also…" paragraph at the end of your reply. ' +
+    'Call it once, when the requested work is finished and there is a genuine choice about what to do next (for example: run it end-to-end, write tests, deploy, or fix the next bug you noticed). ' +
+    'Each option must be a request that stands on its own: `prompt` is what gets sent as the user\'s message when they click, so write it as a complete instruction that finishes that piece of work. ' +
+    'Do NOT repeat the options in your text and do NOT end your reply with a list of steps — the buttons are the list.',
+  inputSchema: {
+    type: 'object',
+    properties: {
+      options: {
+        type: 'array',
+        description: '2–4 options, most useful first.',
+        items: {
+          type: 'object',
+          properties: {
+            label: { type: 'string', description: 'Button text, ≤ 60 characters, in the user\'s language.' },
+            prompt: { type: 'string', description: 'The full instruction sent when the user clicks this option (finish the work, do not just plan it).' },
+            detail: { type: 'string', description: 'Optional one-line hint shown under the label.' },
+          },
+          required: ['label', 'prompt'],
+        },
+      },
+    },
+    required: ['options'],
+  },
+  risk: 'meta',
+  concurrencySafe: false,
+  // Gọi lại với cùng nội dung là bình thường (người dùng bấm "làm tiếp" rồi trợ lý đưa lựa chọn mới).
+  repeatExempt: true,
+  validate(input) {
+    const n = Array.isArray(input.options) ? input.options.filter((o) => o && String(o.label ?? '').trim() && String(o.prompt ?? '').trim()).length : 0;
+    if (n < 2) return 'Cần ít nhất 2 lựa chọn có nhãn và prompt (offer_options).';
+    if (n > MAX_OPTIONS) return `Tối đa ${MAX_OPTIONS} lựa chọn.`;
+    return null;
+  },
+  async execute(input, ctx) {
+    const seen = new Set<string>();
+    const options = input.options
+      .filter((o) => o && String(o.label ?? '').trim() && String(o.prompt ?? '').trim())
+      .slice(0, MAX_OPTIONS)
+      .flatMap((o, i) => {
+        const label = String(o.label).replace(/\s+/g, ' ').trim().slice(0, 60);
+        const prompt = String(o.prompt).trim().slice(0, 600);
+        const key = label.toLowerCase();
+        if (seen.has(key)) return [];
+        seen.add(key);
+        const detail = String(o.detail ?? '').replace(/\s+/g, ' ').trim().slice(0, 160);
+        return [{ id: `o${i + 1}`, label, prompt, ...(detail ? { detail } : {}) }];
+      });
+    if (options.length < 2) return { content: 'Cần ít nhất 2 lựa chọn khác nhau.', isError: true };
+
+    ctx.session.options = options;
+    ctx.emit({ t: 'options', id: ctx.assistantId, options });
+    return {
+      content:
+        `Đã hiện ${options.length} lựa chọn cho người dùng bấm. KHÔNG liệt kê lại chúng trong câu trả lời và không thêm mục "bước tiếp theo": ` +
+        'hãy kết thúc lượt bằng một câu ngắn gọn về kết quả đã xong.',
+      summary: `${options.length} lựa chọn`,
+      display: options.map((o) => `• ${o.label}`).join('\n'),
+    };
+  },
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
 // scratchpad
 // ─────────────────────────────────────────────────────────────────────────────
 

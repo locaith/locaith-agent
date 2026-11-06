@@ -10,6 +10,7 @@ import { Header, type Screen } from './components/Header';
 import { LoDefs, LoSpinner } from './components/Brand';
 import { HistoryView } from './components/HistoryView';
 import { MarketView } from './components/MarketView';
+import { OptionsBar } from './components/OptionsBar';
 import { SettingsView } from './components/SettingsView';
 import { TodoPanel } from './components/TodoPanel';
 import { ModelQueueStrip } from './components/ModelQueue';
@@ -247,6 +248,7 @@ export function App() {
           {view.chromePair && <ChromePairStrip pair={view.chromePair} />}
           {view.memory && <MemoryStrip memory={view.memory} />}
           <TodoPanel todos={view.todos} running={view.running} />
+          <OptionsBar options={view.options} running={view.running} />
           <Composer view={view} />
         </footer>
 
