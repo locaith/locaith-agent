@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.6.13 - 2026-11-06
+
+- **Commands grouped too:** a finished stretch of consecutive `run_command` calls (3 or more) now collapses into "Ran 3 commands" — like file edits — instead of one long row per command. Click it for each command with its full text and output. Mixed sequences still use the generic "N tool calls" summary.
+- **Tests:** the work-summary test matches the new grouping.
+
 ## 0.6.12 - 2026-11-06
 
 A denser conversation view — less scrolling, same detail — and two test fixes.
