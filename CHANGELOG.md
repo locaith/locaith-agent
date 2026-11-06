@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.6.20 - 2026-11-06
+
+- **The Swarm switch is always readable.** Below ~470 px the picker labels are hidden to save space, which also hid the word "Swarm" and left only an icon — with a state you could not see. The Swarm switch now keeps its label at every width, dims when off and gets a violet fill plus a cyan ring when on.
+
 ## 0.6.19 - 2026-11-06
 
 - **Swarm is a switch, not a reasoning level.** The reasoning picker is back to five levels (off/low/medium/high/max) and Swarm is its own toggle next to it: the level you pick is the level sent to the provider, and the toggle adds fan-out orchestration on top. Old sessions saved with \`thinkingLevel: "swarm"\` keep working — they are read as "swarm on + max".
