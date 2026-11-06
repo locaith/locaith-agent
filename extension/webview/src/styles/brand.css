@@ -1,0 +1,142 @@
+/* ─────────────────────────────────────────────────────────────────────────────
+   Thương hiệu Locaith AI: logo "Lo" chuyển động + bộ đếm token khi suy nghĩ.
+   Màu logo: xanh ngọc #22bcec → tím chàm #625aec (đo từ logo đã phát hành).
+   ───────────────────────────────────────────────────────────────────────────── */
+
+.lo-defs {
+  position: absolute;
+  width: 0;
+  height: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+.lo-mark,
+.lo-spin {
+  display: block;
+  flex: none;
+  overflow: visible;
+}
+.lo-spin {
+  filter: drop-shadow(0 0 3px color-mix(in srgb, var(--lo-cyan) 40%, transparent));
+}
+/* thân logo "thở" */
+.lo-spin .lo-base {
+  transform-box: fill-box;
+  transform-origin: 50% 50%;
+  animation: lo-breathe 1.9s ease-in-out infinite;
+}
+/* vệt sáng quét qua thân logo */
+.lo-spin .lo-sheen {
+  animation: lo-sheen 1.7s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+}
+/* đốm sáng chạy dọc nét viền */
+.lo-spin .lo-trace {
+  stroke-dasharray: 16 84;
+  animation: lo-trace 1.7s linear infinite;
+}
+@keyframes lo-breathe {
+  0%,
+  100% {
+    opacity: 0.5;
+    transform: scale(0.94);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+@keyframes lo-sheen {
+  from {
+    transform: translateX(-60%);
+  }
+  to {
+    transform: translateX(210%);
+  }
+}
+@keyframes lo-trace {
+  from {
+    stroke-dashoffset: 0;
+  }
+  to {
+    stroke-dashoffset: -100;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .lo-spin .lo-sheen,
+  .lo-spin .lo-trace {
+    animation: none;
+  }
+  .lo-spin .lo-base {
+    animation-duration: 4s;
+  }
+}
+
+/* logo ở màn đăng nhập: vệt sáng lướt qua đúng hình chữ "Lo" rồi nghỉ (xem LoShine) */
+.lo-shine {
+  display: block;
+  flex: none;
+  overflow: visible;
+  filter: drop-shadow(0 0 9px color-mix(in srgb, var(--lo-cyan) 45%, transparent));
+}
+.lo-shine .lo-shine-band {
+  transform: translateX(-60%);
+  animation: lo-shine 5s cubic-bezier(0.45, 0, 0.2, 1) 0.9s infinite;
+}
+@keyframes lo-shine {
+  0% {
+    transform: translateX(-60%);
+  }
+  34%,
+  100% {
+    transform: translateX(210%);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .lo-shine .lo-shine-band {
+    animation: none;
+    opacity: 0;
+  }
+}
+
+/* đồng hồ báo "đang chạy" trên thanh tiêu đề: logo chuyển động thay chấm cam */
+.hdr-busy {
+  width: auto;
+  height: auto;
+  border-radius: 0;
+  background: none;
+  animation: none;
+  display: inline-flex;
+  flex: none;
+}
+
+/* bộ đếm token khi đang suy nghĩ */
+.think-count,
+.work-stat {
+  font-variant-numeric: tabular-nums;
+  font-size: var(--nd-fs-xs);
+  color: var(--fg-faint);
+  white-space: nowrap;
+}
+.act-thinking .tool-label {
+  flex: none;
+}
+.act-thinking .tool-text {
+  display: flex;
+  flex-direction: row;
+  align-items: baseline;
+  flex-wrap: wrap;
+  column-gap: 8px;
+}
+.act-thinking .is-live .think-count,
+.act-thinking .think-count {
+  color: var(--accent-text);
+}
+.working {
+  align-items: center;
+}
+.working .work-stat {
+  margin-left: 2px;
+}
+.turn-usage {
+  font-variant-numeric: tabular-nums;
+}

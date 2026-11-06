@@ -1,0 +1,45 @@
+// Stub tối thiểu của module 'vscode' để test lớp host bằng Node thuần. Bổ sung khi cần.
+
+/** Test đặt giá trị cài đặt ở từng cấp để kiểm tra việc cài đặt workspace bị bỏ qua đúng chỗ. */
+export const settingsStub = {
+  global: {} as Record<string, unknown>,
+  workspace: {} as Record<string, unknown>,
+  reset() {
+    this.global = {};
+    this.workspace = {};
+  },
+};
+
+export const workspace = {
+  workspaceFolders: undefined as undefined | { uri: { fsPath: string }; name: string }[],
+  getConfiguration: () => ({
+    get: <T>(key: string, def?: T): T | undefined => {
+      if (key in settingsStub.workspace) return settingsStub.workspace[key] as T;
+      if (key in settingsStub.global) return settingsStub.global[key] as T;
+      return def;
+    },
+    inspect: <T>(key: string) => ({
+      key,
+      defaultValue: undefined as T | undefined,
+      globalValue: settingsStub.global[key] as T | undefined,
+      workspaceValue: settingsStub.workspace[key] as T | undefined,
+    }),
+    update: async () => undefined,
+  }),
+};
+export const window = {};
+export class Uri {
+  readonly scheme = 'file';
+  constructor(readonly fsPath: string) {}
+  static file(p: string) {
+    return new Uri(p);
+  }
+  static joinPath(base: Uri, ...parts: string[]) {
+    return new Uri([base.fsPath, ...parts].join('/'));
+  }
+  toString() {
+    return 'file://' + this.fsPath.replace(/\\/g, '/');
+  }
+}
+export const ConfigurationTarget = { Global: 1, Workspace: 2, WorkspaceFolder: 3 };
+export default { workspace, window, Uri, ConfigurationTarget };

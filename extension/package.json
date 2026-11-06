@@ -1,0 +1,755 @@
+{
+  "name": "locaith-agent",
+  "displayName": "Locaith AI Agent",
+  "description": "%ext.description%",
+  "version": "0.6.20",
+  "publisher": "LocaithAI",
+  "license": "SEE LICENSE IN LICENSE.txt",
+  "engines": {
+    "vscode": "^1.90.0"
+  },
+  "categories": [
+    "AI",
+    "Chat",
+    "Programming Languages",
+    "Other"
+  ],
+  "keywords": [
+    "ai",
+    "agent",
+    "claude",
+    "chatgpt",
+    "gemini",
+    "deepseek",
+    "grok",
+    "tiếng việt",
+    "vietnamese",
+    "mcp",
+    "subagents",
+    "workflow",
+    "skills",
+    "plugins",
+    "multi-model"
+  ],
+  "icon": "media/icon.png",
+  "capabilities": {
+    "untrustedWorkspaces": {
+      "supported": "limited",
+      "description": "Trong workspace chưa tin cậy, trợ lý chỉ được đọc và nghiên cứu — không sửa tệp, không chạy lệnh."
+    },
+    "virtualWorkspaces": {
+      "supported": false,
+      "description": "Trợ lý cần truy cập hệ thống tệp thật để đọc, sửa tệp và chạy lệnh."
+    }
+  },
+  "main": "./dist/extension.js",
+  "contributes": {
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "locaithAgent",
+          "title": "Locaith AI",
+          "icon": "media/activity.svg"
+        }
+      ]
+    },
+    "views": {
+      "locaithAgent": [
+        {
+          "type": "webview",
+          "id": "locaithAgent.chatView",
+          "name": "%view.chat%",
+          "icon": "media/activity.svg"
+        }
+      ]
+    },
+    "commands": [
+      {
+        "command": "locaithAgent.open",
+        "title": "%cmd.open%",
+        "category": "Locaith AI",
+        "icon": "$(sparkle)"
+      },
+      {
+        "command": "locaithAgent.openInTab",
+        "title": "%cmd.openInTab%",
+        "category": "Locaith AI",
+        "icon": "$(link-external)"
+      },
+      {
+        "command": "locaithAgent.newChat",
+        "title": "%cmd.newChat%",
+        "category": "Locaith AI",
+        "icon": "$(add)"
+      },
+      {
+        "command": "locaithAgent.showHistory",
+        "title": "%cmd.showHistory%",
+        "category": "Locaith AI",
+        "icon": "$(history)"
+      },
+      {
+        "command": "locaithAgent.stop",
+        "title": "%cmd.stop%",
+        "category": "Locaith AI",
+        "icon": "$(debug-stop)"
+      },
+      {
+        "command": "locaithAgent.addSelectionToChat",
+        "title": "%cmd.addSelection%",
+        "category": "Locaith AI"
+      },
+      {
+        "command": "locaithAgent.addFileToChat",
+        "title": "%cmd.addFile%",
+        "category": "Locaith AI"
+      },
+      {
+        "command": "locaithAgent.explainSelection",
+        "title": "%cmd.explain%",
+        "category": "Locaith AI"
+      },
+      {
+        "command": "locaithAgent.fixSelection",
+        "title": "%cmd.fix%",
+        "category": "Locaith AI"
+      },
+      {
+        "command": "locaithAgent.setApiKey",
+        "title": "%cmd.setApiKey%",
+        "category": "Locaith AI",
+        "icon": "$(key)"
+      },
+      {
+        "command": "locaithAgent.clearApiKey",
+        "title": "%cmd.clearApiKey%",
+        "category": "Locaith AI"
+      },
+      {
+        "command": "locaithAgent.addCustomProvider",
+        "title": "%cmd.addProvider%",
+        "category": "Locaith AI"
+      },
+      {
+        "command": "locaithAgent.selectModel",
+        "title": "%cmd.selectModel%",
+        "category": "Locaith AI",
+        "icon": "$(chip)"
+      },
+      {
+        "command": "locaithAgent.refreshModels",
+        "title": "%cmd.refreshModels%",
+        "category": "Locaith AI",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "locaithAgent.reloadSkills",
+        "title": "%cmd.reloadSkills%",
+        "category": "Locaith AI"
+      },
+      {
+        "command": "locaithAgent.initProjectFile",
+        "title": "%cmd.init%",
+        "category": "Locaith AI"
+      },
+      {
+        "command": "locaithAgent.exportChat",
+        "title": "%cmd.export%",
+        "category": "Locaith AI"
+      },
+      {
+        "command": "locaithAgent.openMarket",
+        "title": "%cmd.openMarket%",
+        "category": "Locaith AI",
+        "icon": "$(extensions)"
+      },
+      {
+        "command": "locaithAgent.openSettings",
+        "title": "%cmd.settings%",
+        "category": "Locaith AI",
+        "icon": "$(gear)"
+      },
+      {
+        "command": "locaithAgent.showLogs",
+        "title": "%cmd.logs%",
+        "category": "Locaith AI"
+      },
+      {
+        "command": "locaithAgent.remote.pair",
+        "title": "%cmd.remotePair%",
+        "category": "Locaith AI",
+        "icon": "$(broadcast)"
+      },
+      {
+        "command": "locaithAgent.remote.manage",
+        "title": "%cmd.remoteManage%",
+        "category": "Locaith AI",
+        "icon": "$(broadcast)"
+      },
+      {
+        "command": "locaithAgent.account.signIn",
+        "title": "%cmd.accountSignIn%",
+        "category": "Locaith AI",
+        "icon": "$(account)"
+      },
+      {
+        "command": "locaithAgent.account.signOut",
+        "title": "%cmd.accountSignOut%",
+        "category": "Locaith AI",
+        "icon": "$(sign-out)"
+      },
+      {
+        "command": "locaithAgent.account.enterCode",
+        "title": "%cmd.accountEnterCode%",
+        "category": "Locaith AI",
+        "icon": "$(key)"
+      },
+      {
+        "command": "locaithAgent.account.manage",
+        "title": "%cmd.accountManage%",
+        "category": "Locaith AI",
+        "icon": "$(link-external)"
+      }
+    ],
+    "menus": {
+      "view/title": [
+        {
+          "command": "locaithAgent.openInTab",
+          "when": "view == locaithAgent.chatView",
+          "group": "navigation@1"
+        }
+      ],
+      "editor/title": [
+        {
+          "command": "locaithAgent.open",
+          "group": "navigation@100"
+        }
+      ],
+      "editor/context": [
+        {
+          "command": "locaithAgent.addSelectionToChat",
+          "when": "editorHasSelection",
+          "group": "locaithAgent@1"
+        },
+        {
+          "command": "locaithAgent.explainSelection",
+          "when": "editorHasSelection",
+          "group": "locaithAgent@2"
+        },
+        {
+          "command": "locaithAgent.fixSelection",
+          "when": "editorHasSelection",
+          "group": "locaithAgent@3"
+        }
+      ],
+      "explorer/context": [
+        {
+          "command": "locaithAgent.addFileToChat",
+          "group": "locaithAgent@1"
+        }
+      ],
+      "editor/title/context": [
+        {
+          "command": "locaithAgent.addFileToChat",
+          "group": "locaithAgent@1"
+        }
+      ]
+    },
+    "keybindings": [
+      {
+        "command": "locaithAgent.open",
+        "key": "ctrl+alt+a",
+        "mac": "cmd+alt+a"
+      },
+      {
+        "command": "locaithAgent.addSelectionToChat",
+        "key": "ctrl+alt+k",
+        "mac": "cmd+alt+k",
+        "when": "editorHasSelection"
+      }
+    ],
+    "configuration": {
+      "title": "Locaith AI",
+      "properties": {
+        "locaithAgent.defaultModel": {
+          "type": "string",
+          "default": "",
+          "markdownDescription": "%cfg.defaultModel%"
+        },
+        "locaithAgent.language": {
+          "type": "string",
+          "enum": [
+            "vi",
+            "en"
+          ],
+          "enumDescriptions": [
+            "Tiếng Việt",
+            "English"
+          ],
+          "default": "vi",
+          "markdownDescription": "%cfg.language%"
+        },
+        "locaithAgent.ui.fontFamily": {
+          "type": "string",
+          "enum": [
+            "be-vietnam-pro",
+            "manrope",
+            "inter",
+            "system"
+          ],
+          "enumDescriptions": [
+            "Be Vietnam Pro — thiết kế riêng cho tiếng Việt, dấu thanh rõ nét (khuyên dùng)",
+            "Manrope — font thương hiệu Locaith AI",
+            "Inter — trung tính, gọn",
+            "Font hệ thống (Segoe UI / SF / Roboto)"
+          ],
+          "default": "be-vietnam-pro",
+          "markdownDescription": "%cfg.fontFamily%"
+        },
+        "locaithAgent.ui.fontSize": {
+          "type": "number",
+          "minimum": 12,
+          "maximum": 20,
+          "default": 14,
+          "markdownDescription": "%cfg.fontSize%"
+        },
+        "locaithAgent.ui.lineHeight": {
+          "type": "number",
+          "minimum": 1.3,
+          "maximum": 2.2,
+          "default": 1.65,
+          "markdownDescription": "%cfg.lineHeight%"
+        },
+        "locaithAgent.ui.codeFont": {
+          "type": "string",
+          "enum": [
+            "jetbrains-mono",
+            "editor"
+          ],
+          "enumDescriptions": [
+            "JetBrains Mono (hỗ trợ đủ dấu tiếng Việt)",
+            "Dùng font của trình soạn thảo"
+          ],
+          "default": "jetbrains-mono",
+          "markdownDescription": "%cfg.codeFont%"
+        },
+        "locaithAgent.ui.showThinking": {
+          "type": "boolean",
+          "default": true,
+          "markdownDescription": "%cfg.showThinking%"
+        },
+        "locaithAgent.agent.permissionMode": {
+          "type": "string",
+          "enum": [
+            "default",
+            "acceptEdits",
+            "plan",
+            "bypass"
+          ],
+          "enumDescriptions": [
+            "Hỏi trước khi sửa tệp hoặc chạy lệnh",
+            "Tự nhận chỉnh sửa trong workspace, vẫn hỏi khi chạy lệnh",
+            "Chỉ đọc và lập kế hoạch, trình kế hoạch để duyệt",
+            "Không hỏi gì (nguy hiểm — cần bật locaithAgent.agent.allowBypassPermissions)"
+          ],
+          "default": "default",
+          "scope": "machine",
+          "markdownDescription": "%cfg.permissionMode%"
+        },
+        "locaithAgent.agent.allowBypassPermissions": {
+          "type": "boolean",
+          "default": false,
+          "scope": "machine",
+          "markdownDescription": "%cfg.allowBypass%"
+        },
+        "locaithAgent.chrome.bridge": {
+          "type": "boolean",
+          "default": true,
+          "scope": "machine",
+          "markdownDescription": "%cfg.chromeBridge%"
+        },
+        "locaithAgent.remote.enabled": {
+          "type": "boolean",
+          "default": true,
+          "scope": "machine",
+          "markdownDescription": "%cfg.remoteEnabled%"
+        },
+        "locaithAgent.remote.cloud": {
+          "type": "boolean",
+          "default": true,
+          "scope": "machine",
+          "markdownDescription": "%cfg.remoteCloud%"
+        },
+        "locaithAgent.remote.local": {
+          "type": "boolean",
+          "default": false,
+          "scope": "machine",
+          "markdownDescription": "%cfg.remoteLocal%"
+        },
+        "locaithAgent.remote.webUrl": {
+          "type": "string",
+          "default": "https://locaith.ai",
+          "scope": "machine",
+          "markdownDescription": "%cfg.remoteWebUrl%"
+        },
+        "locaithAgent.remote.allowedOrigins": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [
+            "https://locaith.ai",
+            "https://www.locaith.ai"
+          ],
+          "scope": "machine",
+          "markdownDescription": "%cfg.remoteOrigins%"
+        },
+        "locaithAgent.remote.publicUrl": {
+          "type": "string",
+          "default": "",
+          "scope": "machine",
+          "markdownDescription": "%cfg.remotePublicUrl%"
+        },
+        "locaithAgent.remote.idleDays": {
+          "type": "number",
+          "default": 30,
+          "minimum": 1,
+          "maximum": 365,
+          "scope": "machine",
+          "markdownDescription": "%cfg.remoteIdleDays%"
+        },
+        "locaithAgent.remote.allowBypass": {
+          "type": "boolean",
+          "default": false,
+          "scope": "machine",
+          "markdownDescription": "%cfg.remoteAllowBypass%"
+        },
+        "locaithAgent.remote.trustAccount": {
+          "type": "boolean",
+          "default": true,
+          "scope": "machine",
+          "markdownDescription": "%cfg.remoteTrustAccount%"
+        },
+        "locaithAgent.agent.thinkingLevel": {
+          "type": "string",
+          "enum": [
+            "off",
+            "low",
+            "medium",
+            "high",
+            "max"
+          ],
+          "default": "medium",
+          "markdownDescription": "%cfg.thinkingLevel%"
+        },
+        "locaithAgent.agent.maxTurns": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 200,
+          "default": 30,
+          "markdownDescription": "%cfg.maxTurns%"
+        },
+        "locaithAgent.agent.maxOutputTokens": {
+          "type": "integer",
+          "minimum": 1024,
+          "maximum": 200000,
+          "default": 32000,
+          "markdownDescription": "%cfg.maxOutputTokens%"
+        },
+        "locaithAgent.agent.parallelToolCalls": {
+          "type": "boolean",
+          "default": true,
+          "markdownDescription": "%cfg.parallelToolCalls%"
+        },
+        "locaithAgent.agent.autoCompact": {
+          "type": "boolean",
+          "default": true,
+          "markdownDescription": "%cfg.autoCompact%"
+        },
+        "locaithAgent.agent.instructionFiles": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [
+            "LOCAITH.md",
+            "AGENTS.md",
+            "CLAUDE.md"
+          ],
+          "scope": "machine",
+          "markdownDescription": "%cfg.instructionFiles%"
+        },
+        "locaithAgent.summarizer.enabled": {
+          "type": "boolean",
+          "default": true,
+          "markdownDescription": "%cfg.summarizerEnabled%"
+        },
+        "locaithAgent.summarizer.model": {
+          "type": "string",
+          "default": "auto",
+          "scope": "machine",
+          "markdownDescription": "%cfg.summarizerModel%"
+        },
+        "locaithAgent.search.backend": {
+          "type": "string",
+          "enum": [
+            "duckduckgo",
+            "brave",
+            "tavily",
+            "serper",
+            "searxng"
+          ],
+          "enumDescriptions": [
+            "DuckDuckGo, tự dự phòng sang Bing (không cần khoá, vẫn có thể bị chặn khi truy vấn nhiều)",
+            "Brave Search (cần API key)",
+            "Tavily (cần API key)",
+            "Serper — kết quả Google (cần API key)",
+            "SearXNG tự dựng (đặt locaithAgent.search.searxngUrl)"
+          ],
+          "default": "duckduckgo",
+          "markdownDescription": "%cfg.searchBackend%"
+        },
+        "locaithAgent.search.searxngUrl": {
+          "type": "string",
+          "default": "",
+          "scope": "machine",
+          "markdownDescription": "%cfg.searxngUrl%"
+        },
+        "locaithAgent.terminal.shell": {
+          "type": "string",
+          "enum": [
+            "auto",
+            "powershell",
+            "cmd",
+            "bash",
+            "zsh",
+            "sh"
+          ],
+          "default": "auto",
+          "markdownDescription": "%cfg.shell%"
+        },
+        "locaithAgent.terminal.timeoutSeconds": {
+          "type": "integer",
+          "minimum": 5,
+          "maximum": 1800,
+          "default": 120,
+          "markdownDescription": "%cfg.commandTimeout%"
+        },
+        "locaithAgent.fetch.allowPrivateNetwork": {
+          "type": "boolean",
+          "default": false,
+          "scope": "machine",
+          "markdownDescription": "%cfg.allowPrivate%"
+        },
+        "locaithAgent.skills.paths": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [],
+          "scope": "machine",
+          "markdownDescription": "%cfg.skillPaths%"
+        },
+        "locaithAgent.artifacts.autoOpen": {
+          "type": "string",
+          "enum": [
+            "never",
+            "static",
+            "always"
+          ],
+          "enumDescriptions": [
+            "Không tự mở: luôn chờ bạn bấm \"Mở\" trên thẻ artifact",
+            "Tự mở SVG và Markdown; HTML có script phải do bạn bấm mở (khuyến nghị)",
+            "Tự mở mọi artifact, kể cả HTML có script"
+          ],
+          "default": "static",
+          "scope": "machine",
+          "markdownDescription": "%cfg.artifactsAutoOpen%"
+        },
+        "locaithAgent.baseUrls": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          },
+          "default": {},
+          "scope": "machine",
+          "markdownDescription": "%cfg.baseUrls%"
+        },
+        "locaithAgent.customProviders": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "id",
+              "label",
+              "baseUrl"
+            ],
+            "properties": {
+              "id": {
+                "type": "string",
+                "pattern": "^[a-z0-9][a-z0-9-]{1,30}$"
+              },
+              "label": {
+                "type": "string"
+              },
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "openai-chat",
+                  "openai-responses",
+                  "anthropic",
+                  "gemini"
+                ],
+                "default": "openai-chat"
+              },
+              "baseUrl": {
+                "type": "string"
+              },
+              "models": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "default": [],
+          "scope": "machine",
+          "markdownDescription": "%cfg.customProviders%"
+        },
+        "locaithAgent.anthropic.eagerInputStreaming": {
+          "type": "boolean",
+          "default": true,
+          "markdownDescription": "%cfg.eagerInput%"
+        },
+        "locaithAgent.debug.logRequests": {
+          "type": "boolean",
+          "default": false,
+          "markdownDescription": "%cfg.debug%"
+        },
+        "locaithAgent.orchestration.mode": {
+          "type": "string",
+          "enum": [
+            "off",
+            "failover",
+            "auto"
+          ],
+          "enumDescriptions": [
+            "Tắt: chỉ dùng đúng model bạn chọn (dữ liệu chỉ đi tới hãng đó)",
+            "Dự phòng: khi hãng đang dùng bị giới hạn tốc độ/quá tải thì tạm chuyển sang hãng khác bạn đã nhập khoá",
+            "Tự động: dự phòng + agent con và workflow tự chọn model theo hạng (mạnh/cân bằng/nhanh) và chia tải giữa các hãng bạn đã nhập khoá"
+          ],
+          "default": "off",
+          "scope": "machine",
+          "markdownDescription": "%cfg.orchestrationMode%"
+        },
+        "locaithAgent.mcp.servers": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "object",
+            "properties": {
+              "command": {
+                "type": "string"
+              },
+              "args": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "env": {
+                "type": "object",
+                "additionalProperties": {
+                  "type": "string"
+                }
+              },
+              "cwd": {
+                "type": "string"
+              },
+              "url": {
+                "type": "string"
+              },
+              "headers": {
+                "type": "object",
+                "additionalProperties": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "default": {},
+          "scope": "machine",
+          "markdownDescription": "%cfg.mcpServers%"
+        },
+        "locaithAgent.plugins.paths": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [],
+          "scope": "machine",
+          "markdownDescription": "%cfg.pluginPaths%"
+        },
+        "locaithAgent.agents.maxConcurrent": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 16,
+          "default": 8,
+          "scope": "machine",
+          "markdownDescription": "%cfg.agentsMaxConcurrent%"
+        }
+      }
+    }
+  },
+  "scripts": {
+    "build": "node esbuild.mjs",
+    "watch": "node esbuild.mjs --watch",
+    "build:prod": "node esbuild.mjs --production",
+    "typecheck": "tsc -p tsconfig.json && tsc -p webview/tsconfig.json && tsc -p tsconfig.browser.json",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "package": "npm run typecheck && npm run build:prod && vsce package --no-dependencies --allow-missing-repository",
+    "build:browser": "node esbuild.browser.mjs",
+    "build:browser:prod": "node esbuild.browser.mjs --production",
+    "watch:browser": "node esbuild.browser.mjs --watch",
+    "test:browser-e2e": "vitest run --config vitest.e2e.config.mts",
+    "package:browser": "npm run typecheck && node esbuild.browser.mjs --production && node scripts/pack-browser.mjs",
+    "build:market": "node scripts/build-market.mjs",
+    "notices": "node scripts/gen-notices.mjs",
+    "build:cli": "esbuild src/cli/index.ts --bundle --platform=node --format=cjs --target=node20 --loader:.md=text --outfile=dist-cli/locaith.cjs",
+    "cli": "node dist-cli/locaith.cjs"
+  },
+  "devDependencies": {
+    "@anthropic-ai/sdk": "^1.3.0",
+    "@fontsource/be-vietnam-pro": "^5.3.0",
+    "@fontsource/inter": "^5.3.0",
+    "@fontsource/jetbrains-mono": "^5.3.0",
+    "@fontsource/manrope": "^5.3.0",
+    "@types/chrome": "^0.3.7",
+    "@types/node": "^22.20.5",
+    "@types/vscode": "1.90.0",
+    "@types/ws": "^8.18.2",
+    "@vscode/test-electron": "^3.1.0",
+    "@vscode/vsce": "^4.1.0",
+    "ajv": "^8.20.0",
+    "diff": "^9.0.0",
+    "docx": "^9.15.0",
+    "dompurify": "^3.4.17",
+    "esbuild": "^0.28.2",
+    "fflate": "^0.8.3",
+    "highlight.js": "^11.12.0",
+    "marked": "^18.1.2",
+    "node-html-parser": "^9.0.5",
+    "preact": "^11.1.0",
+    "puppeteer-core": "^25.16.0",
+    "typescript": "^7.0.2",
+    "unpdf": "^2.0.0",
+    "uqr": "^0.1.3",
+    "vitest": "^5.0.5",
+    "ws": "^8.22.1"
+  },
+  "activationEvents": [
+    "onStartupFinished",
+    "onUri"
+  ]
+}

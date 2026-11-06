@@ -1,0 +1,430 @@
+/* ── Chợ (kỹ năng · plugin · MCP · agent) và cài đặt điều phối ─────────────────────────────────────────── */
+
+/* Màn Chợ: thanh tab là một dải CỐ ĐỊNH phía trên, chỉ phần danh sách (.mk-body) bên dưới mới cuộn.
+   Trước đây thanh tab là phần tử `position: sticky` có nền trong suốt nằm đè lên danh sách đang cuộn nên chữ/viền của thẻ phía dưới lộ ra xuyên qua thanh
+   (làm mờ nền không đủ, và VS Code không phải lúc nào cũng áp dụng được) — khó nhìn khi cuộn xuống. Không còn gì cuộn bên dưới thanh nữa, nên không phụ thuộc theme
+   hay màu nền của khung chứa. Lề hai bên lấy đúng công thức của `.screen` (cột giữa ở khung rộng) nhưng áp cho từng phần, để thanh cuộn nằm sát mép khung. */
+.screen.screen-market {
+  --mk-x: 14px;
+  flex: 1 1 auto;
+  min-height: 0;
+  padding: 14px 0 0;
+  gap: 0;
+}
+@media (min-width: 560px) {
+  .screen.screen-market {
+    /* cùng lề với mọi màn khác (responsive.css): lấp đầy bề rộng khung, chỉ chừa 3% (14–48px) mỗi bên */
+    --mk-x: clamp(14px, 3cqw, 48px);
+  }
+}
+.mk-tabs {
+  display: flex;
+  flex: none;
+  gap: 4px;
+  padding: 4px;
+  margin: 0 var(--mk-x, 14px) 10px;
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--fg) 7%, transparent);
+  border: 1px solid var(--line-soft);
+}
+.mk-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 4px var(--mk-x, 14px) 28px;
+}
+.mk-tab {
+  flex: 1 1 0;
+  min-width: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 6px 8px;
+  border-radius: 9px;
+  color: var(--fg-muted);
+  font-size: var(--nd-fs-sm);
+}
+.mk-tab:hover {
+  background: var(--surface-2);
+  color: var(--fg);
+}
+.mk-tab.is-on {
+  background: var(--nd-gradient);
+  color: #fff;
+}
+.mk-tab-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.mk-pane {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+}
+.mk-search {
+  width: 100%;
+}
+.mk-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.mk-chip {
+  padding: 3px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  color: var(--fg-muted);
+  font-size: var(--nd-fs-xs);
+}
+.mk-chip:hover {
+  color: var(--fg);
+  border-color: var(--accent-text);
+}
+.mk-chip.is-on {
+  background: color-mix(in srgb, var(--lo-violet) 26%, transparent);
+  border-color: var(--accent-text);
+  color: var(--fg);
+}
+.mk-count {
+  color: var(--fg-faint);
+  font-size: var(--nd-fs-xs);
+}
+.mk-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.mk-row {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  padding: 10px 12px;
+  border: 1px solid var(--line-soft);
+  border-radius: 12px;
+  background: var(--surface-1);
+  min-width: 0;
+}
+.mk-row.is-in {
+  border-color: color-mix(in srgb, var(--lo-cyan) 50%, transparent);
+}
+.mk-main {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.mk-title {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+.mk-name {
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+.mk-desc {
+  color: var(--fg-muted);
+  font-size: var(--nd-fs-sm);
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+}
+.mk-meta {
+  color: var(--fg-faint);
+  font-size: var(--nd-fs-xs);
+  overflow-wrap: anywhere;
+}
+.mk-actions {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+.mk-added {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--ok-text);
+  font-size: var(--nd-fs-xs);
+}
+.mk-ver {
+  color: var(--fg-faint);
+  font-size: var(--nd-fs-xs);
+}
+.mk-more {
+  align-self: center;
+}
+.mk-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.mk-sub {
+  margin: 10px 0 0;
+  font-size: var(--nd-fs);
+  font-weight: 600;
+}
+.mk-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--fg-faint);
+  display: inline-grid;
+  place-items: center;
+  flex: none;
+}
+.mk-dot.st-running {
+  background: var(--ok);
+}
+.mk-dot.st-error {
+  background: var(--danger);
+}
+.mk-dot.st-starting {
+  background: transparent;
+  width: 13px;
+  height: 12px;
+}
+.mk-cmd {
+  font-family: var(--nd-font-code);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.mk-warn {
+  color: var(--warn);
+  font-size: var(--nd-fs-xs);
+}
+.mk-err {
+  color: var(--danger);
+  font-size: var(--nd-fs-xs);
+  overflow-wrap: anywhere;
+}
+.mk-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  align-self: flex-start;
+  padding: 2px 0;
+  color: var(--fg-muted);
+  font-size: var(--nd-fs-xs);
+}
+.mk-tools {
+  margin: 4px 0 0;
+  padding: 0 0 0 4px;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  font-size: var(--nd-fs-xs);
+}
+.mk-tools code {
+  color: var(--accent-text);
+  overflow-wrap: anywhere;
+}
+.mk-tools span {
+  color: var(--fg-muted);
+}
+.mk-loading {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 18px 4px;
+  color: var(--fg-muted);
+}
+
+/* điều phối nhiều AI (Cài đặt) */
+.orch-pool {
+  list-style: none;
+  margin: 6px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.orch-row {
+  border: 1px solid var(--line-soft);
+  border-radius: 10px;
+  padding: 8px 10px;
+  background: var(--surface-1);
+}
+.orch-name {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  font-weight: 600;
+}
+.orch-cool {
+  font-weight: 400;
+  font-size: var(--nd-fs-xs);
+  color: var(--warn);
+}
+.orch-tiers {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(118px, 1fr));
+  gap: 6px;
+  margin-top: 6px;
+}
+.orch-tier {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  padding: 4px 8px;
+  border-radius: 8px;
+  background: var(--surface-1);
+  border-left: 3px solid var(--fg-faint);
+}
+.orch-tier b {
+  font-size: var(--nd-fs-xs);
+  font-weight: 600;
+  color: var(--fg-muted);
+}
+.orch-tier span {
+  font-size: var(--nd-fs-xs);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.orch-tier.tier-top {
+  border-left-color: var(--lo-violet);
+}
+.orch-tier.tier-balanced {
+  border-left-color: var(--lo-cyan);
+}
+.orch-tier.tier-fast {
+  border-left-color: var(--ok);
+}
+.orch-tier.is-none {
+  opacity: 0.45;
+}
+
+/* ── Ô logo thương hiệu (BrandIcon) — kiểu thư mục ứng dụng của ChatGPT / Claude ─────────────────────── */
+.bi {
+  --bi-size: 36px;
+  --bi-base: var(--vscode-sideBar-background, var(--vscode-editor-background, #1f1f1f));
+  --bi-line: color-mix(in srgb, var(--fg) 14%, transparent);
+  --bi-neutral: color-mix(in srgb, var(--fg) 7%, var(--bi-base));
+  --bi-ink: var(--bi-ink-d, var(--fg));
+  --bi-tint: 16%;
+  flex: none;
+  box-sizing: border-box;
+  display: inline-grid;
+  place-items: center;
+  width: var(--bi-size);
+  height: var(--bi-size);
+  border-radius: calc(var(--bi-size) * 0.22);
+  border: 1px solid var(--bi-line);
+  background: var(--bi-neutral);
+  color: var(--fg);
+  overflow: hidden;
+  user-select: none;
+}
+.bi-28 {
+  --bi-size: 28px;
+}
+.bi-44 {
+  --bi-size: 44px;
+}
+.bi > svg {
+  display: block;
+  flex: none;
+  max-width: none; /* không để luật img/svg chung co glyph */
+  overflow: visible;
+}
+.bi-t-color {
+  background: color-mix(in srgb, var(--bi-c) var(--bi-tint), var(--bi-base));
+  border-color: color-mix(in srgb, var(--bi-c) 22%, var(--bi-line));
+  color: var(--bi-ink);
+}
+.bi-t-solid {
+  background: var(--bi-c);
+  border-color: color-mix(in srgb, var(--bi-c) 70%, var(--fg) 30%);
+  color: var(--bi-on);
+}
+.bi-t-locaith {
+  background: linear-gradient(160deg, color-mix(in srgb, var(--lo-cyan) 16%, var(--bi-base)), color-mix(in srgb, var(--lo-violet) 20%, var(--bi-base)));
+  border-color: color-mix(in srgb, var(--lo-violet) 45%, transparent);
+}
+.bi-t-gram {
+  background: hsl(var(--bi-h) 58% 52% / 0.16);
+  border-color: hsl(var(--bi-h) 58% 60% / 0.3);
+  color: hsl(var(--bi-h) 72% 76%);
+}
+.bi-gram {
+  font-weight: 650;
+  line-height: 1;
+  font-size: calc(var(--bi-size) * 0.42);
+  letter-spacing: 0;
+  /* chữ hoa nằm cao hơn tâm hộp dòng một chút → hạ nhẹ cho cân thị giác */
+  transform: translateY(0.04em);
+}
+.bi-gram.is-two {
+  font-size: calc(var(--bi-size) * 0.36);
+}
+
+body.vscode-light .bi,
+body.vscode-high-contrast-light .bi {
+  --bi-ink: var(--bi-ink-l, var(--fg));
+  --bi-tint: 11%;
+  --bi-neutral: color-mix(in srgb, var(--fg) 4%, #ffffff);
+  --bi-line: color-mix(in srgb, var(--fg) 13%, transparent);
+}
+body.vscode-light .bi-t-gram,
+body.vscode-high-contrast-light .bi-t-gram {
+  background: hsl(var(--bi-h) 62% 50% / 0.12);
+  border-color: hsl(var(--bi-h) 50% 45% / 0.25);
+  color: hsl(var(--bi-h) 62% 32%);
+}
+body.vscode-high-contrast .bi {
+  --bi-ink: var(--bi-ink-hcd, var(--fg));
+  --bi-line: var(--vscode-contrastBorder, #6fc3df);
+  --bi-neutral: var(--bi-base);
+  border-color: var(--bi-line);
+}
+body.vscode-high-contrast .bi-t-color {
+  background: var(--bi-base);
+}
+body.vscode-high-contrast .bi-t-gram {
+  background: var(--bi-base);
+  color: var(--fg);
+}
+body.vscode-high-contrast-light .bi {
+  --bi-ink: var(--bi-ink-hcl, var(--fg));
+}
+
+/* Dòng có ô logo: ô | khối chữ | nút. */
+.mk-row.has-bi {
+  gap: 12px;
+}
+.bio-head .bi {
+  margin-right: 2px;
+}
+@container app (max-width: 340px) {
+  /* Hẹp: nút xuống hàng dưới, thẳng mép với khối chữ — ô logo vẫn ở cột trái. */
+  .mk-row.has-bi {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    column-gap: 10px;
+    row-gap: 8px;
+    align-items: start;
+  }
+  .mk-row.has-bi > .mk-actions {
+    grid-column: 2;
+  }
+}

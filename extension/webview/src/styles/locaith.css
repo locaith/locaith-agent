@@ -1,0 +1,204 @@
+/* ── Mô hình Locaith (AI Local) trong khung chat: hàng chờ, thẻ thông báo dữ liệu, mục Cài đặt ───────────────── */
+
+/* Dải «đang xếp hàng» khi có hơn 100 người dùng cùng lúc: cùng ngôn ngữ hình ảnh với dải Remote (.rmt) — hổ phách, gọn, đếm ngược + thanh tiến trình mảnh ở mép dưới. */
+.mq {
+  position: relative;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  margin-bottom: 6px;
+  padding: 8px 10px 10px;
+  border-radius: 12px;
+  border: 1px solid color-mix(in srgb, var(--warn) 38%, var(--line));
+  background: color-mix(in srgb, var(--warn) 9%, transparent);
+  font-size: var(--nd-fs-sm);
+  line-height: var(--nd-lh-ui);
+}
+.mq-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
+  min-width: 0;
+}
+.mq-ico {
+  display: flex;
+  flex: none;
+  color: var(--warn);
+}
+.mq-text {
+  flex: 1 1 16ch;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.mq-sub {
+  font-variant-numeric: tabular-nums;
+  color: var(--fg);
+}
+.mq-actions {
+  display: flex;
+  flex: none;
+  margin-left: auto;
+}
+.mq-btn {
+  min-height: 26px;
+  padding: 2px 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface-2);
+  color: var(--fg);
+  font: inherit;
+  font-size: var(--nd-fs-xs);
+  font-weight: 600;
+  cursor: pointer;
+}
+.mq-btn:hover {
+  background: var(--surface-3);
+}
+.mq-btn:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+.mq-why {
+  color: var(--fg-muted);
+  font-size: var(--nd-fs-xs);
+}
+.mq-bar {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 2px;
+  background: color-mix(in srgb, var(--warn) 16%, transparent);
+}
+.mq-bar > span {
+  display: block;
+  width: 100%;
+  height: 100%;
+  background: var(--warn);
+  transform-origin: left center;
+  transition: transform 1s linear;
+}
+@media (prefers-reduced-motion: reduce) {
+  .mq-bar > span {
+    transition: none;
+  }
+}
+
+/* Thẻ thông báo dữ liệu — nằm cuối cuộc trò chuyện, không phải hộp thoại. */
+.lcn {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin: 12px 0 4px;
+  padding: 14px 16px;
+  border-radius: 16px;
+  border: 1px solid color-mix(in srgb, var(--accent-text) 40%, var(--line));
+  background: color-mix(in srgb, var(--nd-primary) 9%, transparent);
+}
+.lcn-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.lcn-ico {
+  display: flex;
+  flex: none;
+  color: var(--accent-text);
+}
+.lcn-title {
+  margin: 0;
+  font-size: var(--nd-fs);
+  font-weight: 600;
+  line-height: var(--nd-lh-ui);
+}
+.lcn-list {
+  margin: 0;
+  padding-left: 18px;
+  list-style: disc outside;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: var(--nd-fs-sm);
+  color: var(--fg-muted);
+}
+.lcn-list li {
+  padding-left: 2px;
+}
+.lcn-who {
+  margin: 0;
+  font-size: var(--nd-fs-xs);
+  color: var(--fg-faint);
+}
+.lcn-banner {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  font-size: var(--nd-fs-sm);
+  border: 1px solid var(--line);
+}
+.lcn-banner svg {
+  flex: none;
+  margin-top: 2px;
+}
+.lcn-banner.is-warn {
+  border-color: color-mix(in srgb, var(--warn) 45%, var(--line));
+  background: color-mix(in srgb, var(--warn) 10%, transparent);
+}
+.lcn-banner.is-error {
+  border-color: color-mix(in srgb, var(--danger, #d9534f) 50%, var(--line));
+  background: color-mix(in srgb, var(--danger, #d9534f) 10%, transparent);
+}
+.lcn-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+/* Mục «Mô hình Locaith» trong Cài đặt */
+.lcs-state {
+  display: flex;
+  align-items: flex-start;
+  gap: 7px;
+  font-size: var(--nd-fs-sm);
+  color: var(--fg-muted);
+}
+.lcs-state.is-ok {
+  color: var(--ok-text);
+}
+.lcs-state.is-warn {
+  color: var(--warn);
+}
+.lcs-dot {
+  flex: none;
+  width: 7px;
+  height: 7px;
+  margin-top: 0.5em;
+  border-radius: 50%;
+  background: currentColor;
+}
+.lcs-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+}
+.lcs-notice {
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  background: var(--surface-2);
+}
+.lcs-notice .lcn-list {
+  font-size: var(--nd-fs-sm);
+}
+
+/* Lời chào khi đang dùng mô hình Locaith (không cần API key) */
+.welcome-locaith {
+  margin: 0;
+  font-size: var(--nd-fs-sm);
+  color: var(--fg-muted);
+}

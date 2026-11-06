@@ -1,0 +1,127 @@
+/* ─────────────────────────────────────────────────────────────────────────────
+   Co giãn theo BỀ RỘNG THẬT của khung (kéo sidebar/tab rộng ra hay thu hẹp lại).
+   `.app` là container "app": mọi quy tắc dưới đây đo theo nó (container query), không theo cửa sổ VS Code.
+   Nguyên tắc: không bao giờ tràn ngang; hàng nút/trường tự xuống dòng; cột nội dung phình ra từ từ khi rộng.
+   ───────────────────────────────────────────────────────────────────────────── */
+
+.app {
+  container: app / inline-size;
+}
+
+/* Cột nội dung LẤP ĐẦY bề rộng khung: kéo sidebar/tab rộng tới đâu, nội dung (dòng thời gian, ô nhập, Cài đặt, Lịch sử, Chợ) giãn tới đó.
+   Trước 0.6.2 cột bị chặn ở 1000px và chỉ chiếm 58% khung (clamp(720px, 58cqw, 1000px)) nên ở khung rộng hai bên trống trơn.
+   Giờ chỉ chừa lề hai bên tỉ lệ với khung: 3% bề rộng, trong khoảng 14–48px. `--gutter` dùng chung cho mọi màn (xem market.css). */
+@media (min-width: 560px) {
+  .timeline-inner,
+  .screen {
+    --gutter: clamp(14px, 3cqw, 48px);
+    padding-left: var(--gutter);
+    padding-right: var(--gutter);
+  }
+  .app-foot {
+    --gutter: clamp(12px, 3cqw, 48px);
+    padding-left: var(--gutter);
+    padding-right: var(--gutter);
+  }
+}
+/* Khung rất rộng: thêm khoảng thở giữa các lượt cho dễ đọc. */
+@container app (min-width: 1100px) {
+  .timeline-inner {
+    gap: 22px;
+    padding-top: 22px;
+  }
+  .orch-tiers {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+/* Mọi hàng nút/trường nhập được phép xuống dòng thay vì tràn. */
+.field-row,
+.field-actions,
+.mk-toolbar,
+.turn-footer,
+.models-line,
+.prov-foot {
+  flex-wrap: wrap;
+  row-gap: 4px;
+}
+.field-row > .text-input {
+  flex: 1 1 9ch;
+  width: auto;
+  min-width: 0;
+}
+.btn {
+  max-width: 100%;
+}
+.prov-head {
+  flex-wrap: wrap;
+  row-gap: 4px;
+}
+.prov-name {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.turn-usage {
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+img,
+svg,
+video {
+  max-width: 100%;
+}
+
+/* Hẹp (sidebar thu nhỏ): bớt lề, ô nhập chiếm cả hàng, nút cho phép xuống dòng chữ. */
+@container app (max-width: 340px) {
+  .timeline-inner {
+    padding: 12px 10px 18px;
+    gap: 14px;
+  }
+  .app-foot {
+    padding: 0 8px 8px;
+  }
+  .hdr {
+    gap: 6px;
+  }
+  .hdr-actions {
+    gap: 0;
+  }
+  .btn-label {
+    white-space: normal;
+    text-align: left;
+  }
+  .prov-name {
+    flex: 1 1 8ch;
+  }
+  .mk-row {
+    flex-direction: column;
+    align-items: stretch; /* để dòng lệnh dài co theo thẻ và hiện dấu … thay vì tràn ra ngoài */
+    gap: 8px;
+  }
+  .mk-actions {
+    justify-content: flex-start;
+  }
+  .mk-hide-narrow {
+    display: none;
+  }
+  .orch-tiers {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Dưới ~380px nhãn tab Chợ không đủ chỗ (bị cắt thành "K…", "Pl…"): chỉ giữ biểu tượng (đã có aria-label và tooltip). */
+@container app (max-width: 380px) {
+  .mk-tab-label {
+    display: none;
+  }
+}
+
+/* Rất hẹp (< 270px): tiêu đề rút gọn. */
+@container app (max-width: 270px) {
+  .hdr-title {
+    font-size: var(--nd-fs-sm);
+  }
+  .composer-card {
+    border-radius: 12px;
+  }
+}

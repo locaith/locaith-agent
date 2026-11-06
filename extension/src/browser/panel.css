@@ -1,0 +1,52 @@
+/* Bổ sung riêng cho khung chat trong trình duyệt (phần còn lại dùng chung với bản VS Code). */
+html,
+body {
+  margin: 0;
+  background: var(--vscode-sideBar-background, #fff);
+  color: var(--vscode-foreground, #26262b);
+}
+
+body.nd-browser {
+  min-width: 320px;
+}
+
+/* Bản trình duyệt không có trình soạn thảo/workspace: ẩn những thứ chỉ có nghĩa trong VS Code. */
+body.nd-browser .md-code-actions [data-vscode-only],
+body.nd-browser .bar-attach-folder {
+  display: none !important;
+}
+
+/* Chip tab đang xem (thay cho chip "đang xem tệp" của VS Code). */
+.chip-tab {
+  cursor: pointer;
+}
+.chip-tab.is-locked .chip-main {
+  opacity: 0.85;
+}
+
+.access-banner {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  margin: 8px 12px 0;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface-1);
+  font-size: var(--nd-fs-sm);
+  line-height: 1.5;
+}
+
+.add-provider-form {
+  display: grid;
+  gap: 8px;
+  margin-top: 8px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface-1);
+}
+.add-provider-form textarea,
+.add-provider-form select {
+  width: 100%;
+}

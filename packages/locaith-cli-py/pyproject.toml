@@ -1,0 +1,32 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "locaith-cli"
+version = "0.1.0"
+description = "Locaith CLI — chạy trợ lý Locaith (Locaith-v5-flash) ngay trong terminal. Cài bằng một lệnh: pip install locaith-cli"
+readme = "README.md"
+requires-python = ">=3.8"
+authors = [{ name = "Locaith Solution Tech", email = "locaithsolution@locaith.com" }]
+keywords = ["locaith", "cli", "agent", "ai", "terminal", "coding-agent"]
+classifiers = [
+  "Environment :: Console",
+  "Intended Audience :: Developers",
+  "Operating System :: OS Independent",
+  "Programming Language :: Python :: 3",
+  "Topic :: Software Development :: Code Generators",
+]
+dependencies = []
+
+[project.urls]
+Homepage = "https://locaith.ai"
+
+[project.scripts]
+locaith = "locaith_cli.cli:main"
+
+[tool.setuptools]
+packages = ["locaith_cli"]
+
+[tool.setuptools.package-data]
+locaith_cli = ["bin/*.cjs"]

@@ -1,0 +1,122 @@
+/* ── Hàng đợi tin nhắn: gửi thêm khi trợ lý đang làm việc ─────────────────────────────────────────────── */
+
+.queue {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  min-width: 0;
+  margin-bottom: 6px;
+  padding: 2px 2px 8px;
+  border-bottom: 1px solid var(--line-soft);
+}
+.queue-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 1px 8px;
+  font-size: var(--nd-fs-xs);
+}
+.queue-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-weight: 600;
+  color: var(--accent-text);
+}
+.queue-hint {
+  color: var(--fg-faint);
+}
+.queue-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 140px;
+  overflow-y: auto;
+}
+.queue-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  padding: 3px 4px 3px 8px;
+  border-radius: 9px;
+  background: var(--surface-1);
+  border-left: 3px solid var(--lo-cyan);
+}
+.queue-text {
+  flex: 1 1 auto;
+  min-width: 0;
+  text-align: left;
+  font-size: var(--nd-fs-sm);
+  line-height: var(--nd-lh-ui);
+  color: var(--fg);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+}
+.queue-text:hover {
+  color: var(--accent-text);
+}
+.queue-att {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  color: var(--fg-faint);
+  font-size: var(--nd-fs-xs);
+}
+.queue-x {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 7px;
+  color: var(--fg-faint);
+}
+.queue-x:hover {
+  background: var(--surface-3);
+  color: var(--fg);
+}
+/* «Gửi ngay»: nút chữ nhỏ cạnh ✕ — dừng bước đang chạy và giao tin này luôn */
+.queue-now {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 22px;
+  padding: 0 8px;
+  border-radius: 7px;
+  font-size: var(--nd-fs-xs);
+  font-weight: 600;
+  color: var(--accent-text);
+  background: var(--surface-2);
+}
+.queue-now:hover {
+  background: var(--surface-3);
+  color: var(--fg);
+}
+.queue-now:focus-visible {
+  outline: 2px solid var(--focus, var(--accent));
+  outline-offset: 1px;
+}
+
+/* tin chèn giữa vòng công cụ: nhãn nhỏ phía trên chữ */
+.user-steer {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin-bottom: 4px;
+  font-size: var(--nd-fs-xs);
+  color: var(--fg-faint);
+}
+
+/* đang chạy: hai nút (Dừng + Gửi thêm) cạnh nhau */
+.send-btn.is-queue {
+  width: 34px;
+}

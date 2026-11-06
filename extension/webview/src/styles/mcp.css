@@ -1,0 +1,64 @@
+/* Tab MCP: thẻ Bio-Memory-Locaith, thẻ kho dịch vụ. */
+.bio-card {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 12px 14px;
+  border-radius: 14px;
+  border: 1px solid color-mix(in srgb, var(--lo-violet) 55%, transparent);
+  background: linear-gradient(160deg, color-mix(in srgb, var(--lo-cyan) 12%, var(--surface-1)), color-mix(in srgb, var(--lo-violet) 14%, var(--surface-1)));
+  min-width: 0;
+}
+.bio-card.is-on {
+  border-color: color-mix(in srgb, var(--lo-cyan) 70%, transparent);
+}
+.bio-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.bio-ico {
+  color: var(--lo-cyan);
+}
+.bio-title {
+  margin: 0;
+  font-size: var(--nd-fs);
+  font-weight: 700;
+}
+.bio-state {
+  margin-left: auto;
+  font-size: var(--nd-fs-xs);
+  color: var(--fg-muted);
+}
+.bio-state.st-ready {
+  color: var(--ok-text);
+}
+.bio-state.st-error {
+  color: var(--danger);
+}
+.bio-desc {
+  -webkit-line-clamp: unset;
+  display: block;
+}
+.bio-progress {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: var(--nd-fs-xs);
+  color: var(--fg-muted);
+}
+.bio-log {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.cat-card.is-off {
+  opacity: 0.6;
+}
+.cat-card .mk-ver {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}

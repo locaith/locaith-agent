@@ -1,0 +1,304 @@
+/* ─────────────────────────────────────────────────────────────────────────────
+   Token thiết kế + nền tảng. Bề mặt/chữ/viền lấy từ biến --vscode-* để hoà vào mọi theme;
+   màu thương hiệu Locaith AI chỉ dùng làm điểm nhấn.
+   Quy tắc tiếng Việt: line-height >= 1.5 ở mọi nơi, không letter-spacing âm, không IN HOA, chữ >= 12px.
+   ───────────────────────────────────────────────────────────────────────────── */
+
+:root {
+  /* thương hiệu */
+  --nd-primary: #625aec; /* tím chàm của logo */
+  --nd-primary-strong: #4f47d8;
+  --nd-secondary: #22bcec; /* xanh ngọc của logo */
+  --nd-gradient: linear-gradient(160deg, #22bcec 0%, #625aec 100%);
+  --lo-cyan: #22bcec;
+  --lo-violet: #625aec;
+  --nd-working: #22bcec;
+
+  /* typography — JS ghi đè theo cài đặt (fonts.ts) */
+  --nd-font-ui: 'Be Vietnam Pro', 'Segoe UI', system-ui, sans-serif;
+  --nd-font-code: 'JetBrains Mono', ui-monospace, 'Cascadia Mono', Consolas, monospace;
+  --nd-font-size: 14px;
+  --nd-font-scale: 0.96;
+  --nd-line-height: 1.65;
+
+  --nd-fs: calc(var(--nd-font-size) * var(--nd-font-scale));
+  --nd-fs-sm: max(12px, calc(var(--nd-fs) * 0.92));
+  --nd-fs-xs: max(12px, calc(var(--nd-fs) * 0.86));
+  --nd-fs-code: max(12px, calc(var(--nd-fs) * 0.9));
+  --nd-lh-ui: 1.55;
+  --nd-row: calc(var(--nd-fs-sm) * var(--nd-lh-ui));
+}
+
+.app {
+  /* theme tối là mặc định; body.vscode-light ghi đè bên dưới */
+  --fg: var(--vscode-foreground, #cccccc);
+  --fg-muted: var(--vscode-descriptionForeground, color-mix(in srgb, var(--fg) 66%, transparent));
+  --fg-faint: color-mix(in srgb, var(--fg) 48%, transparent);
+  --line: var(--vscode-panel-border, color-mix(in srgb, var(--fg) 20%, transparent));
+  --line-soft: color-mix(in srgb, var(--fg) 11%, transparent);
+  --surface-1: color-mix(in srgb, var(--fg) 5%, transparent);
+  --surface-2: color-mix(in srgb, var(--fg) 9%, transparent);
+  --surface-3: color-mix(in srgb, var(--fg) 14%, transparent);
+  --field-bg: var(--vscode-input-background, color-mix(in srgb, var(--fg) 8%, transparent));
+  --field-line: var(--vscode-input-border, var(--line));
+  --pop-bg: var(--vscode-editorWidget-background, var(--vscode-editor-background, #202020));
+  --pop-line: var(--vscode-editorWidget-border, var(--line));
+  --pop-shadow: 0 10px 30px var(--vscode-widget-shadow, rgba(0, 0, 0, 0.38));
+  --code-bg: var(--vscode-textCodeBlock-background, color-mix(in srgb, var(--fg) 7%, transparent));
+
+  --accent: var(--nd-primary);
+  --accent-text: #aaa6ff; /* tím nhạt: đủ tương phản >= 4.5:1 trên nền tối */
+  --ok: #02ebad;
+  --ok-text: #3ddbb0;
+  --warn: var(--vscode-editorWarning-foreground, #e0a800);
+  --danger: var(--vscode-errorForeground, #f85149);
+  --focus: var(--vscode-focusBorder, #aaa6ff);
+
+  --diff-add: #2ea043;
+  --diff-del: #f85149;
+
+  /* màu tô cú pháp (tối) */
+  --hl-comment: #7f8b99;
+  --hl-keyword: #c792ea;
+  --hl-string: #9ad38a;
+  --hl-number: #f0a96b;
+  --hl-title: #82aaff;
+  --hl-type: #4ec9b0;
+  --hl-attr: #8fd3ff;
+  --hl-tag: #6fa8ff;
+  --hl-meta: #d1a3ff;
+  --hl-regexp: #ef8a8a;
+  --hl-add: #9ad38a;
+  --hl-del: #ef8a8a;
+}
+
+body.vscode-light .app,
+body.vscode-high-contrast-light .app {
+  --accent-text: #4f47d8;
+  --ok: #02b88a;
+  --ok-text: #07795c;
+  --warn: var(--vscode-editorWarning-foreground, #9a6700);
+  --diff-add: #1a7f37;
+  --diff-del: #cf222e;
+  --hl-comment: #6a737d;
+  --hl-keyword: #7c3aed;
+  --hl-string: #0a7f5a;
+  --hl-number: #b45309;
+  --hl-title: #2563eb;
+  --hl-type: #0f766e;
+  --hl-attr: #0369a1;
+  --hl-tag: #1d4ed8;
+  --hl-meta: #8b3fb8;
+  --hl-regexp: #b91c1c;
+  --hl-add: #1a7f37;
+  --hl-del: #cf222e;
+}
+
+body.vscode-high-contrast .app,
+body.vscode-high-contrast-light .app {
+  --line: var(--vscode-contrastBorder, #6fc3df);
+  --line-soft: var(--vscode-contrastBorder, #6fc3df);
+  --field-line: var(--vscode-contrastBorder, #6fc3df);
+  --pop-line: var(--vscode-contrastBorder, #6fc3df);
+  --focus: var(--vscode-contrastActiveBorder, #f38518);
+}
+
+/* ── nền tảng ─────────────────────────────────────────────────────────────── */
+
+html,
+body {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  /* VS Code chèn padding 0 20px mặc định cho webview */
+  padding: 0 !important;
+  overflow: hidden;
+}
+
+#root {
+  height: 100%;
+}
+
+.app {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  position: relative;
+  font-family: var(--nd-font-ui);
+  font-size: var(--nd-fs);
+  font-weight: 400;
+  line-height: var(--nd-line-height);
+  color: var(--fg);
+  text-rendering: optimizeLegibility;
+  font-kerning: normal;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Phần reset dùng :where() để độ ưu tiên = 0, nhờ đó mọi lớp thành phần (.btn, .md-list…) đều ghi đè được. */
+:where(.app) *,
+:where(.app) *::before,
+:where(.app) *::after {
+  box-sizing: border-box;
+}
+
+.app [hidden] {
+  display: none !important;
+}
+
+:where(.app) button,
+:where(.app) input,
+:where(.app) textarea,
+:where(.app) select {
+  font: inherit;
+  color: inherit;
+  letter-spacing: normal;
+}
+
+:where(.app) button {
+  cursor: pointer;
+  background: none;
+  border: 0;
+  padding: 0;
+  line-height: var(--nd-lh-ui);
+  text-align: inherit;
+}
+
+:where(.app) button:disabled {
+  cursor: default;
+  opacity: 0.5;
+}
+
+:where(.app) h1,
+:where(.app) h2,
+:where(.app) h3,
+:where(.app) p {
+  margin: 0;
+}
+
+:where(.app) ul,
+:where(.app) ol {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+:where(.app) a {
+  color: var(--accent-text);
+}
+
+:where(.app) :focus {
+  outline: none;
+}
+
+.app :focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 1px;
+  border-radius: 6px;
+}
+
+.app ::selection {
+  background: color-mix(in srgb, var(--nd-primary) 45%, transparent);
+}
+
+.icon {
+  flex: none;
+  display: inline-block;
+  vertical-align: middle;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* thanh cuộn mảnh */
+.app * {
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in srgb, var(--fg) 28%, transparent) transparent;
+}
+
+@keyframes nd-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes nd-pulse {
+  0% {
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--nd-working) 55%, transparent);
+  }
+  70% {
+    box-shadow: 0 0 0 6px transparent;
+  }
+  100% {
+    box-shadow: 0 0 0 0 transparent;
+  }
+}
+
+@keyframes nd-blink {
+  50% {
+    opacity: 0;
+  }
+}
+
+@keyframes nd-dots {
+  0%,
+  80%,
+  100% {
+    opacity: 0.25;
+    transform: translateY(0);
+  }
+  40% {
+    opacity: 1;
+    transform: translateY(-2px);
+  }
+}
+
+@keyframes nd-rise {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+}
+
+.spinner {
+  display: inline-block;
+  flex: none;
+  border-radius: 50%;
+  border: 2px solid color-mix(in srgb, var(--fg) 22%, transparent);
+  border-top-color: var(--nd-working);
+  animation: nd-spin 0.8s linear infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .app *,
+  .app *::before,
+  .app *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+  /* Vòng xoay vẫn phải báo "đang chạy": chậm lại thay vì tắt hẳn */
+  .app .spinner {
+    animation: nd-spin 2.4s linear infinite !important;
+  }
+}
+
+.app-loading {
+  align-items: center;
+  justify-content: center;
+  flex-direction: row;
+  gap: 10px;
+  color: var(--fg-muted);
+}

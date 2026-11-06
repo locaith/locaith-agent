@@ -1,0 +1,445 @@
+/* ── Đăng nhập tài khoản locaith.ai ─────────────────────────────────────────────────────────────────── */
+
+.acct-gate {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px 16px;
+  overflow-y: auto;
+}
+.acct-card {
+  width: 100%;
+  max-width: 400px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  text-align: center;
+}
+/* Logo: ô kính đen (như biểu tượng ứng dụng) có viền gradient mảnh; sau lưng là quầng sáng xanh ngọc → tím chàm "thở" chậm;
+   trên mặt là chữ "Lo" với vệt sáng lướt qua (LoShine). Nền đen cố định ở mọi theme — logo gradient luôn nổi nhất trên nền tối. */
+.acct-logo {
+  --aura-k: 1;
+  position: relative;
+  isolation: isolate;
+  flex: none;
+  width: 92px;
+  height: 92px;
+  margin-bottom: 4px;
+}
+body.vscode-light .acct-logo,
+body.vscode-high-contrast-light .acct-logo {
+  --aura-k: 0.7;
+}
+.acct-logo-aura {
+  position: absolute;
+  inset: -36%;
+  z-index: -1;
+  border-radius: 50%;
+  background:
+    radial-gradient(closest-side, color-mix(in srgb, var(--lo-cyan) 55%, transparent), transparent 72%) 24% 28% / 66% 66% no-repeat,
+    radial-gradient(closest-side, color-mix(in srgb, var(--lo-violet) 60%, transparent), transparent 72%) 76% 74% / 74% 74% no-repeat;
+  filter: blur(12px);
+  opacity: calc(0.9 * var(--aura-k));
+  animation: acct-aura 7s ease-in-out infinite;
+}
+@keyframes acct-aura {
+  0%,
+  100% {
+    opacity: calc(0.66 * var(--aura-k));
+    transform: scale(0.96);
+  }
+  50% {
+    opacity: calc(1 * var(--aura-k));
+    transform: scale(1.05);
+  }
+}
+.acct-logo-tile {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 100%;
+  height: 100%;
+  border-radius: 28px;
+  background:
+    radial-gradient(130% 90% at 16% 0%, rgba(255, 255, 255, 0.11), transparent 56%),
+    linear-gradient(165deg, #181826 0%, #0a0a11 58%, #050508 100%);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.16),
+    0 22px 40px -18px color-mix(in srgb, var(--lo-violet) 75%, transparent),
+    0 3px 10px rgba(0, 0, 0, 0.45);
+}
+/* viền gradient mảnh 1px (khoét ruột bằng mask) — dùng chung cho ô logo và nút đăng nhập */
+.acct-logo-tile::before,
+.acct-signin::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  padding: 1px;
+  pointer-events: none;
+  -webkit-mask:
+    linear-gradient(#fff 0 0) content-box,
+    linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+}
+.acct-logo-tile::before {
+  background: linear-gradient(
+    150deg,
+    color-mix(in srgb, var(--lo-cyan) 90%, #fff) 0%,
+    color-mix(in srgb, var(--lo-violet) 22%, transparent) 38%,
+    color-mix(in srgb, var(--lo-violet) 30%, transparent) 62%,
+    color-mix(in srgb, var(--lo-violet) 85%, #fff) 100%
+  );
+}
+.acct-title {
+  margin: 4px 0 0;
+  font-size: calc(var(--nd-fs) * 1.45);
+  line-height: 1.4;
+  font-weight: 700;
+}
+.acct-sub {
+  margin: 0;
+  max-width: 34ch;
+  color: var(--fg-muted);
+}
+.acct-banner {
+  width: 100%;
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  text-align: left;
+  font-size: var(--nd-fs-sm);
+  border: 1px solid var(--line-soft);
+  background: var(--surface-1);
+}
+.acct-banner svg {
+  flex: none;
+  margin-top: 3px;
+}
+.acct-banner.is-warn {
+  border-color: color-mix(in srgb, var(--warn) 45%, var(--line));
+  background: color-mix(in srgb, var(--warn) 10%, transparent);
+}
+.acct-banner.is-error {
+  border-color: color-mix(in srgb, var(--danger) 45%, var(--line));
+  background: color-mix(in srgb, var(--danger) 10%, transparent);
+}
+.acct-cta {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  margin-top: 4px;
+}
+/* Nút đăng nhập «cao cấp»: nền đen kính, viền gradient mảnh, logo Locaith bên trái, vệt sáng (shimmer) lướt ngang theo chu kỳ
+   (quét ~1,5 s rồi nghỉ), rê chuột thì nổi lên + quầng sáng đậm hơn. Chỉ hoạt họa transform/opacity → nhẹ. */
+.acct-signin {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 48px;
+  padding: 10px 16px;
+  border: 0;
+  border-radius: 14px;
+  color: #eef0fb;
+  font: inherit;
+  font-size: var(--nd-fs);
+  font-weight: 600;
+  line-height: 1.5;
+  text-align: center;
+  cursor: pointer;
+  background:
+    radial-gradient(120% 140% at 12% -30%, rgba(255, 255, 255, 0.13), transparent 55%),
+    linear-gradient(180deg, #14141d 0%, #0a0a10 52%, #050508 100%);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.14),
+    0 12px 28px -12px color-mix(in srgb, var(--lo-violet) 65%, transparent),
+    0 2px 6px rgba(0, 0, 0, 0.5);
+  transition:
+    transform 0.18s ease,
+    box-shadow 0.25s ease;
+}
+.acct-signin::before {
+  z-index: 2;
+  opacity: 0.9;
+  transition: opacity 0.25s ease;
+  background: linear-gradient(
+    135deg,
+    color-mix(in srgb, var(--lo-cyan) 85%, #fff) 0%,
+    color-mix(in srgb, var(--lo-violet) 34%, transparent) 38%,
+    color-mix(in srgb, var(--lo-violet) 34%, transparent) 62%,
+    color-mix(in srgb, #a78bfa 90%, #fff) 100%
+  );
+}
+/* vệt sáng nghiêng lướt qua nút; plus-lighter làm chữ bạc sáng lên đúng lúc vệt đi qua */
+.acct-signin::after {
+  content: '';
+  position: absolute;
+  z-index: 1;
+  top: -40%;
+  bottom: -40%;
+  left: 0;
+  width: 34%;
+  pointer-events: none;
+  /* lõi sáng hơi ngả xanh, mép mờ dần hai bên → vệt "kính" chứ không phải vệt xám */
+  background: linear-gradient(
+    100deg,
+    transparent 0%,
+    rgba(160, 205, 255, 0.05) 30%,
+    rgba(150, 215, 255, 0.16) 44%,
+    rgba(240, 248, 255, 0.46) 50%,
+    rgba(150, 215, 255, 0.16) 56%,
+    rgba(160, 205, 255, 0.05) 70%,
+    transparent 100%
+  );
+  mix-blend-mode: plus-lighter;
+  transform: translateX(-120%) skewX(-20deg);
+  animation: acct-shimmer 4.4s cubic-bezier(0.4, 0.05, 0.3, 1) 1.2s infinite;
+}
+/* quét ~1,4 s rồi nghỉ ~3 s */
+@keyframes acct-shimmer {
+  0% {
+    transform: translateX(-120%) skewX(-20deg);
+  }
+  32%,
+  100% {
+    transform: translateX(370%) skewX(-20deg);
+  }
+}
+.acct-signin-mark {
+  position: relative;
+  display: flex;
+  flex: none;
+}
+.acct-signin-mark .lo-mark {
+  filter: drop-shadow(0 0 6px color-mix(in srgb, var(--lo-cyan) 55%, transparent));
+}
+.acct-signin-label {
+  position: relative;
+  min-width: 0;
+  padding-block: 0.1em;
+  text-wrap: balance; /* sidebar hẹp: ngắt hai dòng cân nhau thay vì treo một chữ lẻ */
+  text-shadow: 0 1px 0 rgba(0, 0, 0, 0.6);
+}
+.acct-signin-arrow {
+  position: relative;
+  display: flex;
+  flex: none;
+  opacity: 0.72;
+  transition:
+    transform 0.2s ease,
+    opacity 0.2s ease;
+}
+.acct-signin:hover {
+  transform: translateY(-1px);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.2),
+    0 16px 34px -12px color-mix(in srgb, var(--lo-violet) 88%, transparent),
+    0 3px 8px rgba(0, 0, 0, 0.5);
+}
+.acct-signin:hover::before {
+  opacity: 1;
+}
+.acct-signin:hover::after {
+  animation-duration: 2s;
+}
+.acct-signin:hover .acct-signin-arrow {
+  opacity: 1;
+  transform: translateX(3px);
+}
+.acct-signin:active {
+  transform: translateY(0) scale(0.992);
+}
+.acct-signin:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 3px;
+}
+/* theme tương phản cao / chế độ màu hệ thống: bỏ hiệu ứng, dùng màu của theme + viền rõ */
+body.vscode-high-contrast .acct-signin,
+body.vscode-high-contrast-light .acct-signin {
+  background: var(--vscode-button-background, #000);
+  color: var(--vscode-button-foreground, #fff);
+  border: 1px solid var(--vscode-contrastBorder, #6fc3df);
+  box-shadow: none;
+}
+body.vscode-high-contrast .acct-signin::before,
+body.vscode-high-contrast .acct-signin::after,
+body.vscode-high-contrast-light .acct-signin::before,
+body.vscode-high-contrast-light .acct-signin::after {
+  display: none;
+}
+@media (forced-colors: active) {
+  .acct-signin {
+    background: ButtonFace;
+    color: ButtonText;
+    border: 1px solid ButtonText;
+    box-shadow: none;
+  }
+  .acct-signin::before,
+  .acct-signin::after {
+    display: none;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .acct-signin,
+  .acct-signin-arrow {
+    transition: none;
+  }
+  .acct-signin::after {
+    animation: none;
+    opacity: 0;
+  }
+  .acct-logo-aura {
+    animation: none;
+  }
+}
+.acct-alt {
+  color: var(--fg-muted);
+  font-size: var(--nd-fs-sm);
+}
+.acct-link {
+  background: none;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+  color: var(--accent-text);
+  font: inherit;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.acct-link:hover {
+  color: var(--fg);
+}
+.acct-link:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+.acct-sep {
+  margin: 0 6px;
+  color: var(--fg-faint);
+}
+.acct-wait {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  padding: 14px;
+  border-radius: 16px;
+  border: 1px solid color-mix(in srgb, var(--accent-text) 34%, var(--line));
+  background: color-mix(in srgb, var(--nd-primary) 8%, transparent);
+}
+.acct-wait-row {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  font-weight: 600;
+  text-align: center;
+}
+.acct-hint {
+  margin: 0;
+  color: var(--fg-muted);
+  font-size: var(--nd-fs-sm);
+  max-width: 36ch;
+}
+.acct-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+}
+.acct-why {
+  margin-top: 6px;
+  padding: 12px 14px;
+  border-radius: 14px;
+  text-align: left;
+  background: var(--surface-1);
+  border: 1px solid var(--line-soft);
+  color: var(--fg-muted);
+  font-size: var(--nd-fs-sm);
+}
+.acct-why p {
+  margin: 4px 0 0;
+}
+.acct-why-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--fg);
+  font-weight: 600;
+}
+
+/* thẻ tài khoản trong Cài đặt */
+.acct-user {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px;
+  border-radius: 14px;
+  background: var(--surface-1);
+  border: 1px solid var(--line-soft);
+}
+.acct-avatar {
+  flex: none;
+  width: 42px;
+  height: 42px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  font-size: calc(var(--nd-fs) * 1.1);
+  color: #fff;
+  background: var(--nd-gradient);
+}
+.acct-who {
+  min-width: 0;
+}
+.acct-name {
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.acct-email {
+  color: var(--fg-muted);
+  font-size: var(--nd-fs-sm);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.acct-state {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 2px;
+  font-size: var(--nd-fs-xs);
+  color: var(--ok-text);
+}
+.acct-state.is-offline {
+  color: var(--warn);
+}
+.acct-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: currentColor;
+}
+.acct-set .acct-actions {
+  justify-content: flex-start;
+  margin-top: 10px;
+}

@@ -1,0 +1,318 @@
+/* ── (0.6.3) Xem trước kết quả ngay dưới khối câu trả lời nhắc tới (components/timeline/MediaPreviews.tsx) ──
+   Ảnh / GIF hiện thẳng (nhiều ảnh xếp lưới), video và âm thanh có trình phát, tài liệu là thẻ một dòng.
+   Không bao giờ rộng hơn cột chữ: mọi khối đều min-width: 0 và max-width: 100% (khung hẹp 280px vẫn không cuộn ngang). */
+
+.media {
+  --media-bg: color-mix(in srgb, var(--fg) 4%, transparent);
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 10px;
+  margin: 8px 0 12px;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.media-images {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 10px;
+  min-width: 0;
+  max-width: 100%;
+}
+/* Lưới ảnh: khung hẹp (sidebar 280px) vẫn 2 cột; khung rộng thì mỗi ô tối đa ~280px (`--n` = số ảnh, đặt trong MediaPreviews) để 2 ảnh
+   không phình thành hai tấm khổng lồ. */
+.media-images.is-grid {
+  display: grid;
+  align-self: stretch;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 116px), 1fr));
+  max-width: min(100%, calc(var(--n, 3) * 280px));
+}
+
+.media-tile {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  min-width: min(100%, 240px);
+  max-width: min(100%, 880px);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--surface-1);
+  overflow: hidden;
+  animation: nd-rise 0.18s ease-out;
+}
+.media-images.is-grid .media-tile {
+  min-width: 0;
+  max-width: none;
+}
+
+/* ảnh */
+.media-thumb {
+  display: block;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background-color: var(--media-bg);
+  /* ô kẻ caro nhạt: thấy được vùng trong suốt của PNG/SVG */
+  background-image: conic-gradient(color-mix(in srgb, var(--fg) 5%, transparent) 25%, transparent 0 50%, color-mix(in srgb, var(--fg) 5%, transparent) 0 75%, transparent 0);
+  background-size: 16px 16px;
+  cursor: zoom-in;
+}
+.media-thumb img {
+  display: block;
+  max-width: 100%;
+  max-height: 380px;
+  width: auto;
+  height: auto;
+  margin: 0 auto;
+  object-fit: contain;
+}
+/* Ô lưới đều nhau: ảnh nằm tuyệt đối trong khung 4:3 (không để ảnh vuông/dọc kéo ô cao hơn các ô khác). */
+.media-images.is-grid .media-tile {
+  position: relative;
+}
+.media-images.is-grid .media-thumb {
+  position: relative;
+  aspect-ratio: 4 / 3;
+  min-height: 0;
+  overflow: hidden;
+}
+.media-images.is-grid .media-thumb img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  max-height: none;
+}
+/* Ô lưới hẹp: chú thích chỉ còn tên tệp; nút mở nổi trên góc ảnh khi rê chuột / đang chọn bằng bàn phím. */
+.media-images.is-grid .media-size {
+  display: none;
+}
+.media-images.is-grid .media-acts {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  padding: 2px;
+  border-radius: 9px;
+  background: color-mix(in srgb, var(--vscode-sideBar-background, #181818) 84%, transparent);
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.28);
+  opacity: 0;
+  transition: opacity 0.12s;
+}
+.media-images.is-grid .media-tile:hover .media-acts,
+.media-images.is-grid .media-tile:focus-within .media-acts {
+  opacity: 1;
+}
+@media (hover: none) {
+  .media-images.is-grid .media-acts {
+    opacity: 1;
+  }
+}
+
+/* video / âm thanh */
+.media-player {
+  display: block;
+  max-width: 100%;
+}
+video.media-player {
+  width: auto;
+  height: auto;
+  max-height: 420px;
+  margin: 0 auto;
+  background: #000;
+}
+.media-video {
+  background: #000;
+}
+.media-video .media-cap {
+  background: var(--vscode-sideBar-background, var(--bg, #181818));
+}
+.media-audio {
+  width: min(100%, 560px);
+}
+.media-audio-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px 6px;
+  min-width: 0;
+}
+.media-audio-icon {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 9px;
+  background: color-mix(in srgb, var(--nd-primary) 16%, transparent);
+  color: var(--accent-text);
+}
+audio.media-player {
+  flex: 1;
+  min-width: 0;
+  height: 36px;
+}
+
+/* chú thích dưới ảnh / video: tên tệp (cắt …), dung lượng, nút mở */
+.media-cap {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  padding: 5px 6px 5px 12px;
+  border-top: 1px solid var(--line-soft);
+  font-size: var(--nd-fs-xs);
+  line-height: var(--nd-lh-ui);
+  color: var(--fg-muted);
+}
+.media-name {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--fg);
+  font-weight: 500;
+}
+.media-size {
+  flex: none;
+  color: var(--fg-faint);
+}
+.media-acts {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  margin-left: auto;
+}
+.media-btn {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 7px;
+  color: var(--fg-faint);
+}
+.media-btn:hover {
+  background: var(--surface-3);
+  color: var(--fg);
+}
+
+/* thẻ tài liệu (HTML, PDF, Word, Excel, PowerPoint) và tệp không nhúng được */
+.media-file {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
+  min-width: 0;
+  /* bề rộng cố định (không co theo chữ): nút mở nằm cùng dòng khi đủ chỗ, chỉ xuống dòng ở khung hẹp */
+  width: min(100%, 520px);
+  padding: 8px 6px 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface-1);
+}
+.media-file-icon {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 9px;
+  background: color-mix(in srgb, var(--nd-primary) 16%, transparent);
+  color: var(--accent-text);
+}
+.media-file-info {
+  flex: 1 1 140px;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+.media-file-sub {
+  font-size: var(--nd-fs-xs);
+  line-height: var(--nd-lh-ui);
+  color: var(--fg-faint);
+  overflow-wrap: anywhere;
+}
+
+/* chip ảnh trong đoạn văn: ảnh trên máy không "bị chặn" — chính ảnh hiện ngay bên dưới */
+.md-image.is-local {
+  border-style: solid;
+}
+
+/* ── (0.6.3) Lượt đã xong: quá trình làm việc gấp thành một dòng (AssistantTurn → WorkSummary) ── */
+.work-row {
+  flex-direction: column;
+  flex-wrap: nowrap;
+  align-items: stretch;
+  gap: 0;
+}
+.work-row .tool-meta {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  height: var(--nd-row);
+  color: var(--fg-faint);
+}
+.work-line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  column-gap: 0;
+  min-width: 0;
+}
+.work-head {
+  color: var(--fg-muted);
+}
+.work-part {
+  font-size: var(--nd-fs-xs);
+  line-height: var(--nd-lh-ui);
+  color: var(--fg-faint);
+  white-space: nowrap;
+}
+.work-part::before {
+  content: '·';
+  margin: 0 6px;
+}
+.work-body {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+  margin: -4px 0 2px 8px;
+  padding: 4px 0 2px 12px;
+  border-left: 1px solid var(--line);
+  animation: nd-rise 0.16s ease-out;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .media-tile,
+  .work-body {
+    animation: none;
+  }
+  .media-images.is-grid .media-acts {
+    transition: none;
+  }
+}
+
+/* tương phản cao: viền rõ, không dùng nền bán trong suốt để phân biệt khối */
+body.vscode-high-contrast .media-tile,
+body.vscode-high-contrast .media-file,
+body.vscode-high-contrast-light .media-tile,
+body.vscode-high-contrast-light .media-file {
+  border-color: var(--vscode-contrastBorder, currentColor);
+  background: transparent;
+}
+body.vscode-high-contrast .media-images.is-grid .media-acts,
+body.vscode-high-contrast-light .media-images.is-grid .media-acts {
+  background: var(--vscode-editor-background, Canvas);
+  border: 1px solid var(--vscode-contrastBorder, currentColor);
+  box-shadow: none;
+}
+body.vscode-high-contrast .media-btn:hover,
+body.vscode-high-contrast-light .media-btn:hover {
+  outline: 1px dashed var(--vscode-contrastActiveBorder, currentColor);
+  background: transparent;
+}

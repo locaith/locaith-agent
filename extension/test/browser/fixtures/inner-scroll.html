@@ -1,0 +1,20 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<title>Ứng dụng cuộn trong khung</title>
+<style>
+  html, body { height: 100%; overflow: hidden; margin: 0; font-family: system-ui, sans-serif; }
+  #app { height: 100%; overflow: auto; }
+  .row { height: 120px; border-bottom: 1px solid #ddd; padding: 8px 16px; }
+</style>
+</head>
+<body>
+<div id="app">
+  <h1>Hộp thư</h1>
+  <script>
+    for (let i = 1; i <= 60; i++) document.write('<div class="row"><b>Thư số ' + i + '</b> — nội dung thư ' + i + '</div>');
+  </script>
+</div>
+</body>
+</html>

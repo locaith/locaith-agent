@@ -1,0 +1,159 @@
+// Đóng gói bản trình duyệt (Chrome / Microsoft Edge, Manifest V3) → dist-browser/ (thư mục "Load unpacked").
+//   node esbuild.browser.mjs                 build
+//   node esbuild.browser.mjs --production    nén, không sourcemap
+//   node esbuild.browser.mjs --watch         theo dõi thay đổi
+//   node esbuild.browser.mjs --test          ra dist-browser-test/ với quyền truy cập mọi trang CẤP SẴN (chỉ để kiểm thử tự động)
+import * as esbuild from 'esbuild';
+import { cp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
+import { fileURLToPath } from 'node:url';
+import path from 'node:path';
+
+const root = path.dirname(fileURLToPath(import.meta.url));
+const at = (...p) => path.join(root, ...p);
+const args = process.argv.slice(2);
+const production = args.includes('--production');
+const watch = args.includes('--watch');
+const testBuild = args.includes('--test');
+const outdir = at(testBuild ? 'dist-browser-test' : 'dist-browser');
+
+const pkg = JSON.parse(await readFile(at('package.json'), 'utf8'));
+
+// ── manifest ────────────────────────────────────────────────────────────────
+const PROVIDER_HOSTS = [
+  'https://api.anthropic.com/*',
+  'https://api.openai.com/*',
+  'https://generativelanguage.googleapis.com/*',
+  'https://api.deepseek.com/*',
+  'https://api.x.ai/*',
+  // OpenRouter: một khoá dùng được hàng trăm model + đăng nhập OAuth một chạm (đổi mã lấy khoá ở api/v1/auth/keys)
+  'https://openrouter.ai/*',
+  // web_search mặc định
+  'https://html.duckduckgo.com/*',
+  'https://www.bing.com/*',
+];
+
+// Artifact HTML chạy trong trang "sandbox" (origin riêng, không có API extension). CSP này tương đương CSP của bản VS Code.
+const CDN = 'https://cdn.jsdelivr.net https://cdnjs.cloudflare.com https://unpkg.com';
+const SANDBOX_CSP =
+  `sandbox allow-scripts allow-modals; script-src 'self' 'unsafe-inline' 'unsafe-eval' ${CDN}; style-src 'self' 'unsafe-inline' ${CDN}; ` +
+  `font-src data: ${CDN}; img-src data: blob:; connect-src 'none'; frame-src 'none'; worker-src 'none'; object-src 'none'; media-src 'none'; ` +
+  `manifest-src 'none'; base-uri 'none'; form-action 'none'`;
+
+function manifest() {
+  const m = {
+    manifest_version: 3,
+    name: '__MSG_extName__',
+    short_name: 'Locaith AI',
+    version: pkg.version.replace(/-.*$/, ''),
+    description: '__MSG_extDescription__',
+    default_locale: 'vi',
+    minimum_chrome_version: '116',
+    icons: { 16: 'icons/16.png', 32: 'icons/32.png', 48: 'icons/48.png', 128: 'icons/128.png' },
+    action: { default_title: '__MSG_actionTitle__', default_icon: { 16: 'icons/16.png', 32: 'icons/32.png' } },
+    side_panel: { default_path: 'sidepanel.html' },
+    background: { service_worker: 'background.js' },
+    permissions: ['sidePanel', 'storage', 'unlimitedStorage', 'scripting', 'activeTab', 'contextMenus', 'tabGroups'],
+    host_permissions: PROVIDER_HOSTS,
+    // Quyền đọc/điều khiển mọi trang xin lúc chạy, khi người dùng bấm nút trong Cài đặt (có thể rút lại bất cứ lúc nào).
+    // identity: chỉ xin khi người dùng bấm "Đăng nhập" (OAuth) — cần để mở cửa sổ đăng nhập do trình duyệt quản lý.
+    optional_permissions: ['tabs', 'identity'],
+    // Phải đúng chuỗi "<all_urls>": chrome.tabs.captureVisibleTab chỉ chấp nhận `<all_urls>` hoặc activeTab (không chấp nhận https://*/* + http://*/*).
+    optional_host_permissions: ['<all_urls>'],
+    content_security_policy: { extension_pages: "script-src 'self'; object-src 'self'", sandbox: SANDBOX_CSP },
+    sandbox: { pages: ['artifact-sandbox.html'] },
+    commands: {
+      _execute_action: { suggested_key: { default: 'Alt+Shift+N' }, description: '__MSG_cmdOpen__' },
+    },
+  };
+  if (testBuild) {
+    m.name = 'Locaith AI (TEST)';
+    m.permissions.push('tabs', 'identity');
+    m.host_permissions.push('<all_urls>');
+    delete m.optional_permissions;
+    delete m.optional_host_permissions;
+  }
+  return m;
+}
+
+const LOCALES = {
+  vi: {
+    extName: { message: 'Locaith AI — Trợ lý trình duyệt' },
+    extDescription: {
+      message: 'Trợ lý AI tự chủ ngay trong trình duyệt: đọc trang đang xem, tra cứu web, dựng báo cáo và (khi bạn cho phép) thao tác thay bạn. Dùng Claude, ChatGPT, Gemini, DeepSeek, Grok hoặc API riêng.',
+    },
+    actionTitle: { message: 'Mở Locaith AI' },
+    cmdOpen: { message: 'Mở/đóng khung Locaith AI' },
+    menuAskSelection: { message: 'Hỏi Locaith AI về đoạn đã chọn' },
+    menuExplainSelection: { message: 'Giải thích đoạn đã chọn' },
+    menuSummarizePage: { message: 'Tóm tắt trang này' },
+  },
+  en: {
+    extName: { message: 'Locaith AI — Browser agent' },
+    extDescription: {
+      message: 'An autonomous AI agent in your browser: reads the page you are viewing, searches the web, builds reports and (with your approval) acts for you. Works with Claude, ChatGPT, Gemini, DeepSeek, Grok or your own API.',
+    },
+    actionTitle: { message: 'Open Locaith AI' },
+    cmdOpen: { message: 'Open/close the Locaith AI panel' },
+    menuAskSelection: { message: 'Ask Locaith AI about the selection' },
+    menuExplainSelection: { message: 'Explain the selection' },
+    menuSummarizePage: { message: 'Summarize this page' },
+  },
+};
+
+// ── esbuild ─────────────────────────────────────────────────────────────────
+const common = {
+  bundle: true,
+  sourcemap: !production,
+  minify: production,
+  logLevel: 'info',
+  legalComments: 'none',
+  platform: 'browser',
+  format: 'iife',
+  target: ['chrome120'],
+  outdir,
+  loader: { '.md': 'text', '.woff2': 'file', '.svg': 'dataurl', '.png': 'dataurl' },
+  assetNames: 'assets/[name]-[hash]',
+  jsx: 'automatic',
+  jsxImportSource: 'preact',
+  define: { 'process.env.NODE_ENV': production ? '"production"' : '"development"', __ND_TEST__: testBuild ? 'true' : 'false' },
+  // MV3 cấm unsafe-eval: Ajv (biên dịch bằng new Function) và node:crypto đồng bộ được thay bằng bản thuần.
+  alias: { ajv: at('src/browser/shims/ajv.ts'), 'node:crypto': at('src/browser/shims/crypto.ts') },
+};
+
+const targets = {
+  panel: { ...common, entryPoints: { panel: at('src/browser/panel.tsx') } },
+  background: { ...common, entryPoints: { background: at('src/browser/background.ts') } },
+  runtime: { ...common, entryPoints: { 'page-runtime': at('src/browser/page/runtime.ts') } },
+  artifact: { ...common, entryPoints: { artifact: at('src/browser/artifactViewer.ts'), 'artifact-sandbox': at('src/browser/artifactSandbox.ts') } },
+  // Bộ đọc tệp tải lên (PDF/Word/Excel…): ESM riêng, panel.js nạp lười bằng import() ở lần tải tệp đầu tiên (pdf.js nặng, không nhét vào panel.js).
+  docparse: { ...common, format: 'esm', entryPoints: { docparse: at('src/browser/docparse.ts') } },
+};
+
+async function copyStatic() {
+  const s = at('src/browser/static');
+  await mkdir(outdir, { recursive: true });
+  await cp(s, outdir, { recursive: true });
+  // Font nhúng vào artifact (trang xem trước tự đọc và nhúng dạng data URI).
+  await cp(at('media/fonts'), path.join(outdir, 'fonts'), { recursive: true });
+  await writeFile(path.join(outdir, 'manifest.json'), JSON.stringify(manifest(), null, 2) + '\n');
+  for (const [loc, msgs] of Object.entries(LOCALES)) {
+    const dir = path.join(outdir, '_locales', loc);
+    await mkdir(dir, { recursive: true });
+    await writeFile(path.join(dir, 'messages.json'), JSON.stringify(msgs, null, 2) + '\n');
+  }
+}
+
+const only = args.find((a) => a.startsWith('--only='))?.slice('--only='.length);
+const selected = Object.entries(targets).filter(([k]) => !only || only.split(',').includes(k));
+
+if (!watch) await rm(outdir, { recursive: true, force: true });
+await copyStatic();
+
+if (watch) {
+  const ctxs = await Promise.all(selected.map(([, t]) => esbuild.context(t)));
+  await Promise.all(ctxs.map((c) => c.watch()));
+  console.log('[esbuild:browser] đang theo dõi thay đổi…');
+} else {
+  await Promise.all(selected.map(([, t]) => esbuild.build(t)));
+  console.log(`[esbuild:browser] xong → ${path.relative(root, outdir)}${testBuild ? ' (bản TEST: cấp sẵn quyền mọi trang)' : ''}`);
+}

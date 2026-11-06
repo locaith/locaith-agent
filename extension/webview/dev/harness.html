@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Locaith AI — harness giao diện</title>
+  <!-- Mô phỏng stylesheet mặc định mà VS Code chèn vào mọi webview -->
+  <style id="_defaultStyles">
+    html { scrollbar-color: rgba(121,121,121,.4) transparent; }
+    body {
+      background-color: transparent;
+      color: var(--vscode-editor-foreground);
+      font-family: var(--vscode-font-family);
+      font-weight: var(--vscode-font-weight);
+      font-size: var(--vscode-font-size);
+      margin: 0;
+      padding: 0 20px;
+    }
+    img, video { max-width: 100%; max-height: 100%; }
+    a, a code { color: var(--vscode-textLink-foreground); }
+    code {
+      font-family: var(--monaco-monospace-font);
+      color: var(--vscode-textPreformat-foreground);
+      background-color: var(--vscode-textPreformat-background);
+      padding: 1px 3px;
+      border-radius: 4px;
+    }
+    pre code { padding: 0; }
+    blockquote { background: rgba(127,127,127,.1); border-color: rgba(0,122,204,.5); }
+    kbd { color: var(--vscode-editor-foreground); background-color: rgba(128,128,128,.17); border: 1px solid rgba(128,128,128,.4); border-radius: 3px; padding: 1px 3px; }
+  </style>
+  <link rel="stylesheet" href="../../dist/webview/main.css">
+</head>
+<body>
+  <div id="root"></div>
+  <script src="./.build/harness.js"></script>
+  <script src="../../dist/webview/main.js"></script>
+</body>
+</html>

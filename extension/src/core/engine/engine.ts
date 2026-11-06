@@ -1,0 +1,626 @@
+/**
+ * Agentic Orchestration Engine — Trụ cột 1: MỘT vòng lặp `while` duy nhất.
+ *
+ * Không có đồ thị DAG hay `if (user_asks_benchmark) …` nào. LLM đóng vai máy trạng thái và bộ lập lịch:
+ * mỗi vòng nó suy nghĩ (đan xen giữa các lần gọi công cụ), có thể phát NHIỀU lệnh gọi công cụ cùng lúc,
+ * nhận kết quả quan sát, rồi quyết định làm tiếp hay dừng. Engine chỉ làm phần cơ khí:
+ *   dựng ngữ cảnh → gọi model (stream qua Interceptor) → chạy công cụ (Dispatcher) → nối kết quả → lặp.
+ */
+
+import {
+  ProviderError,
+  textOf,
+  toolUsesOf,
+  userText,
+  type ChatMessage,
+  type ContentBlock,
+  type LLMProvider,
+  type ProviderEvent,
+  type QueueEvent,
+  type StopReason,
+  type ToolResultBlock,
+  type ToolUseBlock,
+  type Usage,
+} from '../types';
+import type { AttachmentInfo, TodoItem, UiEvent } from '../../shared/protocol';
+import { newId } from '../../shared/transcript';
+import type { SkillRegistry } from '../skills/registry';
+import { sha1 } from '../tools/textUtil';
+import { compactIfNeeded, compactedNotice, stripThinking } from './compaction';
+import { buildSystemPrompt } from './context';
+import { ToolDispatcher } from './dispatcher';
+import { StreamInterceptor, type PillBudget } from './interceptor';
+import { t, type Lang } from './strings';
+import { Summarizer } from './summarizer';
+import { splitThinkTags } from './thinkTags';
+import type { ToolRegistry } from './toolRegistry';
+import type { EngineSettings, SessionState, ToolHost } from './types';
+
+/** Tin nhắn người dùng gửi thêm lúc agent đang chạy; nội dung đã dựng sẵn để gửi model. */
+export interface QueuedMessage {
+  id: string;
+  text: string;
+  /** Bản hiển thị của tệp đính kèm (không có dữ liệu thô). */
+  display: AttachmentInfo[];
+  content: ContentBlock[];
+  ts: number;
+}
+
+/** Trạng thái đứng trong hàng chờ của cổng Locaith (sự kiện `queue` của nhà cung cấp, bỏ trường `type`). */
+export type QueueState = Omit<QueueEvent, 'type'>;
+
+export interface EngineDeps {
+  provider: LLMProvider;
+  /** Model chính (mỗi phiên có thể đổi giữa các lượt → truyền qua RunInput). */
+  summarizer: Summarizer | null;
+  /** Dùng để nén lịch sử; mặc định dùng chính model chính. */
+  compactor?: { provider: LLMProvider; model: string };
+  registry: ToolRegistry;
+  skills: SkillRegistry;
+  host: ToolHost;
+  settings: EngineSettings;
+  emit(ev: UiEvent): void;
+  /** Model phát thẻ <think> trong dòng chữ (không có kênh suy luận riêng): tách thẻ và nhắc suy nghĩ qua prompt. */
+  thinkTags?: boolean;
+  now?: () => Date;
+  /** Đọc tệp hướng dẫn dự án (LOCAITH.md…). Không có → không nạp (bản trình duyệt không có workspace). */
+  loadInstructions?(names: string[]): Promise<{ file: string; text: string } | null>;
+  /** Hồ sơ prompt: 'ide' (mặc định, VS Code) hoặc 'browser' (trợ lý trong Chrome/Edge). Thông tin hay đổi (tab đang mở) KHÔNG vào system prompt. */
+  profile?: 'ide' | 'browser';
+  /**
+   * Lấy (và rút khỏi hàng đợi) các tin người dùng gửi thêm lúc agent đang chạy. Engine gọi ở RANH GIỚI giữa hai lần gọi model:
+   *  1. ngay sau khi chạy xong một lượt công cụ → tin đi CHUNG tin nhắn kết quả công cụ, model đổi hướng được ngay (steering);
+   *  2. khi model trả lời xong mà không gọi công cụ → tin trở thành lượt kế tiếp của CÙNG lần chạy.
+   * Không khai báo = không có hàng đợi (agent con, bản trình duyệt).
+   */
+  takeQueued?(): QueuedMessage[];
+  /** Chỉ dẫn do các server MCP đang chạy cung cấp (đưa vào system prompt kèm nhãn nguồn). */
+  mcpInstructions?(): { server: string; text: string }[];
+  /** Gọi sau khi một lần nén ngữ cảnh thành công, kèm bản tóm tắt (ví dụ để lưu vào bộ nhớ dài hạn). Lỗi của hook không làm hỏng lượt chạy. */
+  onCompacted?(info: { session: SessionState; summary: string }): void | Promise<void>;
+  /**
+   * Cổng Locaith đầy người dùng: có `state` = đang đứng trong hàng (vị trí, mốc thử lại để đếm ngược); `null` = đã được nhận / bị dừng / hết lượt.
+   * Hiển thị ngay trong khung chat (không dùng thông báo hệ thống). Không khai báo (agent con, bản trình duyệt) = chỉ có dòng trạng thái trong lượt trả lời.
+   */
+  onQueue?(state: QueueState | null): void;
+  /** Cổng Locaith từ chối vì tài khoản chưa đồng ý (phiên bản) thông báo dữ liệu: host mở lại thẻ thông báo trong khung chat. */
+  onConsentRequired?(): void;
+  /** Cổng Locaith báo token đăng nhập không còn hợp lệ (401): host kiểm tra lại tài khoản (bị thu hồi thì khoá extension và đòi đăng nhập lại). */
+  onAccountInvalid?(): void;
+}
+
+export interface RunInput {
+  session: SessionState;
+  /** Nội dung tin nhắn người dùng (đã gồm tệp đính kèm, ngữ cảnh IDE, ảnh). */
+  content: ContentBlock[];
+  signal: AbortSignal;
+  assistantId?: string;
+}
+
+export interface RunResult {
+  stopReason: 'end_turn' | 'max_turns' | 'error' | 'aborted' | 'refusal';
+  turns: number;
+  assistantId: string;
+}
+
+/** Công cụ mà việc gọi lặp lại là bình thường (cập nhật trạng thái). */
+const REPEAT_EXEMPT = new Set(['todo_write', 'scratchpad', 'load_skill', 'search_skills']);
+
+/** Dấu vân tay của phần "tiền tố" mà khối suy luận ký vào: system prompt và định nghĩa công cụ (thứ tự công cụ không quan trọng). */
+function promptFingerprint(system: string, specs: ReadonlyArray<{ name: string; description: string; inputSchema: unknown }>): string {
+  const tools = [...specs].sort((a, b) => a.name.localeCompare(b.name)).map((s) => [s.name, s.description, s.inputSchema]);
+  return sha1(`${system}\u0000${JSON.stringify(tools)}`);
+}
+
+/** Id công cụ chưa từng xuất hiện trong lịch sử phiên: giữ nguyên nếu duy nhất, ngược lại thêm hậu tố `_r2`, `_r3`… */
+function freshToolId(session: SessionState, providerId: string): string {
+  const used = new Set<string>();
+  for (const m of session.messages) for (const b of m.content) if (b.type === 'tool_use') used.add(b.id);
+  if (!used.has(providerId)) return providerId;
+  for (let n = 2; ; n++) {
+    const candidate = `${providerId}_r${n}`;
+    if (!used.has(candidate)) return candidate;
+  }
+}
+
+export class AgentEngine {
+  private readonly dispatcher: ToolDispatcher;
+
+  constructor(private readonly d: EngineDeps) {
+    this.dispatcher = new ToolDispatcher({
+      registry: d.registry,
+      host: d.host,
+      emit: d.emit,
+      language: d.settings.language,
+      parallel: d.settings.parallelToolCalls,
+    });
+  }
+
+  async run(input: RunInput): Promise<RunResult> {
+    const { session, signal } = input;
+    const { settings, emit } = this.d;
+    const lang: Lang = settings.language;
+    let id = input.assistantId ?? newId('a');
+    const providerLabel = this.d.provider.label;
+
+    emit({ t: 'assistant_start', id, provider: this.d.provider.id, model: session.model, ts: Date.now() });
+    session.messages.push({ role: 'user', content: input.content, ts: Date.now() });
+    session.updatedAt = Date.now();
+
+    const budget: PillBudget = { seq: 0, count: 0 };
+    const recentSigs: string[] = [];
+    let turns = 0;
+    let continuations = 0;
+    let todoNudges = 0;
+    let emptyNudges = 0;
+    let wrapUp = false;
+    let compactedForOverflow = false;
+    let result: RunResult['stopReason'] = 'end_turn';
+    let lastWasToolResults = false;
+
+    const notice = (level: 'info' | 'warn' | 'error', text: string) => emit({ t: 'notice', id, level, text });
+
+    /**
+     * Tin người dùng gửi trong lúc trợ lý đang làm = VIỆC MỚI. Ghi ngay vào danh sách tác vụ của phiên
+     * (trạng thái chờ) để không bị bỏ quên, hiện ở bảng «Việc cần làm», rồi mới chèn nội dung vào lượt kế tiếp.
+     * Việc đang dở vẫn xong trước; các việc mới chạy lần lượt theo đúng thứ tự gửi.
+     */
+    const addQueuedTasks = (queued: QueuedMessage[]): void => {
+      const next: TodoItem[] = [...session.todos];
+      const used = new Set(next.map((x) => x.id));
+      const added: string[] = [];
+      for (const q of queued) {
+        const title = (q.text || t(lang, 'queuedImageTask')).replace(/\s+/g, ' ').trim().slice(0, 80);
+        if (!title) continue;
+        if (next.some((x) => x.status !== 'completed' && x.title === title)) continue;
+        let n = next.length + 1;
+        while (used.has(`t${n}`)) n++;
+        used.add(`t${n}`);
+        next.push({ id: `t${n}`, title, status: 'pending' });
+        added.push(title);
+      }
+      if (added.length === 0) return;
+      session.todos = next;
+      emit({ t: 'tasks', id, todos: next, added });
+    };
+
+    /**
+     * Chèn các tin người dùng đang chờ ở ranh giới vòng lặp. Trả về khối nội dung để gắn vào tin nhắn user kế tiếp (rỗng nếu không có gì).
+     * Giao diện: đóng đoạn trả lời hiện tại, hiện tin của người dùng, mở đoạn mới — vẫn CÙNG một lần chạy (`run_state` không đổi).
+     */
+    const takeQueued = (steer: boolean): ContentBlock[] => {
+      if (wrapUp || !this.d.takeQueued) return [];
+      let queued: QueuedMessage[] = [];
+      try {
+        queued = this.d.takeQueued();
+      } catch (err) {
+        this.d.host.log('warn', `Không lấy được hàng đợi tin nhắn: ${err instanceof Error ? err.message : String(err)}`);
+      }
+      if (queued.length === 0) return [];
+      emit({ t: 'assistant_end', id, stopReason: 'end_turn' });
+      for (const q of queued) emit({ t: 'user', id: q.id, text: q.text, attachments: q.display, ts: q.ts, ...(steer ? { steer: true } : {}) });
+      id = newId('a');
+      emit({ t: 'assistant_start', id, provider: this.d.provider.id, model: session.model, ts: Date.now() });
+      if (steer) addQueuedTasks(queued);
+      const blocks: ContentBlock[] = steer ? [{ type: 'text', text: t(lang, 'steerHeader', { n: queued.length }) }] : [];
+      for (let i = 0; i < queued.length; i++) {
+        if (steer && queued.length > 1) blocks.push({ type: 'text', text: `[${t(lang, 'steerItem')} ${i + 1}/${queued.length}]` });
+        blocks.push(...queued[i].content);
+      }
+      return blocks;
+    };
+
+    try {
+      while (true) {
+        if (signal.aborted) {
+          result = 'aborted';
+          break;
+        }
+        if (turns >= settings.maxTurns && !wrapUp) {
+          wrapUp = true;
+          notice('warn', t(lang, 'maxTurns', { n: settings.maxTurns }));
+          session.messages.push(userText(t(lang, 'maxTurnsWrapUp'), { synthetic: true }));
+        } else if (wrapUp && turns >= settings.maxTurns + 1) {
+          result = 'max_turns';
+          break;
+        }
+        turns++;
+
+        await this.compact(session, signal, id, false);
+
+        const unlocked = this.d.skills.unlockedTools(session.loadedSkills, session.provider);
+      // Swarm: công cụ workflow luôn sẵn sàng (không cần nạp kỹ năng multi-agent trước).
+      if (session.swarm || session.thinkingLevel === 'swarm') unlocked.add('workflow_run');
+        // Lượt tổng kết cuối vẫn gửi ĐỦ định nghĩa công cụ (Anthropic trả 400 nếu lịch sử có tool_use/tool_result mà không
+        // có `tools`, và danh sách công cụ đổi cũng làm hỏng khối suy luận đã ký) nhưng cấm gọi bằng `toolChoice: 'none'`.
+        const specs = this.d.registry.specs(session, unlocked);
+        const available = new Set(specs.map((s) => s.name));
+        const instructions = this.d.loadInstructions ? await this.d.loadInstructions(settings.instructionFiles) : null;
+        const promptedThinking = !!this.d.thinkTags && session.thinkingLevel !== 'off';
+        const system = buildSystemPrompt({
+          host: this.d.host,
+          model: session.model,
+          providerLabel,
+          mode: session.mode,
+          language: lang,
+          projectInstructions: instructions,
+          promptedThinking,
+          swarm: session.swarm === true || session.thinkingLevel === 'swarm',
+          now: this.d.now?.(),
+          profile: this.d.profile,
+          mcpInstructions: this.d.mcpInstructions?.(),
+          providerId: session.provider,
+        });
+
+        const interceptor = new StreamInterceptor({
+          assistantId: id,
+          emit,
+          summarizer: this.d.summarizer,
+          thinkTags: !!this.d.thinkTags,
+          toolInfo: (name) => {
+            const def = this.d.registry.get(name);
+            return def ? { streamsContent: !!def.streamsContent, contentField: def.contentField } : undefined;
+          },
+          signal,
+          language: lang,
+          flushChars: settings.summarizeEveryChars,
+          flushMs: settings.summarizeEveryMs,
+          maxPills: settings.maxPillsPerReply,
+          budget,
+        });
+
+        // Khối suy luận chỉ hợp lệ khi system + công cụ + lịch sử phía trước không đổi. Nếu system/công cụ vừa đổi
+        // (duyệt kế hoạch, nạp kỹ năng, sang ngày mới) hoặc lịch sử vừa bị sửa, xoá suy luận cũ KHỎI LỊCH SỬ ĐÃ LƯU:
+        // suy luận mới sẽ được sinh ra khi không có chúng, nên lượt sau cũng không được phát lại chúng.
+        // Chỉ làm ở RANH GIỚI lượt (tin nhắn cuối là chữ của người dùng): giữa một vòng công cụ, tin nhắn assistant cuối
+        // (đang chờ kết quả tool_use) phải giữ khối suy luận của nó — tài liệu Anthropic: "không bao giờ xoá giữa vòng công cụ".
+        // Khi đó giữ nguyên vân tay cũ để ranh giới kế tiếp phát hiện ra chênh lệch và xoá một lần.
+        const fingerprint = promptFingerprint(system, specs);
+        const last = session.messages[session.messages.length - 1];
+        // Tin user vừa có tool_result vừa có chữ (người dùng chen vào giữa vòng công cụ) KHÔNG phải ranh giới lượt: suy luận của tin assistant ngay trước nó vẫn phải giữ.
+        const atBoundary =
+          !!last && last.role === 'user' && last.content.some((b) => b.type === 'text' || b.type === 'image') && !last.content.some((b) => b.type === 'tool_result');
+        const boundToPrefix = !!this.d.provider.capabilities.thinkingBoundToPrefix;
+        const prefixChanged = boundToPrefix && !!session.promptFingerprint && session.promptFingerprint !== fingerprint;
+        if (prefixChanged && atBoundary) session.historyEdited = true;
+        if (session.historyEdited) stripThinking(session);
+
+        // Id công cụ của một số máy chủ tương thích (`call_0`, `call_1`…) lặp lại giữa các lượt → đổi tên để mỗi lệnh gọi là duy nhất.
+        const idMap = new Map<string, string>();
+        const uniqueId = (providerId: string): string => {
+          let u = idMap.get(providerId);
+          if (!u) {
+            u = freshToolId(session, providerId);
+            idMap.set(providerId, u);
+          }
+          return u;
+        };
+
+        let done: Extract<ProviderEvent, { type: 'done' }> | null = null;
+        let queued = false;
+        try {
+          for await (const raw of this.d.provider.stream({
+            model: session.model,
+            system,
+            messages: session.messages,
+            tools: specs,
+            toolChoice: wrapUp ? 'none' : undefined,
+            maxOutputTokens: settings.maxOutputTokens,
+            thinking: { level: session.thinkingLevel === 'swarm' ? 'max' : session.thinkingLevel, summaries: true },
+            signal,
+            parallelToolCalls: settings.parallelToolCalls,
+            historyEdited: session.historyEdited,
+            sessionKey: session.id,
+          })) {
+            const ev: ProviderEvent =
+              raw.type === 'tool_start' || raw.type === 'tool_args_delta' || raw.type === 'tool_end'
+                ? { ...raw, id: uniqueId(raw.id) }
+                : raw.type === 'done'
+                  ? { ...raw, message: { ...raw.message, content: raw.message.content.map((b) => (b.type === 'tool_use' ? { ...b, id: uniqueId(b.id) } : b)) } }
+                  : raw;
+            // Hàng chờ của cổng Locaith: báo cho host (dải đếm ngược trong khung chat); sự kiện đầu tiên KHÁC `queue` (retry không tính) = đã được nhận.
+            if (ev.type === 'queue') {
+              queued = true;
+              this.d.onQueue?.({ position: ev.position, ahead: ev.ahead, attempt: ev.attempt, waitMs: ev.waitMs, retryAt: ev.retryAt, limit: ev.limit, active: ev.active, waiting: ev.waiting });
+            } else if (queued && ev.type !== 'retry') {
+              queued = false;
+              this.d.onQueue?.(null);
+            }
+            interceptor.onEvent(ev);
+            if (ev.type === 'done') done = ev;
+          }
+        } catch (err) {
+          await interceptor.finish();
+          const outcome = await this.handleProviderError(err, { session, signal, id, lang, providerLabel, compactedForOverflow, notice });
+          if (outcome === 'retry') {
+            compactedForOverflow = true;
+            continue;
+          }
+          result = outcome;
+          break;
+        } finally {
+          // Lỗi / dừng khi đang xếp hàng: dải đếm ngược phải biến mất.
+          if (queued) this.d.onQueue?.(null);
+        }
+        await interceptor.finish();
+
+        if (!done) {
+          notice('error', t(lang, 'providerError', { provider: providerLabel, detail: 'luồng kết thúc đột ngột' }));
+          result = 'error';
+          break;
+        }
+        session.historyEdited = false;
+        if (!prefixChanged || atBoundary) session.promptFingerprint = fingerprint;
+        // Adapter đã phải bỏ suy luận cũ để API chấp nhận yêu cầu: lịch sử đã lưu phải khớp với những gì thực sự được gửi.
+        if (done.droppedReplayedThinking) stripThinking(session);
+
+        const message = this.normalizeAssistant(done.message, session);
+        session.messages.push(message);
+        this.recordUsage(session, done.usage, id);
+
+        const calls = toolUsesOf(message);
+        const stop: StopReason = done.stopReason;
+
+        if (stop === 'refusal') {
+          notice('warn', t(lang, 'refusal'));
+          result = 'refusal';
+          break;
+        }
+        if (stop === 'content_filter' && calls.length === 0) {
+          notice('warn', t(lang, 'contentFilter'));
+          result = 'refusal';
+          break;
+        }
+
+        // ── Có lệnh gọi công cụ → chạy rồi quay lại vòng lặp ─────────────────────
+        if (calls.length > 0 && !wrapUp) {
+          if (stop === 'max_tokens') {
+            // Lệnh cuối có thể đã bị cắt giữa chừng nhưng vẫn parse được: không bao giờ chạy trên đối số cụt.
+            const last = calls[calls.length - 1];
+            if (!last.parseError) last.parseError = 'đầu ra bị cắt do chạm giới hạn độ dài';
+          }
+          const results = await this.runTools(calls, session, id, signal, available, recentSigs, lang);
+          // Tin người dùng gửi lúc công cụ đang chạy đi CHUNG tin nhắn kết quả (mỗi tin assistant chỉ được theo sau bởi MỘT tin user: giữ xen kẽ vai trò ở mọi hãng); tool_result luôn đứng trước.
+          const steered = signal.aborted ? [] : takeQueued(true);
+          session.messages.push({ role: 'user', content: [...results, ...steered], ts: Date.now() });
+          lastWasToolResults = true;
+          continuations = 0;
+          continue;
+        }
+
+        // ── Không có công cụ ─────────────────────────────────────────────────────
+        // Model dừng mà không gọi công cụ nhưng người dùng đã xếp hàng tin mới → đó là lượt kế tiếp của CÙNG lần chạy.
+        if (stop !== 'pause_turn' && !signal.aborted) {
+          const next = takeQueued(false);
+          if (next.length > 0) {
+            session.messages.push({ role: 'user', content: next, ts: Date.now() });
+            lastWasToolResults = false;
+            continuations = 0;
+            emptyNudges = 0;
+            todoNudges = 0;
+            continue;
+          }
+        }
+        if (stop === 'max_tokens' && !wrapUp) {
+          if (continuations < 2) {
+            continuations++;
+            notice('info', t(lang, 'maxTokensContinue'));
+            session.messages.push(userText(t(lang, 'continuePrompt'), { synthetic: true }));
+            continue;
+          }
+          break;
+        }
+        if (stop === 'pause_turn') continue;
+
+        const text = textOf(message).trim();
+        if (!text && lastWasToolResults && emptyNudges < 1 && !wrapUp) {
+          emptyNudges++;
+          session.messages.push(userText(t(lang, 'emptyReplyNudge'), { synthetic: true }));
+          continue;
+        }
+        const pendingTodos = session.todos.some((x) => x.status !== 'completed');
+        if (pendingTodos && todoNudges < 1 && !wrapUp && !/[?？]\s*$/.test(text)) {
+          todoNudges++;
+          session.messages.push(userText(t(lang, 'todoReminder'), { synthetic: true }));
+          continue;
+        }
+        break;
+      }
+    } finally {
+      session.updatedAt = Date.now();
+      emit({ t: 'assistant_end', id, stopReason: result });
+    }
+    return { stopReason: result, turns, assistantId: id };
+  }
+
+  /** Nén thủ công (/compact) hoặc khi lỗi tràn ngữ cảnh. */
+  async compactNow(session: SessionState, signal: AbortSignal): Promise<string | null> {
+    const lang = this.d.settings.language;
+    const c = this.d.compactor ?? { provider: this.d.provider, model: session.model };
+    const r = await compactIfNeeded({
+      session,
+      provider: c.provider,
+      model: c.model,
+      language: lang,
+      signal,
+      contextWindow: this.d.settings.contextWindow,
+      force: true,
+    });
+    // Người dùng chủ động bấm nén: nếu model tóm tắt lỗi (sai khoá, mất mạng…) phải nói thật, không báo "không có gì để nén".
+    if (r.error && r.summarizedMessages === 0 && r.pruned === 0) throw new Error(`Không nén được hội thoại: ${r.error}`);
+    if (r.summarizedMessages > 0) this.fireCompacted(session);
+    return compactedNotice(lang, r);
+  }
+
+  // ── nội bộ ────────────────────────────────────────────────────────────────────
+
+  /** Bản tóm tắt nằm ở tin tổng hợp đầu tiên (`<tom_tat_hoi_thoai_truoc_do>`): chuyển cho hook mà không chặn lượt chạy. */
+  private fireCompacted(session: SessionState): void {
+    const hook = this.d.onCompacted;
+    if (!hook) return;
+    const head = session.messages[0];
+    const text = head?.content.find((b): b is Extract<ContentBlock, { type: 'text' }> => b.type === 'text')?.text ?? '';
+    const summary = (/<tom_tat_hoi_thoai_truoc_do>\n?([\s\S]*?)\n?<\/tom_tat_hoi_thoai_truoc_do>/.exec(text)?.[1] ?? '').trim();
+    if (!summary) return;
+    void Promise.resolve()
+      .then(() => hook({ session, summary }))
+      .catch((err) => this.d.host.log('warn', `Hook sau khi nén ngữ cảnh lỗi: ${err instanceof Error ? err.message : String(err)}`));
+  }
+
+  private async compact(session: SessionState, signal: AbortSignal, id: string, force: boolean): Promise<boolean> {
+    if (!this.d.settings.autoCompact && !force) return false;
+    const lang = this.d.settings.language;
+    const c = this.d.compactor ?? { provider: this.d.provider, model: session.model };
+    const r = await compactIfNeeded({
+      session,
+      provider: c.provider,
+      model: c.model,
+      language: lang,
+      signal,
+      contextWindow: this.d.settings.contextWindow,
+      force,
+      onStart: () =>
+        this.d.emit({ t: 'pill', id, pillId: `${id}:compact`, text: t(lang, 'compacting'), kind: 'working' }),
+    });
+    if (r.error) this.d.host.log('warn', `Nén ngữ cảnh: không tóm tắt được (${r.error})`);
+    if (r.summarizedMessages > 0) this.fireCompacted(session);
+    const msg = compactedNotice(lang, r);
+    if (msg) this.d.emit({ t: 'notice', id, level: 'info', text: msg });
+    return r.pruned > 0 || r.summarizedMessages > 0;
+  }
+
+  private async handleProviderError(
+    err: unknown,
+    ctx: {
+      session: SessionState;
+      signal: AbortSignal;
+      id: string;
+      lang: Lang;
+      providerLabel: string;
+      compactedForOverflow: boolean;
+      notice(level: 'info' | 'warn' | 'error', text: string): void;
+    },
+  ): Promise<'retry' | 'aborted' | 'error'> {
+    const { lang, providerLabel } = ctx;
+    if (ctx.signal.aborted || (err instanceof ProviderError && err.kind === 'aborted')) return 'aborted';
+
+    if (!(err instanceof ProviderError)) {
+      const detail = err instanceof Error ? err.message : String(err);
+      this.d.host.log('error', `Lỗi không mong đợi khi gọi model: ${err instanceof Error ? err.stack ?? detail : detail}`);
+      ctx.notice('error', t(lang, 'providerError', { provider: providerLabel, detail }));
+      return 'error';
+    }
+
+    this.d.host.log('warn', `ProviderError(${err.kind}${err.status ? ' ' + err.status : ''}): ${err.message}${err.details ? ' — ' + err.details : ''}`);
+    // Token tài khoản Locaith hỏng (401 của cổng): đây KHÔNG phải khoá API — nhờ host kiểm tra lại tài khoản thay vì bảo người dùng nhập khoá.
+    if (err.accountAuth) {
+      this.d.onAccountInvalid?.();
+      ctx.notice('error', t(lang, 'accountInvalid'));
+      return 'error';
+    }
+    // Câu tiếng Việt do máy chủ soạn sẵn (hết hạn mức ngày, quá nhiều lượt, bảo trì, model không tồn tại…): hiện nguyên văn, không thay bằng câu chung "chạm giới hạn tốc độ… chờ N phút".
+    if (err.verbatim && err.message) {
+      ctx.notice('error', err.message);
+      return 'error';
+    }
+    switch (err.kind) {
+      case 'context_length':
+        if (!ctx.compactedForOverflow && (await this.compact(ctx.session, ctx.signal, ctx.id, true))) return 'retry';
+        ctx.notice('error', t(lang, 'contextTooLong'));
+        return 'error';
+      case 'auth':
+        ctx.notice('error', t(lang, 'authError', { provider: providerLabel }));
+        return 'error';
+      case 'consent_required':
+        // Cổng Locaith chưa có bản ghi đồng ý của tài khoản (hoặc đã đổi phiên bản thông báo): mở lại thẻ trong khung chat; sau khi đồng ý, nút «Thử lại» chạy lại.
+        this.d.onConsentRequired?.();
+        ctx.notice('error', t(lang, 'consentRequired', { provider: providerLabel }));
+        return 'error';
+      case 'rate_limit':
+        ctx.notice('error', t(lang, 'rateLimit', { provider: providerLabel }));
+        return 'error';
+      case 'queued':
+      case 'overloaded':
+        ctx.notice('error', t(lang, 'overloaded', { provider: providerLabel }));
+        return 'error';
+      case 'network':
+      case 'timeout':
+        ctx.notice('error', t(lang, 'networkError', { provider: providerLabel, detail: err.message }));
+        return 'error';
+      default:
+        ctx.notice('error', t(lang, 'providerError', { provider: providerLabel, detail: err.message }));
+        return 'error';
+    }
+  }
+
+  /** Gắn nhãn nguồn, tách thẻ <think> khỏi chữ (nếu cần), bỏ khối chữ rỗng. */
+  private normalizeAssistant(message: ChatMessage, session: SessionState): ChatMessage {
+    const out: ContentBlock[] = [];
+    for (const b of message.content) {
+      if (b.type === 'text' && this.d.thinkTags) {
+        const { thinking, text } = splitThinkTags(b.text);
+        if (thinking) out.push({ type: 'thinking', text: thinking, provider: this.d.provider.id });
+        if (text.trim()) out.push({ ...b, text });
+      } else if (b.type === 'text' && !b.text.trim()) {
+        continue;
+      } else {
+        out.push(b);
+      }
+    }
+    return {
+      ...message,
+      role: 'assistant',
+      content: out,
+      provider: message.provider ?? this.d.provider.id,
+      model: message.model ?? session.model,
+      ts: message.ts ?? Date.now(),
+    };
+  }
+
+  private recordUsage(session: SessionState, usage: Usage, id: string): void {
+    // Quy ước của lớp provider: inputTokens = TỔNG token đầu vào (đã gồm phần đọc/ghi cache) → chính là cỡ ngữ cảnh.
+    const fresh = usage.inputTokens;
+    session.lastContextTokens = fresh;
+    session.usageTotals.input += usage.inputTokens;
+    session.usageTotals.output += usage.outputTokens;
+    this.d.emit({ t: 'usage', id, usage, contextTokens: fresh });
+  }
+
+  private async runTools(
+    calls: ToolUseBlock[],
+    session: SessionState,
+    id: string,
+    signal: AbortSignal,
+    available: ReadonlySet<string>,
+    recentSigs: string[],
+    lang: Lang,
+  ): Promise<ToolResultBlock[]> {
+    // Chặn vòng lặp vô ích: cùng một lệnh với cùng đối số lặp lại ≥ 3 lần.
+    const blocked = new Map<string, ToolResultBlock>();
+    const toRun: ToolUseBlock[] = [];
+    for (const c of calls) {
+      const sig = `${c.name}|${JSON.stringify(c.input)}`;
+      const repeats = recentSigs.filter((s) => s === sig).length;
+      const exempt = REPEAT_EXEMPT.has(c.name) || this.d.registry.get(c.name)?.repeatExempt === true;
+      if (!exempt && repeats >= 2 && !c.parseError) {
+        // Lệnh bị chặn KHÔNG được nạp lại vào cửa sổ, nếu không việc chặn sẽ kéo dài mãi.
+        const content =
+          lang === 'en'
+            ? 'You already made this exact call several times with the same arguments. Change your approach (different arguments or another tool), or stop and explain the blocker to the user.'
+            : 'Bạn đã gọi lệnh này với đúng các đối số đó nhiều lần rồi. Hãy đổi cách tiếp cận (đối số khác hoặc công cụ khác), hoặc dừng lại và báo cho người dùng biết vướng mắc ở đâu.';
+        this.d.emit({ t: 'tool_start', id, callId: c.id, name: c.name, args: c.input });
+        this.d.emit({ t: 'tool_end', id, callId: c.id, state: 'error', output: content, durationMs: 0 });
+        blocked.set(c.id, { type: 'tool_result', toolUseId: c.id, name: c.name, content, isError: true });
+      } else {
+        recentSigs.push(sig);
+        if (recentSigs.length > 14) recentSigs.shift();
+        toRun.push(c);
+      }
+    }
+    const ran = toRun.length ? await this.dispatcher.runBatch({ calls: toRun, session, assistantId: id, signal, available }) : [];
+    // Sau khi sửa/ghi tệp hay thao tác lên trang web, thế giới đã đổi: đọc lại tệp, chạy lại `npm test`, chụp lại trang (page_snapshot) là việc chính đáng, không phải vòng lặp.
+    if (toRun.some((c) => { const risk = this.d.registry.get(c.name)?.risk; return risk === 'write' || risk === 'act'; })) recentSigs.length = 0;
+    const byId = new Map(ran.map((r) => [r.toolUseId, r]));
+    return calls.map((c) => blocked.get(c.id) ?? byId.get(c.id)!);
+  }
+}

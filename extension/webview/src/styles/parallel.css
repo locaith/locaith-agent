@@ -1,0 +1,118 @@
+/* ── Gọn khi nhiều việc chạy cùng lúc: dòng tóm tắt «N lệnh gọi công cụ» + dòng agent con sống ─────────────────────────────────────────────
+   Dùng lại đường ray hoạt động (.act, .act-row, .act-icon, .tool-head, .tool-group…) nên cùng ngôn ngữ thị giác với các dòng công cụ hiện có. */
+
+/* Dòng tóm tắt: nhãn đếm cố định + việc mới nhất co giãn và cắt bằng …, tất cả trên MỘT dòng. */
+.par-sum .tool-text {
+  min-width: 0;
+}
+.par-sum-line {
+  display: flex;
+  align-items: baseline;
+  gap: 4px 6px;
+  min-width: 0;
+  min-height: var(--nd-row);
+}
+.par-sum-count {
+  flex: none;
+  white-space: nowrap;
+}
+.par-sum-now {
+  flex: 1 1 0;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--nd-fs-xs);
+  line-height: var(--nd-lh-ui);
+  color: var(--fg-faint);
+}
+.par-sum .tool-state {
+  margin-left: 6px;
+}
+
+/* Dòng agent con đang chạy — LUÔN đúng hai dòng chữ, không bao giờ xuống dòng thứ ba hay tràn ngang.
+   Rộng:  [tiêu đề (cắt …)               461,4k token · 12 lệnh · 5 phút 18 giây]
+          [Đang đọc C:\locaith\locaith-ai-v2\docs\LOCAITH-MODELS.md             ]
+   Hẹp:   [tiêu đề (cắt …)                                    5 phút 18 giây]
+          [461,4k token · 12 lệnh · Đang đọc C:\locaith\locai…              ] */
+.par-agent {
+  flex-wrap: nowrap;
+  align-items: flex-start;
+}
+.par-agent-body {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+.par-agent-top {
+  display: flex;
+  align-items: baseline;
+  gap: 0 12px;
+  min-width: 0;
+}
+.par-agent-title {
+  flex: 1 1 0;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--nd-fs-sm);
+  line-height: var(--nd-lh-ui);
+  color: var(--fg);
+}
+.par-agent-stats {
+  flex: none;
+  white-space: nowrap;
+  font-size: var(--nd-fs-xs);
+  line-height: var(--nd-lh-ui);
+  color: var(--fg-faint);
+  font-variant-numeric: tabular-nums;
+}
+.par-agent-activity {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--nd-fs-xs);
+  line-height: var(--nd-lh-ui);
+  color: var(--fg-faint);
+  font-variant-numeric: tabular-nums;
+  padding-block: 0.12em;
+}
+/* Bộ số «token · lệnh · lỗi» chỉ hiện ở MỘT trong hai nơi tuỳ bề ngang (rộng: dòng đầu; hẹp: đầu dòng hai). */
+.par-act-counts {
+  display: none;
+}
+@container app (max-width: 520px) {
+  .par-st-counts {
+    display: none;
+  }
+  .par-act-counts {
+    display: inline;
+  }
+}
+/* Rất hẹp: ở dòng tóm tắt nhường chỗ cho số đếm, bỏ phần việc mới nhất. */
+@container app (max-width: 270px) {
+  .par-sum-now {
+    display: none;
+  }
+}
+
+/* Tương phản cao: chữ phụ đậm hơn một bậc (48% quá nhạt trên nền tương phản cao). */
+body.vscode-high-contrast .par-sum-now,
+body.vscode-high-contrast .par-agent-stats,
+body.vscode-high-contrast .par-agent-activity,
+body.vscode-high-contrast-light .par-sum-now,
+body.vscode-high-contrast-light .par-agent-stats,
+body.vscode-high-contrast-light .par-agent-activity {
+  color: var(--fg-muted);
+}
+
+/* Số giây chạy là chữ, không phải hiệu ứng; vòng quay đã tự tĩnh lại ở brand.css. Chỉ bỏ các chuyển màu khi giảm chuyển động. */
+@media (prefers-reduced-motion: reduce) {
+  .par-sum .tool-head,
+  .par-agent {
+    transition: none;
+  }
+}

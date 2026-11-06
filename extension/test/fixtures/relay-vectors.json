@@ -1,0 +1,69 @@
+{
+  "note": "Vector kiểm thử cố định cho giao thức Remote qua relay (v1). Khoá riêng chỉ dùng cho kiểm thử — KHÔNG phải bí mật. Cả extension và trang locaith.ai phải ra đúng các giá trị này.",
+  "keys": {
+    "A": {
+      "jwk": {
+        "kty": "EC",
+        "crv": "P-256",
+        "x": "h62OkuNl7D3eyrXHAiFW7CSEgSH5yLzwupMPrLBH-jI",
+        "y": "TlpEkrb3_yOnHaUKnqtRmUttzAtX6sta_MV6bA4zgT4",
+        "d": "GKr7KhfxBWNB4OqvWjAK4hainj3n4rbASzHrbSAkurg"
+      },
+      "pub": "BIetjpLjZew93sq1xwIhVuwkhIEh-ci88LqTD6ywR_oyTlpEkrb3_yOnHaUKnqtRmUttzAtX6sta_MV6bA4zgT4"
+    },
+    "B": {
+      "jwk": {
+        "kty": "EC",
+        "crv": "P-256",
+        "x": "Jk0G67_KC0YUZAAF0aq7kpWxS8dIXu20ZxyQ1yLyTok",
+        "y": "Im7LfYd6cPB4YZQ_RF45Ns_akHb15mkik6UDPNRguFc",
+        "d": "o0TETEx-bkh8xTWgiGU13oZVjT9eqGRJiOql0EKBTSM"
+      },
+      "pub": "BCZNBuu_ygtGFGQABdGqu5KVsUvHSF7ttGcckNci8k6JIm7LfYd6cPB4YZQ_RF45Ns_akHb15mkik6UDPNRguFc"
+    },
+    "A2": {
+      "jwk": {
+        "kty": "EC",
+        "crv": "P-256",
+        "x": "xsB2bnjhtNJsqwpaiodVyxoSBAv40GG6SC6ax4W-KGI",
+        "y": "jdPipynyau3OlMoRdtmD9v_Obd5iuBSEl6pDYjo_vpw",
+        "d": "4elQ1rJUr2aXQXVVqqQ4jzP-RGr-qKENA2bocEGWu3A"
+      },
+      "pub": "BMbAdm544bTSbKsKWoqHVcsaEgQL-NBhukgumseFvihijdPipynyau3OlMoRdtmD9v_Obd5iuBSEl6pDYjo_vpw"
+    },
+    "B2": {
+      "jwk": {
+        "kty": "EC",
+        "crv": "P-256",
+        "x": "rZgJBgyLMmTtGOu9VBqkWOFrPYVelovKSsp62l-rv8k",
+        "y": "yoQq2Gcjev-7-qwBTBbXZmCBX6vWwz57LkqPjsBYqiU",
+        "d": "OEcARfwn3BFLCvd-FKgn26PIctt21I7nngw_Zbhci4g"
+      },
+      "pub": "BK2YCQYMizJk7RjrvVQapFjhaz2FXpaLykrKetpfq7_JyoQq2Gcjev-7-qwBTBbXZmCBX6vWwz57LkqPjsBYqiU"
+    }
+  },
+  "pairing": {
+    "z": "57badadee951db9656b69c662691fa8bd8620ef914ee6b4d4941308340f47f45",
+    "kDev": "591917af7382aefad697df91a8573ac761866b8ac54fe37f3d8adf6fff2d1357",
+    "sas": "667 273",
+    "macPairReq": "66b983716b62abee9b05f23c3ce8f8410747f555152a5293a3b06b52772c8534",
+    "macPairHello": "372357ba278200656bd09f5e3cb67090a31f30459d00d82d99cad685ee6e58bf",
+    "macPairOk": "a4eada4bf0b4db1972660e21a80c17b466edf4d93d0ca7334d4f124850f24163"
+  },
+  "session": {
+    "macHello": "53f8db708024926a130b1ad4c8c856e782627db0f894890d218bb858f2bfd1cc",
+    "macHelloOk": "ce8185e2395c9ea51dd0f04297b35d7a9b4c6ba3694777a280d6fea7a24f78eb",
+    "c2h": "ece7ee8b99abbdc292b9bc47553c7eb0f927fb7447c7d764432293fc13a25ba3",
+    "h2c": "c1c22bbe6bbfe87d6924b2f4864fd2b312a0f1971a31b76ddc4b293bca5bfa48",
+    "plain": "{\"k\":\"cmd\",\"id\":\"c1\",\"cmd\":{\"type\":\"stop\"}}",
+    "cipherC2h": "d5dfb7d532291cd3044ee213b7f051bc89466b58be10d21216e80524675aff5bffbd317541e7a8d2fc95425378bcf52b5b29f7c5f70af7d83f1a8f",
+    "cipherH2c": "63e7b4532ecb17ec65b3fbd97f7d6fabe4dc90379c5fbe496efd9678b78c62aa753bf3ff46a16f82912ee61f312e4f8e8e5665f2e0a1bd071a555e"
+  },
+  "account": {
+    "note": "Khoá thiết bị của thiết bị «tài khoản» (0.6.5) = HKDF-SHA256(ikm = khoá tài khoản 16 byte, salt = rỗng, info = lp(\"account_dev\", hostId), 32). Tính độc lập bằng node:crypto.",
+    "accountKey": "EBESExQVFhcYGRobHB0eHw",
+    "hostId": "oKGio6SlpqeoqaqrrK2urw",
+    "dev": "AAAAAAAAAAAAAAAA",
+    "kDev": "KdYUediyoRoVhBNn0zhNTdyvtr_r2_hEfCs3Q8TLhh4"
+  }
+}
