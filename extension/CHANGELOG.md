@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.6.21 - 2026-11-06
+
+- **The full answer is never hidden behind "Worked for" again.** A finished turn collapsed everything before its *last* text block, so a short closing line stayed visible while the whole answer above it went into the collapsed summary. The answer region is now the whole trailing run of text: everything before it still folds into the turn summary, the answer never does.
+- **Expanded groups no longer break on a narrow pane.** Opening a task, command or edit group put its body as a column beside the header, so around 400 px the body shrank to one character per line. Group bodies now stack under their header at every width.
+- **Task rows carry their state.** A task row with a failed step turns red — border, background and label — instead of leaving the word "Error" in the same grey as the rest of the meta.
+- **The agent panel opens in the centre of the screen.** It used to sit on the bottom edge, so reaching it meant leaving the chip, and leaving the chip closed it. It now opens centred, waits 260 ms before closing, and each row shows what that agent is working on, with the full detail on hover.
+- **Consecutive thinking blocks are grouped.** Six "Thinking · 517 tokens" rows in a row became one "Thinking · 6 parts" row; expanding it keeps every part, numbered.
+
 ## 0.6.20 - 2026-11-06
 
 - **The Swarm switch is always readable.** Below ~470 px the picker labels are hidden to save space, which also hid the word "Swarm" and left only an icon — with a state you could not see. The Swarm switch now keeps its label at every width, dims when off and gets a violet fill plus a cyan ring when on.
