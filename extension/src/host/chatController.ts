@@ -1,7 +1,7 @@
 import * as vscode from 'vscode';
 import { AgentEngine, type QueuedMessage, type QueueState, type RunResult } from '../core/engine/engine';
 import { coreRunExtensions } from '../core/engine/extensions';
-import { hostRunExtensions } from './hostExtensions';
+import { hostRunExtensions, hostSubAgentExtensions } from './hostExtensions';
 import { registerVerifySlash } from './extensions/verifier'; // (lane:blind-verifier)
 import { SlashRegistry, type SlashContext } from './slashRegistry';
 import { commandsOutputStyle, registerCommandsSlash, type CommandsLaneAccess } from './commandsSlash'; // (lane:commands-agents)
@@ -295,7 +295,7 @@ export class ChatController implements vscode.Disposable {
         limiter: new Semaphore(d.config.agentsMaxConcurrent()),
         writeLock: new Semaphore(1),
         onSwitch: (i) => this.announceSwitch(i, false),
-        extensions: () => [hooksSubAgentExtension(() => this.hookService())], // (lane:hooks) hook PreToolUse/PostToolUse cũng áp cho agent con
+        extensions: () => hostSubAgentExtensions({ deps: this.d, host: this.host, registry: this.registry, session: () => this.session }, hooksSubAgentExtension(() => this.hookService())), // (lane:hooks) hook PreToolUse/PostToolUse + (lane:perm-rules) luật quyền cũng áp cho agent con
       },
       market: { search: (q, n, skip) => d.market.search(q, n, skip) },
       chrome: d.chrome,

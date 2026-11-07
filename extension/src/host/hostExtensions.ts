@@ -41,3 +41,11 @@ export function hostRunExtensions(ctx: HostExtensionContext): RunExtension[] {
     verifierExtension(ctx), // (lane:blind-verifier)  — luôn ĐỨNG CUỐI: kiểm tra sau khi mọi cổng khác đã chấp nhận
   ];
 }
+
+/**
+ * Extension cho engine của AGENT CON (`agent`, `workflow_run`): luật quyền (deny/ask/allow) + hook PreToolUse/PostToolUse. Thiếu luật quyền ở đây thì
+ * luật `deny` bị vượt qua chỉ bằng cách nhờ agent con làm thay (xlane). `hooksSub` do controller truyền vào (nó giữ dịch vụ hook).
+ */
+export function hostSubAgentExtensions(ctx: HostExtensionContext, hooksSub: RunExtension): RunExtension[] {
+  return [permissionRulesExtension(ctx), hooksSub];
+}

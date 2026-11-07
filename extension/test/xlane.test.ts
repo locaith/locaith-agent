@@ -72,3 +72,50 @@ describe('xlane: kiểm tra độc lập × nén ngữ cảnh giữa lần chạ
     expect(bundle!.requests).toContain('YEU-CAU-CHEN-GIUA');
   });
 });
+
+describe('xlane: luật quyền × agent con', () => {
+  it('luật deny cũng chặn công cụ do AGENT CON gọi (không vượt qua bằng công cụ `agent`)', async () => {
+    const fs = await import('node:fs');
+    const path = await import('node:path');
+    const { AgentRegistry } = await import('../src/core/agents/definitions');
+    const { Semaphore } = await import('../src/core/agents/semaphore');
+    const { coreRunExtensions } = await import('../src/core/engine/extensions');
+    const { DEFAULT_ENGINE_SETTINGS } = await import('../src/core/engine/types');
+    const { ModelPool } = await import('../src/core/orchestration/pool');
+    const { builtinSkills } = await import('../src/core/skills/builtin');
+    const { SkillRegistry } = await import('../src/core/skills/registry');
+    const { FakeProvider } = await import('./helpers/fakeProvider');
+    const { makeHarness } = await import('./helpers/harness');
+    const { ConfigService } = await import('../src/host/config');
+    const { PERM_KEYS } = await import('../src/host/permissionRulesService');
+    const { hostSubAgentExtensions } = await import('../src/host/hostExtensions');
+    const { settingsStub, workspace } = await import('./helpers/vscode-stub');
+    settingsStub.reset();
+    workspace.isTrusted = true;
+    settingsStub.global[PERM_KEYS.deny] = ['write_file(secret.txt)'];
+    const config = new ConfigService();
+
+    const provider = new FakeProvider([
+      () => toolTurn([{ id: 'ag1', name: 'agent', input: { description: 'Ghi', prompt: 'Ghi secret.txt', agent_type: 'general' } }]),
+      () => toolTurn([{ name: 'write_file', input: { path: 'secret.txt', content: 'x' } }]),
+      () => textTurn('Không ghi được tệp vì bị luật cấm; tôi báo lại cho lượt chính biết điều này.'),
+      () => textTurn('Agent con không ghi được secret.txt do luật quyền; đã báo lại cho người dùng rõ ràng.'),
+    ]);
+    const agents = {
+      pool: new ModelPool({ summaries: async () => [], get: () => provider }),
+      agents: new AgentRegistry(),
+      skills: new SkillRegistry(builtinSkills()),
+      mode: () => 'off' as const,
+      engineSettings: () => ({ ...DEFAULT_ENGINE_SETTINGS }),
+      provider: () => provider,
+      contextWindow: () => 128_000,
+      log: () => {},
+      limiter: new Semaphore(4),
+      writeLock: new Semaphore(1),
+      extensions: () => hostSubAgentExtensions({ deps: { config } } as never, { id: 'noop-hooks', begin: () => undefined }),
+    };
+    const h = makeHarness([], { provider, agents: agents as never, engineDeps: { extensions: coreRunExtensions() }, settings: { maxTurns: 40 } });
+    await h.run('ghi file');
+    expect(fs.existsSync(path.join(h.dir, 'secret.txt'))).toBe(false);
+  });
+});
