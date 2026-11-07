@@ -473,6 +473,26 @@
           "default": 80,
           "markdownDescription": "%cfg.compactAtPercent%"
         },
+        "locaithAgent.agent.compactAtTokens": {
+          "type": "integer",
+          "minimum": 0,
+          "default": 0,
+          "markdownDescription": "%cfg.compactAtTokens%"
+        },
+        "locaithAgent.agent.clearToolResultsAtPercent": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 90,
+          "default": 40,
+          "markdownDescription": "%cfg.clearToolResultsAtPercent%"
+        },
+        "locaithAgent.agent.keepRecentMessages": {
+          "type": "integer",
+          "minimum": 4,
+          "maximum": 200,
+          "default": 20,
+          "markdownDescription": "%cfg.keepRecentMessages%"
+        },
         "locaithAgent.agent.instructionFiles": {
           "type": "array",
           "items": {

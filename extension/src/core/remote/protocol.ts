@@ -9,7 +9,7 @@
  * webview trong VS Code dùng, nên áp bằng cùng một reducer (shared/transcript.ts). Mất kết nối thì xin lại từ `seq` đã nhận; quá cũ thì nhận snapshot mới.
  */
 
-import type { AttachmentInfo, PermissionMode, QueuedInfo, SessionSummary, ThinkingLevel, TItem, TodoItem, UiEvent, WebviewMessage } from '../../shared/protocol';
+import type { AttachmentInfo, ContextInfo, PermissionMode, QueuedInfo, SessionSummary, ThinkingLevel, TItem, TodoItem, UiEvent, WebviewMessage } from '../../shared/protocol';
 import { PERMISSION_MODES, THINKING_LEVELS } from '../../shared/protocol';
 
 export const REMOTE_API_VERSION = 1;
@@ -57,7 +57,8 @@ export interface RemoteState {
   swarm?: boolean;
   providers: RemoteProvider[];
   sessions: SessionSummary[];
-  context: { usedTokens: number; limitTokens: number } | null;
+  /** Thanh đo ngữ cảnh; các trường ngoài usedTokens/limitTokens là tuỳ chọn (bản web cũ bỏ qua). */
+  context: ContextInfo | null;
   /** Người dùng đã bật chế độ "bỏ qua mọi xác nhận" trong cài đặt VS Code (chỉ để hiển thị cảnh báo). */
   allowBypass: boolean;
   /** Trang từ xa có được phép tự chuyển sang chế độ bypass không (mặc định không). */

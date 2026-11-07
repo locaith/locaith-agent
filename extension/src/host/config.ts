@@ -109,6 +109,21 @@ export class ConfigService {
       autoCompact: c.get<boolean>('agent.autoCompact', d.autoCompact),
       compactAt: Math.min(95, Math.max(50, c.get<number>('agent.compactAtPercent', 80))) / 100,
       instructionFiles: cleanNameList(this.get<unknown>('agent.instructionFiles', d.instructionFiles), d.instructionFiles),
+      ...this.compactTuningSettings(), // (lane:ctx-compaction)
+    };
+  }
+
+  /** (lane:ctx-compaction) Tham số giữ ngữ cảnh gọn; `compactAtUserSet` = người dùng tự đặt compactAtPercent ở cấp nào đó (tắt trần tự động 300k). */
+  private compactTuningSettings(): Pick<EngineSettings, 'clearToolResultsAtPercent' | 'keepRecentMessages' | 'compactAtTokens' | 'compactAtUserSet'> {
+    const c = this.cfg();
+    const d = DEFAULT_ENGINE_SETTINGS;
+    const info = c.inspect<number>('agent.compactAtPercent');
+    const userSet = !!info && (info.globalValue !== undefined || info.workspaceValue !== undefined || info.workspaceFolderValue !== undefined);
+    return {
+      clearToolResultsAtPercent: clamp(c.get<number>('agent.clearToolResultsAtPercent', d.clearToolResultsAtPercent ?? 40), 0, 90),
+      keepRecentMessages: clamp(c.get<number>('agent.keepRecentMessages', d.keepRecentMessages ?? 20), 4, 200),
+      compactAtTokens: Math.max(0, c.get<number>('agent.compactAtTokens', d.compactAtTokens ?? 0)),
+      compactAtUserSet: userSet,
     };
   }
 
