@@ -1,0 +1,9 @@
+{
+  "_note": "SHA-256 của biểu tượng Lo (src/browser/static/icons). Đổi logo thì phải cập nhật tệp này CÓ CHỦ ĐÍCH; test/browserIcons.test.ts và scripts/pack-browser.mjs đối chiếu.",
+  "icons": {
+    "16": "7168e3624971c7ec1a7616b0b1b21237d40ac888874db4d93ef4ed3fe8801fff",
+    "32": "6cd804e14bab5670852f7495ed28b58c446e0be7fad8b1f583dd4d7b4a7c2830",
+    "48": "c5048fce09f03328e88ca9c161f6c6abbd1bc5e70a273be917722c92f5d39c14",
+    "128": "f83a0e8f4c08ec375bcbd2515e22d95f347c680270f9d82eb8daf29ff79969f9"
+  }
+}
