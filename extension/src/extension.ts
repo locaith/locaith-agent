@@ -13,6 +13,7 @@ import { BioMemoryService } from './host/bioMemory';
 import { ChromeService } from './host/chrome';
 import { ConnectorService } from './host/connectors';
 import { LocaithBridge, LocaithConsent } from './host/locaith';
+import { gatewayDiagnosticHeaders } from './core/providers/gatewayDiagnostics'; // (lane:gateway-client)
 import { LOCAITH_GATEWAY_URL, LOCAITH_PROVIDER_ID, LocaithGatewayClient } from './core/providers/locaithGateway';
 import { AUTO_MODELS, AutoProvider, type AutoHooks } from './core/orchestration/autoProvider';
 import { ModelPool } from './core/orchestration/pool';
@@ -277,11 +278,11 @@ export async function activate(context: vscode.ExtensionContext): Promise<TestAp
   const locaithConsent = new LocaithConsent({
     memento: context.globalState,
     account: { get usable() { return account.usable; }, token: () => account.token(), userId: () => account.userId() },
-    client: new LocaithGatewayClient({ baseUrl: () => config.baseUrls()[LOCAITH_PROVIDER_ID] ?? LOCAITH_GATEWAY_URL, timeoutMs: 6_000 }),
+    client: new LocaithGatewayClient({ baseUrl: () => config.baseUrls()[LOCAITH_PROVIDER_ID] ?? LOCAITH_GATEWAY_URL, timeoutMs: 6_000, headers: () => gatewayDiagnosticHeaders({ family: 'vscode', version, deviceId: account.deviceId() }) }), // (lane:gateway-client)
     clientLabel: `vscode/${version}`.replace(/[^A-Za-z0-9 ._/-]/g, '_').slice(0, 40),
     log: (level, msg) => logger.log(level, msg),
   });
-  locaithBridge.attach({ get usable() { return account.usable; }, token: () => account.token(), userId: () => account.userId() }, locaithConsent);
+  locaithBridge.attach({ get usable() { return account.usable; }, token: () => account.token(), userId: () => account.userId(), deviceId: () => account.deviceId(), refreshToken: (stale) => account.refreshToken(stale), expireToken: (t) => account.expireToken(t) }, locaithConsent); // (lane:gateway-client)
 
   // Remote hiện trong khung chat: ChatController dựng TRƯỚC RemoteService nên nhận cầu nối, gắn RemoteService vào ngay sau khi dựng.
   const remoteBridge = new RemoteBridge();

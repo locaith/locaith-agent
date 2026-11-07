@@ -33,6 +33,8 @@ import {
 } from '../types';
 import { wellFormedDeep } from '../textSafe';
 import { completeViaStream, isObject } from './common';
+import { withAuthRefresh } from './gatewayAuth'; // (lane:gateway-client)
+import { AUTH_MESSAGE } from './locaithGateway'; // (lane:gateway-client)
 import { dataUrl, isBlank, makeToolUse, normalizeHistory } from './history';
 import {
   abortedError,
@@ -300,9 +302,14 @@ export class OpenAIChatProvider implements LLMProvider {
   }
 
   private async http(): Promise<{ ctx: HttpContext; headers: Record<string, string>; hasKey: boolean }> {
-    const key = await this.cfg.getApiKey();
+    // (lane:gateway-client) Nhà cung cấp tài khoản: token lấy qua người giữ token — token đã đánh dấu hỏng không bao giờ được trả ra, mà phải làm mới trước.
+    const key = this.cfg.auth ? await this.cfg.auth.acquire() : await this.cfg.getApiKey();
     // Server cục bộ (Ollama, LM Studio…) không cần khoá; DeepSeek thì bắt buộc.
     const requiresKey = this.flavor === 'deepseek' || this.cfg.options?.requiresKey === true;
+    if (!key && this.cfg.auth && (await this.cfg.getApiKey())) {
+      // Đã đăng nhập nhưng token bị cổng từ chối và chưa làm mới được: không gửi đi, báo lỗi hành động được (đăng nhập lại).
+      throw new ProviderError(AUTH_MESSAGE, { kind: 'auth', providerId: this.id, status: 401, retryable: false, accountAuth: true });
+    }
     if (!key && requiresKey) {
       // Nhà cung cấp dùng tài khoản Locaith (credential 'account') không có "khoá API" để nhập: thiếu token nghĩa là chưa đăng nhập.
       throw new ProviderError(
@@ -341,8 +348,8 @@ export class OpenAIChatProvider implements LLMProvider {
     const st = loadDegrade(this.id, req.model);
     const policy = resolveRetryPolicy(this.cfg.options);
 
-    try {
-      yield* withDegradation(
+    const chain = () =>
+      withDegradation(
         () =>
           withRetries(
             { providerId: this.id, signal: req.signal, policy, log: this.cfg.log, onQueueLeave: (ticket) => this.leaveQueue(ctx, headers, ticket) },
@@ -350,6 +357,29 @@ export class OpenAIChatProvider implements LLMProvider {
           ),
         (err) => degradeChat(err, st, this.id, req.model, this.flavor),
       );
+    try {
+      const auth = this.cfg.auth;
+      if (auth) {
+        // (lane:gateway-client) 401: làm mới token đúng một lần rồi gửi lại đúng một lần; vẫn 401 thì dừng.
+        yield* withAuthRefresh(
+          {
+            auth,
+            providerId: this.id,
+            signal: req.signal,
+            log: this.cfg.log,
+            message: AUTH_MESSAGE,
+            getKey: () => /^Bearer (.+)$/.exec(headers.authorization ?? '')?.[1],
+            setKey: (k) => {
+              headers.authorization = `Bearer ${k}`;
+              ctx.secrets = [k];
+            },
+          },
+          chain,
+          this.cfg.credential,
+        );
+      } else {
+        yield* chain();
+      }
     } catch (err) {
       if (!hasKey && err instanceof ProviderError && err.kind === 'auth') {
         throw new ProviderError(`Máy chủ ${this.label} yêu cầu khóa API nhưng chưa có khóa nào được đặt.`, {

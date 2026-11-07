@@ -15,6 +15,8 @@ import {
   type LocaithGatewayClient,
 } from '../core/providers/locaithGateway';
 import type { AccountProviderHooks } from '../core/providers/registry';
+import { GatewayTokenManager } from '../core/account/gatewayToken';
+import { gatewayDiagnosticHeaders, type GatewayClientFamily } from '../core/providers/gatewayDiagnostics';
 
 const CACHE_KEY = 'locaithAgent.locaith.consent';
 
@@ -40,6 +42,12 @@ export interface LocaithAccountLike {
   token(): string | undefined;
   /** Id ổn định của tài khoản (khoá của bản đệm đồng ý). */
   userId(): string | undefined;
+  /** (lane:gateway-client) Mã thiết bị của phiên (chưa băm) — chỉ để băm làm nhãn chẩn đoán `X-Locaith-Device`. */
+  deviceId?(): string | undefined;
+  /** (lane:gateway-client) Làm mới khi cổng trả 401 cho `stale`; trả token dùng được hoặc undefined. */
+  refreshToken?(stale: string): Promise<string | undefined>;
+  /** (lane:gateway-client) Cổng từ chối token ngay cả sau khi làm mới → khoá phiên để người dùng đăng nhập lại. */
+  expireToken?(token: string): Promise<void> | void;
 }
 
 export type AcceptResult = { ok: true } | { ok: false; error: ConsentError | 'rejected' | 'signed_out'; message?: string };
@@ -194,15 +202,21 @@ export class LocaithBridge {
     this.consent = consent;
   }
 
-  hooks(extensionVersion: string): AccountProviderHooks {
-    const client = headerSafe(`vscode/${extensionVersion}`, 40);
+  hooks(extensionVersion: string, family: GatewayClientFamily = 'vscode'): AccountProviderHooks {
+    // (lane:gateway-client, H01) người giữ token: cờ «hỏng cho tới khi làm mới», làm mới đúng một lần, khử trùng lặp.
+    const tokens = new GatewayTokenManager({
+      current: () => (this.account?.usable ? this.account.token() : undefined),
+      refresh: (stale) => this.account?.refreshToken?.(stale) ?? Promise.resolve(undefined),
+      onDead: (t) => void this.account?.expireToken?.(t),
+    });
     return {
       token: () => (this.account?.usable ? this.account.token() : undefined),
+      auth: tokens,
       headers: ({ sessionKey, ticket }) => ({
-        'x-locaith-client': client,
+        // (lane:gateway-client, H02) nhãn chẩn đoán: họ+phiên bản máy khách, băm thiết bị, băm phiên chat — không có mã thô, email hay đường dẫn.
+        ...gatewayDiagnosticHeaders({ family, version: extensionVersion, deviceId: this.account?.deviceId?.(), sessionKey }),
         // Bắt buộc: báo cho cổng rằng ta muốn nhận 429 + mã vé khi đầy (và tự đếm ngược), thay vì để cổng giữ yêu cầu mở.
         'x-locaith-queue': 'ticket',
-        ...(sessionKey ? { 'x-locaith-session': headerSafe(sessionKey, 80) } : {}),
         ...(ticket ? { 'x-locaith-ticket': headerSafe(ticket, 120) } : {}),
       }),
       guard: () =>

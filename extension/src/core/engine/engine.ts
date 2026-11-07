@@ -35,6 +35,7 @@ import { formatMemoryBlock } from './memory';
 import { ToolDispatcher } from './dispatcher';
 import { StreamInterceptor, type PillBudget } from './interceptor';
 import { t, type Lang } from './strings';
+import { gatewayErrorText } from './gatewayErrors'; // (lane:gateway-client)
 import { Summarizer } from './summarizer';
 import { splitThinkTags } from './thinkTags';
 import type { ToolRegistry } from './toolRegistry';
@@ -678,6 +679,12 @@ export class AgentEngine {
     if (err.accountAuth) {
       this.d.onAccountInvalid?.();
       ctx.notice('error', t(lang, 'accountInvalid'));
+      return 'error';
+    }
+    // (lane:gateway-client) Lỗi cổng Locaith theo nhóm (hạn mức, giới hạn tốc độ, quá tải, mất mạng…) kèm hành động; vi giữ lời cổng, en dùng câu chuẩn.
+    const gw = gatewayErrorText(err, lang);
+    if (gw) {
+      ctx.notice('error', gw);
       return 'error';
     }
     // Câu tiếng Việt do máy chủ soạn sẵn (hết hạn mức ngày, quá nhiều lượt, bảo trì, model không tồn tại…): hiện nguyên văn, không thay bằng câu chung "chạm giới hạn tốc độ… chờ N phút".

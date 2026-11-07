@@ -96,31 +96,31 @@ export function classifyGatewayError(providerId: string, status: number | undefi
       ...(int(q.active, 0, 1_000_000) !== undefined ? { active: int(q.active, 0, 1_000_000) } : {}),
       ...(int(q.waiting, 0, 1_000_000) !== undefined ? { waiting: int(q.waiting, 0, 1_000_000) } : {}),
     };
-    return new ProviderError(message ?? QUEUE_DEFAULT_MESSAGE, { kind: 'queued', providerId, status: 429, retryable: true, retryAfterMs: info.retryAfterMs, queue: info });
+    return new ProviderError(message ?? QUEUE_DEFAULT_MESSAGE, { kind: 'queued', providerId, status: 429, retryable: true, retryAfterMs: info.retryAfterMs, queue: info, gatewayCode: code });
   }
   if (code === 'locaith_consent_required') {
-    return new ProviderError(message ?? CONSENT_MESSAGE, { kind: 'consent_required', providerId, status: 403, retryable: false });
+    return new ProviderError(message ?? CONSENT_MESSAGE, { kind: 'consent_required', providerId, status: 403, retryable: false, gatewayCode: code });
   }
   if (code === 'locaith_unauthorized') {
     // Token đăng nhập bị thu hồi/hết hạn: không bảo người dùng "nhập khoá API" — engine nhờ host kiểm tra lại tài khoản (accountAuth).
-    return new ProviderError(AUTH_MESSAGE, { kind: 'auth', providerId, status: 401, retryable: false, accountAuth: true });
+    return new ProviderError(AUTH_MESSAGE, { kind: 'auth', providerId, status: 401, retryable: false, accountAuth: true, gatewayCode: code });
   }
   // Hết hạn mức chi tiêu trong NGÀY: Retry-After có thể là nhiều GIỜ (tới nửa đêm) — không bao giờ thử lại, hiện nguyên lời cổng rồi dừng lượt.
   if (code === 'locaith_quota') {
-    return new ProviderError(message ?? QUOTA_DEFAULT_MESSAGE, { kind: 'rate_limit', providerId, status: status ?? 429, retryable: false, ...(headerRetryMs !== undefined ? { retryAfterMs: headerRetryMs } : {}), verbatim: true });
+    return new ProviderError(message ?? QUOTA_DEFAULT_MESSAGE, { kind: 'rate_limit', providerId, status: status ?? 429, retryable: false, ...(headerRetryMs !== undefined ? { retryAfterMs: headerRetryMs } : {}), verbatim: true, gatewayCode: code });
   }
   // Giới hạn theo người dùng (quá nhiều yêu cầu song song / quá nhanh): chỉ tự thử lại khi cổng bảo chờ ≤ 60 giây; lâu hơn thì hiện lời cổng.
   if (code === 'locaith_rate_limited') {
     const auto = headerRetryMs === undefined || headerRetryMs <= RATE_LIMIT_AUTO_RETRY_MAX_MS;
-    return new ProviderError(message ?? RATE_LIMITED_DEFAULT_MESSAGE, { kind: 'rate_limit', providerId, status: status ?? 429, retryable: auto, ...(headerRetryMs !== undefined ? { retryAfterMs: headerRetryMs } : {}), verbatim: true });
+    return new ProviderError(message ?? RATE_LIMITED_DEFAULT_MESSAGE, { kind: 'rate_limit', providerId, status: status ?? 429, retryable: auto, ...(headerRetryMs !== undefined ? { retryAfterMs: headerRetryMs } : {}), verbatim: true, gatewayCode: code });
   }
   // Bảo trì / chưa cấu hình: thử lại đúng một lần sau vài giây, hết lần thì hiện lời cổng.
   if (code === 'locaith_unavailable') {
     const wait = Math.min(UNAVAILABLE_RETRY_MAX_MS, Math.max(1_000, headerRetryMs ?? UNAVAILABLE_RETRY_MS));
-    return new ProviderError(message ?? UNAVAILABLE_DEFAULT_MESSAGE, { kind: 'overloaded', providerId, status: status ?? 503, retryable: true, retryAfterMs: wait, retryLimit: 1, verbatim: true });
+    return new ProviderError(message ?? UNAVAILABLE_DEFAULT_MESSAGE, { kind: 'overloaded', providerId, status: status ?? 503, retryable: true, retryAfterMs: wait, retryLimit: 1, verbatim: true, gatewayCode: code });
   }
   if (code === 'locaith_model_not_found') {
-    return new ProviderError(message ?? MODEL_NOT_FOUND_DEFAULT_MESSAGE, { kind: 'not_found', providerId, status: status ?? 404, retryable: false, verbatim: true });
+    return new ProviderError(message ?? MODEL_NOT_FOUND_DEFAULT_MESSAGE, { kind: 'not_found', providerId, status: status ?? 404, retryable: false, verbatim: true, gatewayCode: code });
   }
   return undefined;
 }
@@ -163,7 +163,7 @@ export class LocaithGatewayClient {
   private readonly timeoutMs: number;
 
   constructor(
-    private readonly opts: { baseUrl: () => string; fetch?: typeof fetch; timeoutMs?: number },
+    private readonly opts: { baseUrl: () => string; fetch?: typeof fetch; timeoutMs?: number; /** (lane:gateway-client) nhãn chẩn đoán X-Locaith-Client/Device (gatewayDiagnosticHeaders). */ headers?: () => Record<string, string> },
   ) {
     this.f = opts.fetch ?? ((...a) => fetch(...a));
     this.timeoutMs = opts.timeoutMs ?? 10_000;
@@ -175,7 +175,7 @@ export class LocaithGatewayClient {
     try {
       const res = await this.f(join(this.opts.baseUrl(), path), {
         method,
-        headers: { authorization: `Bearer ${token}`, accept: 'application/json', ...(body !== undefined ? { 'content-type': 'application/json' } : {}) },
+        headers: { ...(this.opts.headers?.() ?? {}), authorization: `Bearer ${token}`, accept: 'application/json', ...(body !== undefined ? { 'content-type': 'application/json' } : {}) },
         ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
         signal: ctl.signal,
       });

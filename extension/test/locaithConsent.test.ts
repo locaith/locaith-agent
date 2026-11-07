@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { LOCAITH_NOTICE_VERSION, type ConsentGetResult, type ConsentPostResult } from '../src/core/providers/locaithGateway';
+import { diagHash } from '../src/core/providers/gatewayDiagnostics';
 import { LocaithBridge, LocaithConsent, headerSafe, type LocaithAccountLike, type MementoLike } from '../src/host/locaith';
 
 const TOKEN = `lat_${'Qq1Ww2Ee3R'.repeat(5).slice(0, 43)}`;
@@ -184,14 +185,14 @@ describe('LocaithBridge — token, tiêu đề, chốt chặn', () => {
     expect(hooks.headers({ sessionKey: 's_ab12', ticket: 'q_9f3c' })).toEqual({
       'x-locaith-client': 'vscode/0.6.0',
       'x-locaith-queue': 'ticket',
-      'x-locaith-session': 's_ab12',
+      'x-locaith-session': diagHash('session', 's_ab12'), // băm một chiều, không phải id thô
       'x-locaith-ticket': 'q_9f3c',
     });
     const odd = new LocaithBridge();
     odd.attach(new Account(), { accepted: () => true });
-    expect(odd.hooks('0.6.0-beta+1 \n"x"').headers({ sessionKey: 'a\nb"c'.padEnd(200, 'z') })['x-locaith-client']).toMatch(/^vscode\/0\.6\.0-beta_1 __x_$/);
+    expect(odd.hooks('0.6.0-beta+1 \n"x"').headers({ sessionKey: 'a\nb"c'.padEnd(200, 'z') })['x-locaith-client']).toMatch(/^vscode\/0\.6\.0-beta\+1x$/);
     expect(headerSafe('a\r\nb: c', 40)).toBe('a__b_ c');
-    expect(odd.hooks('0.6.0').headers({ sessionKey: 'x'.repeat(300) })['x-locaith-session']).toHaveLength(80);
+    expect(odd.hooks('0.6.0').headers({ sessionKey: 'x'.repeat(300) })['x-locaith-session']).toMatch(/^[0-9a-f]{16}$/);
     // Không có header đồng ý nào nữa (đồng ý là bản ghi phía máy chủ theo tài khoản).
     expect(Object.keys(hooks.headers({ sessionKey: 's', ticket: 't' })).some((k) => /consent/i.test(k))).toBe(false);
   });

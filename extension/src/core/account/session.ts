@@ -98,6 +98,36 @@ export class AccountSession {
     return this.usable ? this.saved?.token : undefined;
   }
 
+  /** (lane:gateway-client) Mã thiết bị do máy chủ cấp lúc đăng nhập (chưa băm). Chỉ dùng để băm làm nhãn chẩn đoán, không bao giờ gửi thô. */
+  get deviceId(): string | undefined {
+    return this.usable ? this.saved?.device.id : undefined;
+  }
+
+  /**
+   * (lane:gateway-client) Cổng Locaith trả 401 cho `stale`: làm mới bằng cơ chế sẵn có. Token thiết bị không đúc lại được nếu không đăng nhập lại, nên «làm mới» là:
+   *   1) đọc lại kho (cửa sổ khác có thể vừa đăng nhập lại → token mới) — có token khác `stale` thì dùng luôn;
+   *   2) không thì hỏi máy chủ tài khoản (`whoami`, bỏ qua gộp lời gọi) — thành công và KHÔNG ở chế độ offline = token còn hiệu lực.
+   * Máy chủ nói token đã bị thu hồi → phiên chuyển «expired» (giao diện hiện nút đăng nhập) và trả undefined. Mất mạng → undefined (không xác minh được).
+   */
+  async refreshToken(stale: string): Promise<string | undefined> {
+    await this.reload();
+    if (this.saved && this.usable && this.saved.token !== stale) return this.saved.token;
+    if (!this.saved) return undefined;
+    await this.verify(true);
+    const s = this.st;
+    return s.status === 'signedIn' && !s.offline && this.saved ? this.saved.token : undefined;
+  }
+
+  /** (lane:gateway-client) Cổng vẫn từ chối `token` sau khi đã làm mới: xoá nó và chuyển «expired» để người dùng đăng nhập lại. Không đụng tới token khác (cửa sổ khác có thể đã đổi). */
+  async expireToken(token: string): Promise<void> {
+    const saved = this.saved ?? (await this.d.store.load());
+    if (!saved || saved.token !== token) return;
+    this.saved = null;
+    await this.d.store.save(null);
+    this.set({ status: 'expired', user: saved.user, reason: 'revoked' });
+    this.d.log?.('warn', 'Cổng Locaith từ chối token đã làm mới — phiên đăng nhập bị khoá, cần đăng nhập lại.');
+  }
+
   get user(): AccountUser | undefined {
     return this.st.status === 'signedIn' ? this.st.user : this.st.status === 'expired' ? this.st.user : undefined;
   }
