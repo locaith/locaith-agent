@@ -896,8 +896,11 @@ export interface ViewState {
   // ── (lane:mcp-parity) ──
   // ── (lane:instructions-memory) ──
   // ── (lane:tools-parity) ──
-  /** Lời mời đánh giá trên Chrome Web Store (chỉ bản trình duyệt, chỉ hiện sau vài lần dùng). */
-  rating?: { sends: number };
+  /**
+   * Lời mời đánh giá (chỉ bản trình duyệt, chỉ hiện sau vài lần dùng). Chạm một sao là gửi NGAY về Locaith:
+   * `picked` = số sao vừa chọn (dải chuyển sang «Cảm ơn…»), `sent` = đã tới Locaith (false = đang gửi / sẽ gửi khi có mạng).
+   */
+  rating?: { sends: number; picked?: number; sent?: boolean };
 }
 
 /** (lane:perm-rules) Một luật quyền đã nạp, kèm nguồn. */
@@ -1082,7 +1085,10 @@ export type WebviewMessage =
   | { type: 'bio_install' }
   | { type: 'chrome_pair_allow'; id: string }
   | { type: 'chrome_pair_deny'; id: string }
-  /** Lời mời đánh giá trên Chrome Web Store: mở trang đánh giá, hoặc tắt hẳn. */
+  /** Lời mời đánh giá: chạm sao = gửi ngay (`rating_submit`); nhận xét chữ tuỳ chọn (`rating_comment`); đóng lời cảm ơn; «Không hiện lại»; và đánh giá cả trên cửa hàng (`rating_rate`, lựa chọn thêm). */
+  | { type: 'rating_submit'; stars: number }
+  | { type: 'rating_comment'; text: string }
+  | { type: 'rating_close' }
   | { type: 'rating_rate' }
   | { type: 'rating_dismiss' }
   | { type: 'bio_auto_retry' }

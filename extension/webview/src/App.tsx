@@ -250,7 +250,7 @@ export function App() {
           {view.remote && <RemoteStrip remote={view.remote} />}
           {view.chromePair && <ChromePairStrip pair={view.chromePair} />}
           {view.memory && <MemoryStrip memory={view.memory} />}
-          {view.platform === 'browser' && view.rating && <RatingStrip sends={view.rating.sends} />}
+          {view.platform === 'browser' && view.rating && <RatingStrip sends={view.rating.sends} picked={view.rating.picked} sent={view.rating.sent} />}
           {view.bgTasks && view.bgTasks.length > 0 && <BgTasksStrip tasks={view.bgTasks} />} {/* (lane:bg-tasks) */}
           <OptionsBar options={view.options} running={view.running} />
           <Composer view={view} />

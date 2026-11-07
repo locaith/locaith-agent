@@ -766,6 +766,24 @@ function beforeAfterScene(): ViewState {
   };
 }
 
+/** Bản trình duyệt: lời mời đánh giá — chạm sao gửi ngay (phase `ask`) rồi dải cảm ơn (`thanks`: đã gửi / chờ mạng). */
+function ratingScene(phase: 'ask' | 'thanks' | 'queued' | 'thanks-low'): ViewState {
+  const v = baseState();
+  const now = Date.now();
+  return {
+    ...v,
+    platform: 'browser',
+    rating: phase === 'ask' ? { sends: 3 } : phase === 'thanks' ? { sends: 3, picked: 5, sent: true } : phase === 'queued' ? { sends: 3, picked: 4, sent: false } : { sends: 3, picked: 2, sent: true },
+    transcript: [
+      { kind: 'user', id: 'u_r', text: 'Tóm tắt giúp mình trang này', ts: now - 9000, attachments: [] },
+      {
+        kind: 'assistant', id: 'a_r', provider: 'anthropic', model: 'claude-opus-5-5', ts: now - 6000, done: true, stopReason: 'end_turn',
+        blocks: [{ type: 'text', id: 't_r', text: 'Trang nói về ba gói giá và chính sách hoàn tiền trong 14 ngày.' }],
+      },
+    ],
+  };
+}
+
 /** Đang chạy: nhiều lần sửa tệp (gộp một dòng), một lần đang sửa, ba agent con đang chạy, một agent lỗi. */
 function agentsScene(): ViewState {
   const v = baseState();
@@ -1063,6 +1081,12 @@ function initialView(): ViewState {
       break;
     case 'before-after':
       v = beforeAfterScene();
+      break;
+    case 'rating':
+    case 'rating-thanks':
+    case 'rating-queued':
+    case 'rating-thanks-low':
+      v = ratingScene(scenario === 'rating' ? 'ask' : (scenario.slice(7) as 'thanks' | 'queued' | 'thanks-low'));
       break;
     case 'media':
     case 'media-live':

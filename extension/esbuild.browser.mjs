@@ -32,6 +32,9 @@ const PROVIDER_HOSTS = [
   'https://www.bing.com/*',
 ];
 
+// Máy chủ của Locaith mà tiện ích gọi: CHỈ nhận đánh giá người dùng tự chạm sao (src/browser/rating.ts, RATING_ENDPOINT). Gói 0.4.4 đã được cửa hàng duyệt cũng khai báo máy chủ này.
+const SERVICE_HOSTS = ['https://studio-api.locaith.com/*'];
+
 // Artifact HTML chạy trong trang "sandbox" (origin riêng, không có API extension). CSP này tương đương CSP của bản VS Code.
 const CDN = 'https://cdn.jsdelivr.net https://cdnjs.cloudflare.com https://unpkg.com';
 const SANDBOX_CSP =
@@ -53,7 +56,8 @@ function manifest() {
     side_panel: { default_path: 'sidepanel.html' },
     background: { service_worker: 'background.js' },
     permissions: ['sidePanel', 'storage', 'unlimitedStorage', 'scripting', 'activeTab', 'contextMenus', 'tabGroups'],
-    host_permissions: PROVIDER_HOSTS,
+    // PROVIDER_HOSTS: nhà cung cấp AI + tìm web. SERVICE_HOSTS: chỉ để gửi đánh giá một chạm (POST /api/feedback) — không gửi gì khác tới đó.
+    host_permissions: [...PROVIDER_HOSTS, ...SERVICE_HOSTS],
     // Quyền đọc/điều khiển mọi trang xin lúc chạy, khi người dùng bấm nút trong Cài đặt (có thể rút lại bất cứ lúc nào).
     // identity: chỉ xin khi người dùng bấm "Đăng nhập" (OAuth) — cần để mở cửa sổ đăng nhập do trình duyệt quản lý.
     // KHÔNG khai báo `tabs`: mã không bao giờ xin quyền này (URL/tiêu đề tab có được nhờ quyền trang do người dùng cấp),

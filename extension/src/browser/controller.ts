@@ -35,7 +35,8 @@ import type {
   WebviewMessage,
 } from '../shared/protocol';
 import { PERMISSION_MODES, THINKING_LEVELS } from '../shared/protocol';
-import { RATING_URL, shouldAskRating, type RatingState } from './rating';
+import { RATING_COMMENT_MAX, RATING_URL, buildRatingPayload, shouldAskRating, type RatingPayload, type RatingState } from './rating';
+import type { RatingSendResult } from './ratingSend';
 import { backupFileName, makeBackup } from '../shared/sessionBackup';
 import type { BaseSessionStore } from '../shared/sessionStore';
 import { newId, reduceView } from '../shared/transcript';
@@ -82,6 +83,8 @@ export interface BrowserControllerDeps {
   lastSession?: { get(): Promise<string | undefined>; set(id: string | undefined): Promise<void> };
   /** Đọc tệp tải lên (PDF/Word/Excel/HTML/CSV/TXT) thành chữ. Bản thật nạp lười từ docparse.js (xem panel.tsx); bỏ trống = chưa hỗ trợ đọc tệp. */
   extractDocument?: DocExtractor;
+  /** Gửi một đánh giá về Locaith (mặc định ở panel.tsx = `postRating`). Bỏ trống = không gửi gì (kiểm thử / chạy không mạng): đánh giá vẫn được ghi nhận và chờ gửi. */
+  sendFeedback?: (payload: RatingPayload) => Promise<RatingSendResult>;
 }
 
 const SLASH: Record<Lang, SlashCommandInfo[]> = {
@@ -186,6 +189,9 @@ export class BrowserController {
   private abort: AbortController | null = null;
   /** Đang trong giai đoạn chuẩn bị của send() (trước khi `running` bật). */
   private starting = false;
+  /** Lời cảm ơn đang hiện sau khi người dùng chạm sao (không lưu: tắt khung là hết). */
+  private ratingThanks: { stars: number } | null = null;
+  private ratingFlush: Promise<void> | null = null;
   private readonly waiters = new Map<string, (d: PermissionDecision) => void>();
   private readonly host: BrowserToolHost;
   private readonly registry: ToolRegistry;
@@ -441,6 +447,7 @@ export class BrowserController {
     };
     this.post({ type: 'init', state: this.view });
     void this.refreshProvidersInBackground();
+    void this.flushRating();
   }
 
   private async refreshProvidersInBackground(force = false): Promise<void> {
@@ -803,9 +810,32 @@ export class BrowserController {
         if (/^https?:\/\//i.test(u)) await openExternalOnce(u, (x) => this.d.api.openExternal(x)); // (lane:customer-bugs) chống nảy đúp
         return;
       }
+      case 'rating_submit': {
+        // Chạm một sao = GỬI NGAY về Locaith (không mở trang nào, không bắt viết gì). Ghi nhận trước, gửi sau: mất mạng thì chờ lần mở khung kế tiếp.
+        const stars = m.stars;
+        if (typeof stars !== 'number' || !Number.isInteger(stars) || stars < 1 || stars > 5) return;
+        await this.d.config.submitRating(stars);
+        this.ratingThanks = { stars };
+        await this.syncRating();
+        await this.flushRating();
+        return;
+      }
+      case 'rating_comment': {
+        // Nhận xét bằng chữ là TUỲ CHỌN và chỉ có sau khi đã chấm sao.
+        const text = typeof m.text === 'string' ? m.text.trim().slice(0, RATING_COMMENT_MAX) : '';
+        if (!text || !this.ratingThanks) return;
+        await this.d.config.addRatingComment(text);
+        await this.flushRating();
+        return;
+      }
+      case 'rating_close':
+        this.ratingThanks = null;
+        await this.syncRating();
+        return;
       case 'rating_rate':
-        // Mở trang đánh giá Chrome Web Store rồi thôi hỏi (đã làm đúng việc người dùng muốn).
+        // Lựa chọn THÊM (nút riêng ở lời cảm ơn): đánh giá công khai trên Chrome Web Store — mở đúng trang rồi thôi hỏi.
         await this.d.config.markRatingOpened();
+        this.ratingThanks = null;
         await this.syncRating();
         await this.d.api.openExternal(RATING_URL[this.lang]).catch(() => undefined);
         return;
@@ -889,11 +919,43 @@ export class BrowserController {
   /** Hiện/ẩn dải mời đánh giá theo trạng thái đã lưu (chỉ bản trình duyệt). */
   private async syncRating(state?: RatingState): Promise<void> {
     const s = state ?? (await this.d.config.rating());
-    const show = shouldAskRating(s);
-    const next = show ? { sends: s.sends } : undefined;
+    const thanks = this.ratingThanks;
+    // Đang cảm ơn: giữ dải để báo «đã gửi» hay «sẽ gửi khi có mạng»; còn lại thì theo luật mời đánh giá.
+    const sentStars = !(s.pending ?? []).some((p) => p.kind === 'stars');
+    const next = thanks ? { sends: s.sends, picked: thanks.stars, sent: sentStars } : shouldAskRating(s) ? { sends: s.sends } : undefined;
     if (JSON.stringify(this.view.rating ?? null) === JSON.stringify(next ?? null)) return;
     this.view = { ...this.view, ...(next ? { rating: next } : { rating: undefined }) };
     this.patch({ rating: next });
+  }
+
+  /**
+   * Gửi các đánh giá đang chờ về Locaith (tuần tự, tối đa vài mục). Lỗi tạm → giữ lại để lần mở khung sau thử tiếp; máy chủ từ chối hẳn → bỏ.
+   * Không bao giờ ném lỗi và không chạy chồng hai lần.
+   */
+  private flushRating(): Promise<void> {
+    const send = this.d.sendFeedback;
+    if (!send) return Promise.resolve();
+    if (this.ratingFlush) return this.ratingFlush;
+    const run = (async () => {
+      try {
+        for (let i = 0; i < 4; i++) {
+          const s = await this.d.config.rating();
+          const p = s.pending?.[0];
+          if (!p) break;
+          const ctx = { version: this.d.version, lang: this.lang, sends: s.sends, browser: /\bEdg\//.test(globalThis.navigator?.userAgent ?? '') ? ('edge' as const) : ('chrome' as const) };
+          const res = await send(buildRatingPayload(p, ctx)).catch(() => 'retry' as const);
+          if (res === 'retry') break;
+          await this.d.config.markRatingSent(p.kind);
+        }
+      } catch (err) {
+        this.d.logger.log('warn', `Gửi đánh giá: ${err instanceof Error ? err.message : String(err)}`);
+      } finally {
+        this.ratingFlush = null;
+        await this.syncRating().catch(() => undefined);
+      }
+    })();
+    this.ratingFlush = run;
+    return run;
   }
 
   /** Nhận cuộc đang xem (đã nạp sẵn) làm cuộc hiện tại — không chặn, không mất gì của cuộc kia (đã lưu). */

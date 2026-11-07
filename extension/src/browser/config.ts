@@ -5,7 +5,7 @@
 
 import { DEFAULT_ENGINE_SETTINGS, type EngineSettings } from '../core/engine/types';
 import type { CustomProviderConfig } from '../core/providers/registry';
-import { EMPTY_RATING, countRatingSend, denyRating, markRated, sanitizeRating, type RatingState } from './rating';
+import { EMPTY_RATING, addComment, countRatingSend, denyRating, markRated, markSent, sanitizeRating, submitStars, type RatingKind, type RatingState } from './rating';
 import { isAllowedBaseUrl } from '../shared/baseUrl';
 import {
   DEFAULT_BROWSER_SETTINGS,
@@ -274,6 +274,27 @@ export class BrowserConfig {
 
   async markRatingOpened(): Promise<RatingState> {
     const next = markRated(await this.rating());
+    await this.saveRating(next);
+    return next;
+  }
+
+  /** Người dùng chạm một ngôi sao: ghi nhận ngay (không mời lại) và xếp hàng gửi về Locaith. */
+  async submitRating(stars: number): Promise<RatingState> {
+    const next = submitStars(await this.rating(), stars);
+    await this.saveRating(next);
+    return next;
+  }
+
+  /** Nhận xét bằng chữ (tuỳ chọn) đi kèm số sao đã chấm. */
+  async addRatingComment(text: string): Promise<RatingState> {
+    const next = addComment(await this.rating(), text);
+    await this.saveRating(next);
+    return next;
+  }
+
+  /** Đã gửi xong (hoặc máy chủ từ chối hẳn) thứ đầu hàng thuộc loại `kind`. */
+  async markRatingSent(kind: RatingKind): Promise<RatingState> {
+    const next = markSent(await this.rating(), kind);
     await this.saveRating(next);
     return next;
   }
