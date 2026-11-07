@@ -384,6 +384,8 @@ const vi = {
 
   // ── artifact ──
   'artifact.writing': 'Đang viết…',
+  'artifact.browser': 'Mở trong trình duyệt',
+  'artifact.browserHint': 'Xem artifact bằng Chrome/Edge thay vì tab bên cạnh của VS Code',
   'artifact.open': 'Mở xem trước',
   'artifact.save': 'Lưu',
   'artifact.type.html': 'Trang HTML',
@@ -1184,6 +1186,8 @@ const en: Record<I18nKey, string> = {
   'turn.preparing': 'Getting ready',
 
   'artifact.writing': 'Writing…',
+  'artifact.browser': 'Open in browser',
+  'artifact.browserHint': 'View the artifact in Chrome/Edge instead of the VS Code side tab',
   'artifact.open': 'Open preview',
   'artifact.save': 'Save',
   'artifact.type.html': 'HTML page',

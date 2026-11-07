@@ -92,6 +92,16 @@ describe('parseFileRef', () => {
   it('nhận tên tệp có dấu tiếng Việt', () => {
     expect(parseFileRef('tài-liệu/báo-cáo.md')).toEqual({ path: 'tài-liệu/báo-cáo.md' });
   });
+  it('nhận đường dẫn CÓ DẤU CÁCH (thư mục tiếng Việt) — khách báo "không mở được file .md"', () => {
+    expect(parseFileRef('docs/Bản giao.md')).toEqual({ path: 'docs/Bản giao.md' });
+    expect(parseFileRef('tài liệu/H S K K chữ hán/bản giao 2026.md:12')).toEqual({ path: 'tài liệu/H S K K chữ hán/bản giao 2026.md', line: 12 });
+    expect(parseFileRef('C:\\locaith\\Bản giao.md')).toEqual({ path: 'C:\\locaith\\Bản giao.md' });
+  });
+  it('câu văn có dấu cách nhưng không phải đường dẫn thì vẫn từ chối', () => {
+    expect(parseFileRef('xem file này .md')).toBeNull();
+    expect(parseFileRef('Hãy đọc bản giao.md')).toBeNull();
+    expect(parseFileRef('a/b.md còn nữa')).toBeNull();
+  });
   it('từ chối thứ không phải đường dẫn tệp', () => {
     expect(parseFileRef('https://example.com/a.ts')).toBeNull();
     expect(parseFileRef('1.2.3')).toBeNull();

@@ -107,6 +107,7 @@ export class ConfigService {
       maxOutputTokens: c.get<number>('agent.maxOutputTokens', d.maxOutputTokens),
       parallelToolCalls: c.get<boolean>('agent.parallelToolCalls', d.parallelToolCalls),
       autoCompact: c.get<boolean>('agent.autoCompact', d.autoCompact),
+      compactAt: Math.min(95, Math.max(50, c.get<number>('agent.compactAtPercent', 80))) / 100,
       instructionFiles: cleanNameList(this.get<unknown>('agent.instructionFiles', d.instructionFiles), d.instructionFiles),
     };
   }
@@ -288,9 +289,9 @@ export class ConfigService {
    * Khi nào tự mở khung xem trước artifact: `never` (luôn chờ người dùng bấm), `static` (mặc định — tự mở SVG/Markdown,
    * còn HTML có script phải do người dùng bấm mở), `always`.
    */
-  artifactsAutoOpen(): 'never' | 'static' | 'always' {
+  artifactsAutoOpen(): 'never' | 'static' | 'always' | 'browser' {
     const v = this.get<string>('artifacts.autoOpen', 'static');
-    return v === 'never' || v === 'always' ? v : 'static';
+    return v === 'never' || v === 'always' || v === 'browser' ? v : 'static';
   }
 
   debug(): boolean {

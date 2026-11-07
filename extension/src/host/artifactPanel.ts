@@ -52,6 +52,8 @@ export class ArtifactPanels implements vscode.Disposable {
   constructor(
     private readonly extensionUri: vscode.Uri,
     private readonly logger: Logger,
+    /** Thư mục lưu trữ của extension: nơi ghi bản HTML tạm khi mở artifact trong trình duyệt. */
+    private readonly extensionContext?: { globalStorageUri: vscode.Uri },
   ) {}
 
   open(rec: ArtifactRecord, opts: { preserveFocus?: boolean } = {}): void {
@@ -80,6 +82,27 @@ export class ArtifactPanels implements vscode.Disposable {
     if (!p) return;
     p.title = rec.title;
     p.webview.html = renderArtifactDocument(rec, this.extensionUri.fsPath);
+  }
+
+  /**
+   * Mở artifact trong TRÌNH DUYỆT mặc định (Chrome/Edge…) thay vì tab xem trước bên cạnh của VS Code.
+   * Ghi ra tệp tạm (kèm font nhúng sẵn) rồi gọi `openExternal` — Chrome mở như một trang web bình thường,
+   * cùng một bản nội dung với tab xem trước.
+   */
+  async openInBrowser(rec: ArtifactRecord): Promise<void> {
+    const spec = EXT[rec.type] ?? EXT.html;
+    const dir = vscode.Uri.joinPath(this.extensionContext?.globalStorageUri ?? this.extensionUri, 'artifacts-browser');
+    try {
+      await vscode.workspace.fs.createDirectory(dir);
+      const safe = rec.id.replace(/[^\w-]/g, '_').slice(0, 60) || 'artifact';
+      const target = vscode.Uri.joinPath(dir, `${safe}.${spec.ext}`);
+      const body = rec.type === 'html' ? htmlPage(rec.content, fontCss(this.extensionUri.fsPath)) : rec.content;
+      await vscode.workspace.fs.writeFile(target, new TextEncoder().encode(body));
+      if (!(await vscode.env.openExternal(target))) throw new Error('openExternal');
+      this.logger.log('info', `Mở artifact "${rec.title}" trong trình duyệt: ${target.fsPath}`);
+    } catch {
+      void vscode.window.showErrorMessage(`Không mở được "${rec.title}" trong trình duyệt.`);
+    }
   }
 
   async save(rec: ArtifactRecord): Promise<void> {

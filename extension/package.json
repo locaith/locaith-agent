@@ -2,7 +2,7 @@
   "name": "locaith-agent",
   "displayName": "Locaith AI Agent",
   "description": "%ext.description%",
-  "version": "0.6.29",
+  "version": "0.6.30",
   "publisher": "LocaithAI",
   "license": "SEE LICENSE IN LICENSE.txt",
   "engines": {
@@ -466,6 +466,13 @@
           "default": true,
           "markdownDescription": "%cfg.autoCompact%"
         },
+        "locaithAgent.agent.compactAtPercent": {
+          "type": "integer",
+          "minimum": 50,
+          "maximum": 95,
+          "default": 80,
+          "markdownDescription": "%cfg.compactAtPercent%"
+        },
         "locaithAgent.agent.instructionFiles": {
           "type": "array",
           "items": {
@@ -555,12 +562,14 @@
           "enum": [
             "never",
             "static",
-            "always"
+            "always",
+            "browser"
           ],
           "enumDescriptions": [
             "Không tự mở: luôn chờ bạn bấm \"Mở\" trên thẻ artifact",
             "Tự mở SVG và Markdown; HTML có script phải do bạn bấm mở (khuyến nghị)",
-            "Tự mở mọi artifact, kể cả HTML có script"
+            "Tự mở mọi artifact, kể cả HTML có script",
+            "Mở HTML trong TRÌNH DUYỆT mặc định (Chrome/Edge) thay vì tab bên cạnh của VS Code"
           ],
           "default": "static",
           "scope": "machine",

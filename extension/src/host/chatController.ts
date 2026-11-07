@@ -4,7 +4,7 @@ import { loadProjectInstructions } from '../core/engine/instructions';
 import { MEMORY_DIR, MEMORY_INDEX, type MemoryScope, type MemorySnapshot } from '../core/engine/memory';
 import { t, type Lang } from '../core/engine/strings';
 import { Summarizer } from '../core/engine/summarizer';
-import { newSession, type PermissionDecision, type SessionState } from '../core/engine/types';
+import { newSession, type ArtifactRecord, type PermissionDecision, type SessionState } from '../core/engine/types';
 import { isInside, normalizeForCompare, resolveUserPath } from '../core/fsutil/paths';
 import { MEDIA_DATA_URI_MAX, MEDIA_MAX_PATHS, imageMime, mediaCandidates, mediaKindOf, viaLink, type MediaZones } from '../core/fsutil/mediaPaths';
 import * as fs from 'node:fs';
@@ -81,7 +81,7 @@ export interface ControllerDeps {
   skills: SkillRegistry;
   skillDirs: () => string[];
   store: SessionStore;
-  artifacts: ArtifactPanels;
+  artifacts: ArtifactPanels & { openInBrowser?(rec: ArtifactRecord): Promise<void> };
   diffs: DiffPreview;
   editor: EditorContextTracker;
   files: FileIndex;
@@ -789,10 +789,15 @@ export class ChatController implements vscode.Disposable {
       case 'artifact': {
         const rec = this.session.artifacts[ev.artifactId];
         if (!rec || ev.state !== 'ready') break;
-        if (this.seenArtifacts.has(rec.id)) this.d.artifacts.refresh(rec);
-        else {
+        // Chính sách "browser": mở bằng Chrome/Edge (khách báo tab bên cạnh của VS Code khó dùng cho HTML).
+        const inBrowser = this.d.config.artifactsAutoOpen() === 'browser';
+        if (this.seenArtifacts.has(rec.id)) {
+          this.d.artifacts.refresh(rec);
+          if (inBrowser) void this.d.artifacts.openInBrowser?.(rec); // bản mới của artifact: mở lại để thấy cập nhật
+        } else {
           this.seenArtifacts.add(rec.id);
-          if (this.shouldAutoOpenArtifact(rec.type)) this.d.artifacts.open(rec, { preserveFocus: true }); // tự mở khung xem trước bên cạnh
+          if (inBrowser) void this.d.artifacts.openInBrowser?.(rec);
+          else if (this.shouldAutoOpenArtifact(rec.type)) this.d.artifacts.open(rec, { preserveFocus: true }); // tự mở khung xem trước bên cạnh
         }
         break;
       }
@@ -978,6 +983,11 @@ export class ChatController implements vscode.Disposable {
       case 'save_artifact': {
         const rec = this.session.artifacts[m.artifactId];
         if (rec) await this.d.artifacts.save(rec);
+        return;
+      }
+      case 'open_artifact_browser': {
+        const rec = this.session.artifacts[m.artifactId];
+        if (rec) await this.d.artifacts.openInBrowser?.(rec);
         return;
       }
       case 'search_files':

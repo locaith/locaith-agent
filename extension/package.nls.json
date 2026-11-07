@@ -33,6 +33,7 @@
   "cfg.maxTurns": "Số vòng lặp tối đa cho một yêu cầu (mỗi vòng = một lần gọi model + chạy công cụ). Mặc định 200 — gần như không trần, giống Claude Code; khi chạm trần, trợ lý vẫn có một lượt tổng kết thay vì dừng giữa việc. Chỉ hạ xuống khi muốn giới hạn chi phí.",
   "cfg.maxOutputTokens": "Số token tối đa model được sinh ra trong một lần gọi (đã gồm token suy luận).",
   "cfg.parallelToolCalls": "Cho phép model phát nhiều lệnh gọi công cụ cùng lúc (ví dụ tìm kiếm web song song).",
+  "cfg.compactAtPercent": "Nén tự động khi ngữ cảnh đã dùng tới bao nhiêu phần trăm cửa sổ của model (50-95, mặc định 80). Nén sớm quá thì trợ lý hay quên việc đang làm; để 90 nếu model có cửa sổ lớn.",
   "cfg.autoCompact": "Tự nén các tin nhắn cũ khi ngữ cảnh gần đầy.",
   "cfg.instructionFiles": "Tệp hướng dẫn dự án được nạp vào system prompt nếu có ở thư mục gốc workspace (lấy tệp đầu tiên tìm thấy).",
   "cfg.summarizerEnabled": "Dùng một model nhỏ chạy nền để tóm tắt luồng suy nghĩ/viết mã thành các dòng trạng thái ngắn. Tốn thêm một ít token.",

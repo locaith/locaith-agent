@@ -878,6 +878,8 @@ export type WebviewMessage =
   | { type: 'open_diff'; callId: string }
   | { type: 'open_artifact'; artifactId: string }
   | { type: 'save_artifact'; artifactId: string }
+  /** Mở artifact (HTML/SVG/Markdown) trong TRÌNH DUYỆT mặc định thay vì tab xem trước của VS Code. */
+  | { type: 'open_artifact_browser'; artifactId: string }
   | { type: 'search_files'; reqId: number; query: string }
   /** Đọc một tệp tải lên (PDF/Word/Excel/HTML/CSV/TXT) thành chữ; `data` là base64 không tiền tố. Trả lời bằng `document_parsed`. */
   | { type: 'parse_document'; reqId: number; name: string; data: string }

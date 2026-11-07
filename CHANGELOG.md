@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.6.30 - 2026-11-07
+
+- **Rows no longer get a full background fill.** A task row used to paint its whole block violet (and red when a step failed), which tinted every line inside it. Now only the left bar and the label keep the colour, so the timeline stays on your editor's background.
+- **Files with spaces in their path open again.** A reference like `docs/Bản giao.md` or `tài liệu/H S K K/bản giao 2026.md:12` was rejected as "not a path", so clicking it did nothing — this is the "cannot open the .md file" report. Paths with spaces now open (still rejected when the text is a sentence, not a path).
+- **Artifacts can open in your real browser.** New "Open in browser" button on every artifact card, plus a fourth value for `locaithAgent.artifacts.autoOpen`: `browser` writes the page (fonts embedded) and opens it in Chrome/Edge instead of a VS Code side tab.
+- **Compaction threshold is now yours to set.** `locaithAgent.agent.compactAtPercent` (50–95, default 80) replaces the hardcoded 80%: on a large-window model, compacting at ~100k was making the assistant forget the job. The value is clamped and passed to every compaction path.
+
 ## 0.6.29 - 2026-11-07
 
 - **Ask before the work, never after it.** `offer_options` changed meaning: it is now the one clarification you get when the request is genuinely ambiguous — the assistant reasons first (is this enough to finish end to end?), and only when two plausible readings would produce different deliverables does it show 2–4 readings as buttons and STOP. Clicking one starts a run that finishes that whole version of the job.

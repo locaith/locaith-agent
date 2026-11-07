@@ -41,6 +41,10 @@ export function ArtifactCard({ block }: { block: ArtifactBlockT }) {
           <Button variant="primary" small icon="eye" onClick={() => post({ type: 'open_artifact', artifactId: block.artifactId })}>
             {t('artifact.open')}
           </Button>
+          {/* Khách báo: HTML hay mở trong tab bên cạnh của VS Code, trong khi họ muốn xem bằng Chrome. */}
+          <Button variant="secondary" small icon="globe" onClick={() => post({ type: 'open_artifact_browser', artifactId: block.artifactId })} title={t('artifact.browserHint')}>
+            {t('artifact.browser')}
+          </Button>
           <Button variant="secondary" small icon="download" onClick={() => post({ type: 'save_artifact', artifactId: block.artifactId })}>
             {t('artifact.save')}
           </Button>

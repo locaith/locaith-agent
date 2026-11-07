@@ -219,6 +219,8 @@ export interface SummarizeOptions {
   keepRecentUserTurns?: number;
   /** Ngân sách ký tự để GIỮ NGUYÊN VĂN các tệp bối cảnh người dùng đã tải lên qua lần nén (mặc định theo cửa sổ ngữ cảnh). */
   pinnedDocChars?: number;
+  /** Ngưỡng nén tự động theo phần trăm cửa sổ ngữ cảnh (0,5–0,95). Không có = 0,8. */
+  compactAt?: number;
 }
 
 /**
@@ -288,8 +290,9 @@ export async function compactIfNeeded(
   o: SummarizeOptions & { contextWindow: number; force?: boolean; onStart?: () => void },
 ): Promise<CompactResult> {
   const { session } = o;
+  const at = Math.min(0.95, Math.max(0.5, o.compactAt ?? 0.8));
   const estimate = Math.max(session.lastContextTokens, estimateMessagesTokens(session.messages) + 3000);
-  if (!o.force && estimate < o.contextWindow * 0.8) return { pruned: 0, summarizedMessages: 0 };
+  if (!o.force && estimate < o.contextWindow * at) return { pruned: 0, summarizedMessages: 0 };
   o.onStart?.();
 
   const pruned = pruneOldToolResults(session, o.force ? 3 : 6);

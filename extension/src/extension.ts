@@ -73,7 +73,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<TestAp
   const skills = new SkillRegistry(builtinSkills());
   const agents = new AgentRegistry();
   const diffs = new DiffPreview();
-  const artifacts = new ArtifactPanels(context.extensionUri, logger);
+  const artifacts = new ArtifactPanels(context.extensionUri, logger, context);
   const editor = new EditorContextTracker();
   const files = new FileIndex();
 

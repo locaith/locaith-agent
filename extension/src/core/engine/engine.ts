@@ -486,6 +486,7 @@ export class AgentEngine {
       language: lang,
       signal,
       contextWindow: this.d.settings.contextWindow,
+      compactAt: this.d.settings.compactAt,
       force: true,
     });
     // Người dùng chủ động bấm nén: nếu model tóm tắt lỗi (sai khoá, mất mạng…) phải nói thật, không báo "không có gì để nén".
@@ -520,6 +521,7 @@ export class AgentEngine {
       language: lang,
       signal,
       contextWindow: this.d.settings.contextWindow,
+      compactAt: this.d.settings.compactAt,
       force,
       onStart: () =>
         this.d.emit({ t: 'pill', id, pillId: `${id}:compact`, text: t(lang, 'compacting'), kind: 'working' }),

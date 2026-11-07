@@ -101,13 +101,28 @@ const FILE_RE = new RegExp(
   `^(?:\\./|\\.\\./|/|[A-Za-z]:[\\\\/])?(?:[\\p{L}\\p{N}_@.+~-]+[\\\\/])*[\\p{L}\\p{N}_@.+~-]+\\.(?:${FILE_EXT})(?::(\\d+)(?::(\\d+))?|#L(\\d+)(?:-L?(\\d+))?)?$`,
   'iu',
 );
+/**
+ * Đường dẫn CÓ DẤU CÁCH (thư mục tiếng Việt: `tài liệu/bản giao.md`). Chỉ nhận khi có ít nhất một dấu phân cách
+ * thư mục — nhờ vậy câu văn trong backtick ("xem file này .md") không bị biến thành liên kết oan.
+ */
+const FILE_SPACED_RE = new RegExp(
+  `^(?:\\./|\\.\\./|/|[A-Za-z]:[\\\\/])?(?:[^\\\\/:*?"<>|\\n]+[\\\\/])+[^\\\\/:*?"<>|\\n]+\\.(?:${FILE_EXT})(?::(\\d+)(?::(\\d+))?|#L(\\d+)(?:-L?(\\d+))?)?$`,
+  'iu',
+);
 
-/** `src/app.ts:12` → { path: 'src/app.ts', line: 12 }; không giống đường dẫn tệp → null. */
+/**
+ * `src/app.ts:12` → { path: 'src/app.ts', line: 12 }; không giống đường dẫn tệp → null.
+ * Tên tệp/thư mục có DẤU CÁCH vẫn nhận (miễn là có dấu `/` hoặc `\`), vì workspace tiếng Việt rất hay gặp
+ * ("docs/Bản giao.md") — trước đây những đường dẫn này không bấm được nên khách báo "không mở được file .md".
+ */
 export function parseFileRef(text: string): { path: string; line?: number } | null {
   const s = text.trim();
-  if (!s || s.length > 260 || /\s/.test(s) || s.includes('://')) return null;
-  const m = FILE_RE.exec(s);
+  if (!s || s.length > 300 || s.includes('://') || /\n/.test(s)) return null;
+  const spaced = /\s/.test(s);
+  const m = (spaced ? FILE_SPACED_RE : FILE_RE).exec(s);
   if (!m) return null;
+  // Đường dẫn có dấu cách: đoạn cuối không được kết thúc bằng dấu cách (tránh nuốt cả câu vào "tên tệp").
+  if (spaced && /[\\/]\s|\s\.\w+$/.test(s)) return null;
   const line = m[1] ?? m[3];
   const path = s.replace(/(?::\d+(?::\d+)?|#L\d+(?:-L?\d+)?)$/, '');
   return line ? { path, line: Number(line) } : { path };

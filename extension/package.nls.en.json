@@ -33,6 +33,7 @@
   "cfg.maxTurns": "Maximum loop iterations for one request (each = one model call + tool execution). Default 200 — effectively no cap, like Claude Code; on reaching the limit the assistant still gets one wrap-up turn instead of stopping mid-task. Lower it only to cap cost.",
   "cfg.maxOutputTokens": "Maximum tokens the model may generate in one call (including reasoning tokens).",
   "cfg.parallelToolCalls": "Let the model issue several tool calls at once (e.g. parallel web searches).",
+  "cfg.compactAtPercent": "Auto-compact once the context is this percentage of the model's window (50-95, default 80). Compacting too early makes the assistant forget what it was doing; use 90 for models with a large window.",
   "cfg.autoCompact": "Automatically compact older messages when the context is nearly full.",
   "cfg.instructionFiles": "Project instruction files loaded into the system prompt if present in the workspace root (first one found wins).",
   "cfg.summarizerEnabled": "Run a small background model that turns the thinking/code-writing stream into short status lines. Costs a few extra tokens.",

@@ -277,6 +277,11 @@ export interface EngineSettings {
   autoCompact: boolean;
   /** Cửa sổ ngữ cảnh của model đang dùng (token). */
   contextWindow: number;
+  /**
+   * Ngưỡng nén TỰ ĐỘNG, tính theo phần trăm cửa sổ ngữ cảnh (0,5–0,95; mặc định 0,8).
+   * Khách báo nén ở ~100k là quá sớm với model cửa sổ lớn → nâng lên 0,9 để giữ ngữ cảnh lâu hơn.
+   */
+  compactAt?: number;
   /** Tên các tệp hướng dẫn dự án cần nạp, theo thứ tự ưu tiên. */
   instructionFiles: string[];
   /** Gom delta suy nghĩ/mã: số ký tự tối thiểu hoặc khoảng thời gian trước khi tóm tắt. */
