@@ -359,6 +359,9 @@ const SHOTS = [
     },
   },
   { name: 'before-after-dark-420', q: { scenario: 'before-after', theme: 'dark', expand: '1' }, w: 420, h: 700 },
+  // Ảnh nguồn cho ảnh chụp màn hình trang cửa hàng Chrome (nền sáng, nền tảng browser): _work/chrome-store-shots-07.mjs ghép lại.
+  { name: 'store-timeline-light-420', q: { scenario: 'cc-timeline', theme: 'light', platform: 'browser' }, w: 420, h: 760 },
+  { name: 'store-research-light-420', q: { scenario: 'research', theme: 'light', speed: '0', platform: 'browser' }, w: 420, h: 760 },
   { name: 'rating-ask-dark-420', q: { scenario: 'rating', theme: 'dark', platform: 'browser' }, w: 420, h: 520 },
   { name: 'rating-thanks-dark-420', q: { scenario: 'rating-thanks', theme: 'dark', platform: 'browser' }, w: 420, h: 520 },
   { name: 'rating-queued-light-420', q: { scenario: 'rating-queued', theme: 'light', platform: 'browser' }, w: 420, h: 520 },
