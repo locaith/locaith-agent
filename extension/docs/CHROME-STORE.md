@@ -31,6 +31,7 @@ Tải **tệp zip** lên tab «Gói» của mục cửa hàng (manifest ở gố
 | `panel.js` có câu riêng cho bản trình duyệt nói khoá API nằm trong kho riêng của tiện ích, không mã hoá, và câu đó không nhắc VS Code | Chính sách dữ liệu người dùng đòi nói đúng sự thật |
 | `sidepanel.html` nạp `store-consent.js` trước `panel.js`; có `store-consent-sw.js`; dịch vụ nền nạp nó; URL chính sách thật (không còn chỗ giữ chỗ); giao diện và cổng nền dùng chung một khoá đồng ý | Phải có thông báo dữ liệu + đồng ý NGAY TRONG tiện ích |
 | Không có `testHooks`, không phải bản `--test`, `manifest.version` khớp `package.json`, các tệp manifest tham chiếu đều có trong gói | Lỗi đóng gói cơ học |
+| Mã gửi đánh giá một chạm tới `<máy chủ>/api/feedback` thì máy chủ đó PHẢI nằm trong `host_permissions`; và thông báo đồng ý phải nói việc chấm sao được gửi tới Locaith | Backend không cho CORS với origin tiện ích: thiếu quyền là mọi lần chạm sao lỗi âm thầm; dữ liệu rời máy phải được nói trước |
 
 Kèm theo là test tự động (`npx vitest run test/browser`): dựng thật một gói rồi kiểm, và cố ý đưa vào từng lỗi trên (biểu tượng «N», mô tả có «Claude», CDN, quyền `tabs`/thừa, mất thông báo đồng ý…) để chứng minh bộ kiểm bắt được.
 
@@ -44,7 +45,9 @@ Bộ kiểm chỉ thấy nội dung TRONG gói. Những thứ này nằm ở b�
 2. **Ảnh chụp màn hình** (1280×800) và ô quảng bá nhỏ (440×280) — chụp lại nếu giao diện hoặc tính năng đổi. Ảnh nào còn hiện tính năng đã bỏ là rủi ro bị gỡ vì «mô tả sai sự thật».
 3. **Tab «Quyền riêng tư»**: lý do cho từng quyền (xem `LY-DO-QUYEN-CHROME.md` trong bộ hồ sơ nộp), URL chính sách quyền riêng tư (https://www.locaith.ai/chinh-sach-quyen-rieng-tu-chrome/ — trang phải còn truy cập được), khai báo «sử dụng dữ liệu». Nội dung khai báo phải khớp thông báo trong tiện ích.
 4. **Ghi chú cho người duyệt** nếu cần.
-5. Nộp vào ĐÚNG mục «Locaith AI — Trợ lý trình duyệt» (không phải «Locaith Memory Sync» — sản phẩm khác).
+5. **ĐĂNG trang chính sách quyền riêng tư mới TRƯỚC khi nộp.** Bản 0.7.0 gửi số sao (ẩn danh) về Locaith khi người dùng chạm sao, nên chính sách phải có mục «Khi bạn chấm sao đánh giá» và bỏ phần nói về tính năng bản này không có (Theo dõi tin nhắn, cầu nối VS Code, mô hình Locaith). Bản đã soạn: `chrome-store-assets/publish-07/chinh-sach-quyen-rieng-tu-chrome/index.html` (chép vào `public/chinh-sach-quyen-rieng-tu-chrome/` của repo locaith-ai-v2 rồi đẩy lên; URL giữ nguyên).
+6. **Lý do quyền máy chủ** `studio-api.locaith.com` (mới so với 0.6.27): dán từ `LY-DO-QUYEN-CHROME.md`, mục `host_permissions`. Cập nhật lên 0.7.0 Chrome sẽ hỏi người đang dùng bản cũ chấp nhận quyền mới.
+7. Nộp vào ĐÚNG mục «Locaith AI — Trợ lý trình duyệt» (không phải «Locaith Memory Sync» — sản phẩm khác).
 
 ## 4. Bài học chính sách (đừng lặp lại)
 
