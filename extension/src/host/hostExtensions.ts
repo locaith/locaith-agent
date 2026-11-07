@@ -12,7 +12,7 @@ import type { SessionState } from '../core/engine/types';
 import type { VsCodeToolHost } from './vscodeHost';
 import type { ControllerDeps } from './chatController';
 // ── import của từng tính năng (mỗi lane một dòng, bỏ dấu // khi dùng) ──
-// import { verifierExtension } from './extensions/verifier'; // (lane:blind-verifier)
+import { verifierExtension } from './extensions/verifier'; // (lane:blind-verifier)
 // import { hooksExtension } from './extensions/hooks'; // (lane:hooks)
 // import { backgroundTasksExtension } from './extensions/backgroundTasks'; // (lane:bg-tasks)
 // import { ideDiagnosticsExtension } from './extensions/ideDiagnostics'; // (lane:ide-context)
@@ -38,6 +38,6 @@ export function hostRunExtensions(ctx: HostExtensionContext): RunExtension[] {
     // instructionsExtension(ctx), // (lane:instructions-memory)
     // checkpointsExtension(ctx), // (lane:checkpoints-rewind)
     // backgroundTasksExtension(ctx), // (lane:bg-tasks)
-    // verifierExtension(ctx), // (lane:blind-verifier)  — luôn ĐỨNG CUỐI: kiểm tra sau khi mọi cổng khác đã chấp nhận
+    verifierExtension(ctx), // (lane:blind-verifier)  — luôn ĐỨNG CUỐI: kiểm tra sau khi mọi cổng khác đã chấp nhận
   ];
 }

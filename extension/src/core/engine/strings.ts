@@ -95,6 +95,28 @@ const vi = {
   stopContradiction: 'Lưu ý: trợ lý nói đã hoàn thành toàn bộ nhưng danh sách còn {n} việc chưa xong — hãy tin danh sách.',
   // ── (lane:loop-guards) ──
   // ── (lane:blind-verifier) ──
+  verifyRunning: 'Kiểm tra độc lập: đang chạy (vòng {round}/{max})',
+  verifyPass: 'Đã kiểm tra độc lập: đạt',
+  verifyFail: 'Kiểm tra độc lập: {n} điểm cần sửa',
+  verifyUncertain: 'Kiểm tra độc lập: chưa chắc — {n} điểm chưa xác nhận được',
+  verifyOutstanding: 'Kiểm tra độc lập: còn {n} điểm tồn đọng sau {rounds} vòng — xem danh sách bên dưới',
+  verifySkipped: 'Không kiểm tra độc lập được: {reason}',
+  verifyReasonError: 'lỗi khi chạy agent kiểm tra',
+  verifyReasonTimeout: 'quá 4 phút',
+  verifyReasonAborted: 'đã dừng theo yêu cầu',
+  verifyReasonNoVerdict: 'agent kiểm tra không nộp kết luận',
+  verifyReasonNoModel: 'không có model khả dụng cho agent kiểm tra',
+  verifyReasonBusy: 'một phiên kiểm tra khác đang chạy',
+  verifyNothing: 'Chưa có lần chạy nào để kiểm tra trong cuộc trò chuyện này.',
+  verifyStaleRun: 'Lần chạy gần nhất đã dừng giữa chừng ({reason}) — kiểm tra theo trạng thái lúc đó.',
+  verifySectionMissing: 'Còn thiếu',
+  verifySectionDefects: 'Lỗi phát hiện',
+  verifySectionUnverified: 'Chưa xác nhận được',
+  // Tin tổng hợp gửi lại cho model chính khi kiểm tra không đạt: đánh số từng mục, bắt xử lý HẾT rồi mới báo xong.
+  verifyFeedbackHead:
+    '[Kiểm tra độc lập — vòng {round}/{max}] Một người kiểm tra độc lập (chỉ thấy yêu cầu gốc, tệp đã đổi, lệnh đã chạy và câu trả lời của bạn) kết luận: {verdict}. Hãy XỬ LÝ HẾT các mục dưới đây (sửa, chạy kiểm chứng thật, dẫn bằng chứng) rồi mới báo xong. Mục nào bạn cho là sai thì nói rõ vì sao kèm bằng chứng.',
+  verifyFeedbackVerdictFail: 'KHÔNG ĐẠT',
+  verifyFeedbackVerdictUncertain: 'CHƯA CHẮC',
   // ── (lane:checkpoints-rewind) ──
   // ── (lane:perm-rules) ──
   // ── (lane:hooks) ──
@@ -196,6 +218,27 @@ const en: typeof vi = {
   stopContradiction: 'Note: the assistant claimed everything is done, but {n} task(s) in the list are still unfinished — trust the list.',
   // ── (lane:loop-guards) ──
   // ── (lane:blind-verifier) ──
+  verifyRunning: 'Independent check: running (round {round}/{max})',
+  verifyPass: 'Independently verified: pass',
+  verifyFail: 'Independent check: {n} issue(s) to fix',
+  verifyUncertain: 'Independent check: uncertain — {n} point(s) could not be confirmed',
+  verifyOutstanding: 'Independent check: {n} point(s) still outstanding after {rounds} round(s) — see the list below',
+  verifySkipped: 'Independent check unavailable: {reason}',
+  verifyReasonError: 'the verifier agent failed',
+  verifyReasonTimeout: 'it took longer than 4 minutes',
+  verifyReasonAborted: 'stopped as requested',
+  verifyReasonNoVerdict: 'the verifier agent did not submit a verdict',
+  verifyReasonNoModel: 'no model is available for the verifier agent',
+  verifyReasonBusy: 'another check is already running',
+  verifyNothing: 'There is no run to verify in this conversation yet.',
+  verifyStaleRun: 'The last run stopped midway ({reason}) — verifying its state at that point.',
+  verifySectionMissing: 'Missing',
+  verifySectionDefects: 'Defects found',
+  verifySectionUnverified: 'Could not be verified',
+  verifyFeedbackHead:
+    '[Independent check — round {round}/{max}] An independent reviewer (who saw only the original request, the changed files, the commands you ran and your final answer) concluded: {verdict}. Address EVERY item below (fix it, run the real check, cite evidence) before reporting completion. If you believe an item is wrong, say exactly why with evidence.',
+  verifyFeedbackVerdictFail: 'FAIL',
+  verifyFeedbackVerdictUncertain: 'UNCERTAIN',
   // ── (lane:checkpoints-rewind) ──
   // ── (lane:perm-rules) ──
   // ── (lane:hooks) ──

@@ -22,6 +22,7 @@ import { CompactRow } from './CompactRow';
 import { PermissionCard } from './PermissionCard';
 import { RunHead, StatusDot } from './RunHead';
 import { Stamp } from './TimeMarks';
+import { VerifyRow } from './VerifyRow'; // (lane:blind-verifier)
 
 /**
  * Thông báo (lane:cc-timeline-ui): mức info = chấm nhỏ + chữ nghiêng xám (như «Idle 1d 16h…» của Claude Code);
@@ -56,6 +57,7 @@ export function NoticeView({
 }
 
 export function StandaloneNotice({ item, canRetry }: { item: NoticeItem; canRetry: boolean }) {
+  if (item.verify) return <VerifyRow verify={item.verify} standalone />; // (lane:blind-verifier) /verify
   return (
     <div class="turn turn-notice">
       <NoticeView level={item.level} text={item.text} compact={item.compact} onRetry={canRetry && item.level === 'error' ? () => post({ type: 'retry' }) : undefined} />
@@ -237,6 +239,7 @@ function AssistantTurnView({ item, live, isLast }: { item: AssistantItem; live: 
         return <PermissionCard key={seg.key} block={seg.block} />;
       case 'notice': {
         const b: NoticeBlockT = seg.block;
+        if (b.verify) return <VerifyRow key={seg.key} verify={b.verify} />; // (lane:blind-verifier)
         return (
           <NoticeView
             key={seg.key}

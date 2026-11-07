@@ -1019,3 +1019,55 @@ export function cutContinueState(opts: { forced?: boolean } = {}): ViewState {
     ],
   });
 }
+
+// ── (lane:blind-verifier) Kiểm tra độc lập: lượt đã xong có dòng «Kiểm tra độc lập» (đạt / cần sửa / tồn đọng / đang chạy) ──
+export function verifyScene(kind: 'pass' | 'fail' | 'outstanding' | 'running' | 'skipped' = 'fail'): ViewState {
+  const A = 'a_v1';
+  const running = kind === 'running';
+  const verify: TItem[] = [
+    userItem('u1', 'Thêm hàm formatMoney(vi-VN, có VAT) vào src/utils/formatMoney.ts, viết test và chạy test cho mình.', 200_000),
+    {
+      kind: 'assistant',
+      id: A,
+      provider: 'locaith',
+      model: 'locaith-v5-flash',
+      ts: Date.now() - 190_000,
+      done: !running,
+      endedAt: running ? undefined : Date.now() - 20_000,
+      stopReason: running ? undefined : 'end_turn',
+      blocks: [
+        { type: 'tool', id: 'r1', name: 'read_file', args: { path: 'src/utils/formatMoney.ts' }, state: 'done', summary: '42 dòng', startedAt: Date.now() - 180_000, durationMs: 40 },
+        { type: 'tool', id: 'e1', name: 'edit_file', args: { path: 'src/utils/formatMoney.ts' }, state: 'done', summary: '+9 −3', startedAt: Date.now() - 170_000, durationMs: 120, diff: DIFF_EDIT },
+        { type: 'tool', id: 'w1', name: 'write_file', args: { path: 'src/utils/formatMoney.test.ts' }, state: 'done', summary: '+18', startedAt: Date.now() - 160_000, durationMs: 90 },
+        { type: 'tool', id: 'c1', name: 'run_command', args: { command: 'npx vitest run src/utils/formatMoney.test.ts' }, state: 'done', summary: 'thành công', output: ' ✓ src/utils/formatMoney.test.ts (3)\n Test Files  1 passed (1)\n      Tests  3 passed (3)', startedAt: Date.now() - 150_000, durationMs: 4200 },
+        { type: 'text', id: 't1', text: 'Đã thêm `formatMoney` (định dạng `vi-VN`, tuỳ chọn VAT 10 %) và 3 test; `vitest` chạy xanh.' },
+        kind === 'running'
+          ? { type: 'notice', id: 'n1', level: 'info', text: 'Kiểm tra độc lập: đang chạy (vòng 1/2)', verify: { key: 'v1', state: 'running', round: 1, maxRounds: 2 } }
+          : kind === 'pass'
+            ? { type: 'notice', id: 'n1', level: 'info', text: 'Đã kiểm tra độc lập: đạt', verify: { key: 'v1', state: 'pass', round: 1, maxRounds: 2, durationMs: 38_000, model: 'locaith-v5-flash', tokens: 6400 } }
+            : kind === 'skipped'
+              ? { type: 'notice', id: 'n1', level: 'info', text: 'Không kiểm tra độc lập được: quá 4 phút', verify: { key: 'v1', state: 'skipped', round: 1, maxRounds: 2, reason: 'quá 4 phút', durationMs: 240_000 } }
+              : {
+                  type: 'notice',
+                  id: 'n1',
+                  level: 'warn',
+                  text: 'Kiểm tra độc lập: 3 điểm cần sửa',
+                  verify: {
+                    key: 'v1',
+                    state: 'fail',
+                    round: kind === 'outstanding' ? 2 : 1,
+                    maxRounds: 2,
+                    missing: ['Yêu cầu "có VAT" chưa có test: src/utils/formatMoney.test.ts chỉ kiểm tra 3 trường hợp không VAT (dòng 4–18).'],
+                    defects: ['formatMoney(1234.5, { vat: true }) trả về "1.357 ₫" thay vì "1.358 ₫" — làm tròn trước khi cộng VAT (src/utils/formatMoney.ts:21).'],
+                    unverifiedClaims: ['Câu trả lời nói "vitest chạy xanh" nhưng lệnh đã chạy chỉ gồm tệp test mới, chưa chạy toàn bộ bộ test (npx vitest run).'],
+                    ...(kind === 'outstanding' ? { outstanding: true } : {}),
+                    durationMs: 52_000,
+                    model: 'locaith-v5-flash',
+                    tokens: 9100,
+                  },
+                },
+      ],
+    },
+  ];
+  return baseState({ title: 'Thêm formatMoney có VAT', transcript: verify, running, provider: 'anthropic', model: 'claude-sonnet-5-5' });
+}

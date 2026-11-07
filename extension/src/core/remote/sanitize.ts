@@ -3,7 +3,7 @@
  * (kết quả công cụ, đối số, diff, suy luận). Thuần tuý, không import `vscode`.
  */
 
-import type { ABlock, AgentProgress, AttachmentInfo, CompactInfo, ContextInfo, DiffInfo, PermissionRequest, QueuedInfo, SuggestionOption, TItem, ToolBlock, UiEvent, ViewState } from '../../shared/protocol';
+import type { ABlock, AgentProgress, AttachmentInfo, CompactInfo, ContextInfo, DiffInfo, PermissionRequest, QueuedInfo, SuggestionOption, TItem, ToolBlock, UiEvent, VerifyInfo, ViewState } from '../../shared/protocol';
 import type { RemoteHostInfo, RemoteProvider, RemoteState } from './protocol';
 import { REMOTE_API_VERSION } from './protocol';
 
@@ -123,6 +123,37 @@ export function sanitizeContext(c: ContextInfo | null | undefined): ContextInfo 
   return out;
 }
 
+// ── (lane:blind-verifier) kết quả kiểm tra độc lập: chỉ trạng thái hợp lệ, số nguyên, danh sách và chữ đã cắt ──
+const VERIFY_LIST_CAP = 12;
+const VERIFY_ITEM_CAP = 400;
+const VERIFY_STATES = new Set<VerifyInfo['state']>(['running', 'pass', 'fail', 'uncertain', 'skipped']);
+
+export function sanitizeVerify(v: VerifyInfo): VerifyInfo {
+  const list = (x: unknown): string[] | undefined => {
+    if (!Array.isArray(x)) return undefined;
+    const out = x.filter((s): s is string => typeof s === 'string' && s.trim().length > 0).slice(0, VERIFY_LIST_CAP).map((s) => cap(s.replace(/\s+/g, ' ').trim(), VERIFY_ITEM_CAP));
+    return out.length ? out : undefined;
+  };
+  const out: VerifyInfo = {
+    key: typeof v?.key === 'string' ? v.key.slice(0, 40) : 'v',
+    state: v && VERIFY_STATES.has(v.state) ? v.state : 'skipped',
+    round: Math.max(1, wholeNumber(v?.round) || 1),
+    maxRounds: Math.max(1, wholeNumber(v?.maxRounds) || 1),
+  };
+  const missing = list(v?.missing);
+  const defects = list(v?.defects);
+  const unverified = list(v?.unverifiedClaims);
+  if (missing) out.missing = missing;
+  if (defects) out.defects = defects;
+  if (unverified) out.unverifiedClaims = unverified;
+  if (v?.outstanding === true) out.outstanding = true;
+  if (typeof v?.reason === 'string' && v.reason) out.reason = cap(v.reason, VERIFY_ITEM_CAP);
+  if (typeof v?.durationMs === 'number' && Number.isFinite(v.durationMs)) out.durationMs = wholeNumber(v.durationMs);
+  if (typeof v?.model === 'string' && v.model) out.model = cap(v.model, 80);
+  if (typeof v?.tokens === 'number' && Number.isFinite(v.tokens)) out.tokens = wholeNumber(v.tokens);
+  return out;
+}
+
 function sanitizeTool(b: ToolBlock): RemoteToolBlock {
   const { images, agent, ...rest } = b;
   return {
@@ -157,7 +188,7 @@ function sanitizeBlock(b: ABlock): ABlock {
       return { ...rest, ...timing, text: b.text.length > THINK_CAP ? capTail(b.text, THINK_CAP) : b.text };
     }
     case 'notice':
-      return b.compact ? { ...b, compact: sanitizeCompact(b.compact) } : b;
+      return b.compact || b.verify ? { ...b, ...(b.compact ? { compact: sanitizeCompact(b.compact) } : {}), ...(b.verify ? { verify: sanitizeVerify(b.verify) } : {}) } : b;
     default:
       return b;
   }
@@ -166,7 +197,7 @@ function sanitizeBlock(b: ABlock): ABlock {
 export function sanitizeItem(it: TItem): TItem {
   if (it.kind === 'user') return { ...it, attachments: it.attachments.map(sanitizeAttachment) };
   if (it.kind === 'assistant') return { ...it, blocks: it.blocks.map(sanitizeBlock) };
-  if (it.kind === 'notice' && it.compact) return { ...it, compact: sanitizeCompact(it.compact) };
+  if (it.kind === 'notice' && (it.compact || it.verify)) return { ...it, ...(it.compact ? { compact: sanitizeCompact(it.compact) } : {}), ...(it.verify ? { verify: sanitizeVerify(it.verify) } : {}) };
   return it;
 }
 
@@ -278,7 +309,7 @@ export function sanitizeEvent(ev: UiEvent): UiEvent {
     case 'tool_permission':
       return { ...ev, request: sanitizePermission(ev.request) };
     case 'notice':
-      return ev.compact ? { ...ev, compact: sanitizeCompact(ev.compact) } : ev;
+      return ev.compact || ev.verify ? { ...ev, ...(ev.compact ? { compact: sanitizeCompact(ev.compact) } : {}), ...(ev.verify ? { verify: sanitizeVerify(ev.verify) } : {}) } : ev;
     case 'options':
       return { ...ev, options: sanitizeOptions(ev.options) }; // (lane:output-timeouts)
     case 'text':

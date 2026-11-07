@@ -13,4 +13,5 @@
 @import './extras.css';
 @import './media.css';
 @import './responsive.css';
+@import './verify.css'; /* (lane:blind-verifier) */
 @import './timeline-cc.css'; /* (lane:cc-timeline-ui) dòng thời gian gọn — nạp cuối để thắng kiểu cũ */

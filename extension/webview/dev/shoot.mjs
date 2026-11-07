@@ -194,6 +194,13 @@ const SHOTS = [
   { name: 'locaith-settings-dark-420', q: { scenario: 'locaith-settings', theme: 'dark' }, w: 420, h: 1000 },
   { name: 'locaith-settings-pending-light-420', q: { scenario: 'locaith-settings-pending', theme: 'light' }, w: 420, h: 1000 },
   { name: '02-onboarding-dark-320', q: { scenario: 'onboarding', theme: 'dark' }, w: 320, h: 780 },
+  // (lane:blind-verifier)
+  { name: 'verify-fail-dark-420', q: { scenario: 'verify', theme: 'dark' }, w: 420, h: 820, act: async (p) => { await p.click('[data-testid="verify-row"] .tool-head'); await wait(200); } },
+  { name: 'verify-fail-collapsed-dark-420', q: { scenario: 'verify', theme: 'dark' }, w: 420, h: 820 },
+  { name: 'verify-pass-dark-420', q: { scenario: 'verify-pass', theme: 'dark' }, w: 420, h: 820 },
+  { name: 'verify-outstanding-light-420', q: { scenario: 'verify-outstanding', theme: 'light' }, w: 420, h: 820, act: async (p) => { await p.click('[data-testid="verify-row"] .tool-head'); await wait(200); } },
+  { name: 'verify-running-dark-320', q: { scenario: 'verify-running', theme: 'dark' }, w: 320, h: 820 },
+  { name: 'verify-fail-en-hc-420', q: { scenario: 'verify', theme: 'hc', lang: 'en' }, w: 420, h: 820, act: async (p) => { await p.click('[data-testid="verify-row"] .tool-head'); await wait(200); } },
   { name: '03-research-done-dark-420-full', q: { scenario: 'research', theme: 'dark', speed: '0', expand: '1' }, w: 420, h: 900, full: true },
   { name: '04-research-searching-dark-420', q: { scenario: 'research', theme: 'dark', speed: '0', stop: 'searching' }, w: 420, h: 820 },
   { name: '05-research-pills-dark-420', q: { scenario: 'research', theme: 'dark', speed: '0', stop: 'pills' }, w: 420, h: 820 },

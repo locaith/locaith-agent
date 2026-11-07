@@ -849,6 +849,20 @@ const vi = {
   'options.continue': 'Chưa xong',
   // ── (lane:loop-guards) ──
   // ── (lane:blind-verifier) ──
+  'verify.title': 'Kiểm tra độc lập',
+  'verify.running': 'Kiểm tra độc lập · đang chạy',
+  'verify.pass': 'Đã kiểm tra độc lập: đạt',
+  'verify.fail': 'Kiểm tra độc lập · {n} điểm cần sửa',
+  'verify.uncertain': 'Kiểm tra độc lập · chưa chắc ({n})',
+  'verify.outstanding': 'Kiểm tra độc lập · còn {n} điểm tồn đọng',
+  'verify.skipped': 'Không kiểm tra độc lập được',
+  'verify.round': 'vòng {r}/{m}',
+  'verify.missing': 'Còn thiếu',
+  'verify.defects': 'Lỗi phát hiện',
+  'verify.unverified': 'Chưa xác nhận được',
+  'verify.outstandingNote': 'Hết vòng kiểm tra mà vẫn còn các điểm trên — trợ lý đã dừng để bạn quyết định.',
+  'verify.expand': 'Xem từng điểm',
+  'verify.collapse': 'Thu gọn kiểm tra',
   // ── (lane:checkpoints-rewind) ──
   // ── (lane:perm-rules) ──
   // ── (lane:hooks) ──
@@ -1692,6 +1706,20 @@ const en: Record<I18nKey, string> = {
   'options.continue': 'Not finished',
   // ── (lane:loop-guards) ──
   // ── (lane:blind-verifier) ──
+  'verify.title': 'Independent check',
+  'verify.running': 'Independent check · running',
+  'verify.pass': 'Independently verified: pass',
+  'verify.fail': 'Independent check · {n} issue(s) to fix',
+  'verify.uncertain': 'Independent check · uncertain ({n})',
+  'verify.outstanding': 'Independent check · {n} point(s) still outstanding',
+  'verify.skipped': 'Independent check unavailable',
+  'verify.round': 'round {r}/{m}',
+  'verify.missing': 'Missing',
+  'verify.defects': 'Defects found',
+  'verify.unverified': 'Could not be verified',
+  'verify.outstandingNote': 'The check rounds ran out with these points still open — the assistant stopped so you can decide.',
+  'verify.expand': 'Show each point',
+  'verify.collapse': 'Collapse check',
   // ── (lane:checkpoints-rewind) ──
   // ── (lane:perm-rules) ──
   // ── (lane:hooks) ──
