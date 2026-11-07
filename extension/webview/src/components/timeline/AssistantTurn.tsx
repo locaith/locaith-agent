@@ -65,15 +65,8 @@ function WorkingIndicator({ empty, blocks }: { empty: boolean; blocks: readonly 
   const stat = [tokens > 0 ? t('act.thinkTokens', { n: shown.toLocaleString(lang === 'vi' ? 'vi-VN' : 'en-US') }) : '', secs !== null && secs >= 1 ? `${secs} s` : ''].filter(Boolean).join(' · ');
   return (
     <div class="working working-stage" role="status">
-      {/* Mascot: logo Locaith tách thành ba robot nhỏ nhún nhảy — để lúc chờ dài không thấy trống. Thuần CSS, tự dừng khi giảm chuyển động. */}
-      <div class="mascot" aria-hidden="true">
-        <LoSpinner size={18} />
-        <span class="mascot-bots">
-          <span class="mascot-bot b1" />
-          <span class="mascot-bot b2" />
-          <span class="mascot-bot b3" />
-        </span>
-      </div>
+      {/* Chỉ một vòng quay nhỏ (chủ dự án đã yêu cầu BỎ hiệu ứng ba robot nhún nhảy). */}
+      <LoSpinner size={16} />
       <span>{empty ? t('turn.preparing') : t('act.working')}</span>
       {stat && <span class="work-stat">{stat}</span>}
     </div>

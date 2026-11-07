@@ -541,10 +541,12 @@ function queueProvider(delay = 900) {
     capabilities: { reasoning: 'none', parallelTools: true, vision: false, toolArgStreaming: 'whole' },
     async *stream(req) {
       const last = req.messages[req.messages.length - 1];
+      // Khối chữ `volatile` = dòng ngân sách vòng lặp do harness gắn vào cuối payload (0.6.31): không phải chữ của người dùng.
+      const lastBlocks = last.content.filter((b) => !(b.type === 'text' && b.volatile));
       requests.push({
         roles: req.messages.map((m) => m.role),
-        lastTypes: last.content.map((b) => b.type),
-        users: last.role === 'user' ? last.content.filter((b) => b.type === 'text').map((b) => b.text) : [],
+        lastTypes: lastBlocks.map((b) => b.type),
+        users: last.role === 'user' ? lastBlocks.filter((b) => b.type === 'text').map((b) => b.text) : [],
       });
       // `hold`: giữ lượt này treo tới khi bị Dừng.
       if (state.hold) {
@@ -562,7 +564,7 @@ function queueProvider(delay = 900) {
         yield { type: 'done', stopReason: 'tool_use', usage: { inputTokens: 100, outputTokens: 10 }, message: { role: 'assistant', content: [{ type: 'tool_use', id, name: 'list_dir', input }] } };
         return;
       }
-      const text = `Đã nhận: ${last.role === 'user' ? last.content.filter((b) => b.type === 'text').map((b) => b.text).join(' | ') : ''}`;
+      const text = `Đã nhận: ${last.role === 'user' ? lastBlocks.filter((b) => b.type === 'text').map((b) => b.text).join(' | ') : ''}`;
       yield { type: 'text_delta', text };
       yield { type: 'done', stopReason: 'end_turn', usage: { inputTokens: 100, outputTokens: 10 }, message: { role: 'assistant', content: [{ type: 'text', text }] } };
     },
@@ -599,10 +601,13 @@ async function testQueueFlow(api) {
   await run;
   await waitFor(() => !api.sidebar.isRunning, 30000, 'lượt kết thúc sau khi giao hết hàng đợi');
 
-  const [r1, r2, r3, r4] = provider.requests;
-  // 0.6.6: tin gửi GIỮA CHỪNG (Tin thêm 2) được ghi thành tác vụ chờ trong «Việc cần làm»; model giả không bao giờ đánh dấu xong nên engine nhắc ĐÚNG MỘT lần (todoReminder) → lần gọi thứ 4.
-  assert.strictEqual(provider.requests.length, 4, `Phải có đúng 4 lần gọi model (3 + một lời nhắc việc dở), đang có ${provider.requests.length}`);
-  assert.ok(r4.users.some((t) => t.includes('tác vụ chưa hoàn thành')), 'Lần gọi thứ 4 phải là lời nhắc còn tác vụ dở');
+  const [r1, r2, r3, r4, r5] = provider.requests;
+  // 0.6.31: tin gửi GIỮA CHỪNG (Tin thêm 2) được ghi thành tác vụ chờ; model giả không bao giờ đánh dấu xong nên cổng hoàn thành nhắc CÓ NHÃN: lần 1 (lần gọi thứ 4) và lần 2 (lần gọi thứ 5);
+  // lần can thiệp thứ 3 thì thôi nhắc và báo người dùng việc còn lại (không nhắc vô hạn).
+  assert.strictEqual(provider.requests.length, 5, `Phải có đúng 5 lần gọi model (3 + hai lời nhắc việc dở có nhãn), đang có ${provider.requests.length}`);
+  assert.ok(r4.users.some((t) => t.includes('[nhắc lần 1]') && t.includes('việc chưa xong')), 'Lần gọi thứ 4 phải là lời nhắc [nhắc lần 1] còn việc dở');
+  assert.ok(r5.users.some((t) => t.includes('[nhắc lần 2]')), 'Lần gọi thứ 5 phải là lời nhắc [nhắc lần 2]');
+  assert.ok(api.sidebar.snapshot().view.transcript.some((i) => i.kind === 'assistant' && i.blocks.some((b) => b.type === 'notice' && b.level === 'warn' && b.text.includes('Tin thêm 2'))), 'Lần thứ 3 phải báo người dùng việc còn dở (Tin thêm 2) thay vì nhắc tiếp');
   assert.ok(api.sidebar.snapshot().session.todos.some((x) => x.title === 'Tin thêm 2' && x.status === 'pending'), 'Tin gửi giữa chừng phải nằm trong danh sách tác vụ');
   assert.deepStrictEqual(r2.roles, ['user', 'assistant', 'user'], 'Vai trò phải xen kẽ');
   assert.deepStrictEqual(r2.lastTypes.slice(0, 1), ['tool_result'], 'Tin chèn giữa chừng đi chung tin kết quả công cụ (tool_result đứng trước)');
@@ -619,7 +624,7 @@ async function testQueueFlow(api) {
   assert.deepStrictEqual(items.filter((i) => i.kind === 'user').map((i) => i.text), ['Việc dài: liệt kê thư mục', 'Tin thêm 2', 'Tin thêm 3']);
   assert.ok(items.filter((i) => i.kind === 'assistant').every((i) => i.done), 'Mọi đoạn trả lời phải được đóng');
   const roles = api.sidebar.snapshot().session.messages.map((m) => m.role);
-  assert.deepStrictEqual(roles, ['user', 'assistant', 'user', 'assistant', 'user', 'assistant', 'user', 'assistant'], 'Lịch sử gửi model phải xen kẽ vai trò (kèm lời nhắc việc dở ở cuối)');
+  assert.deepStrictEqual(roles, ['user', 'assistant', 'user', 'assistant', 'user', 'assistant', 'user', 'assistant', 'user', 'assistant'], 'Lịch sử gửi model phải xen kẽ vai trò (kèm hai lời nhắc việc dở ở cuối)');
 
   // ── 2. Lệnh gạch chéo khi đang chạy: vẫn từ chối (không xếp hàng) ──
   // ── 3. Bấm vào tin chờ để sửa; Dừng thì các tin chưa giao quay về ô nhập, KHÔNG tự gửi ──
@@ -694,7 +699,7 @@ function scriptedProvider(newText, oldText = 'Đặng Thị Hồng') {
     let idx = -1;
     for (let i = messages.length - 1; i >= 0; i--) {
       const m = messages[i];
-      if (m.role === 'user' && !m.synthetic && m.content.some((b) => b.type === 'text')) {
+      if (m.role === 'user' && !m.synthetic && m.content.some((b) => b.type === 'text' && !b.volatile)) {
         idx = i;
         break;
       }

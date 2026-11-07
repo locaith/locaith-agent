@@ -229,60 +229,11 @@
   color: var(--accent-text);
 }
 
-/* ── Mascot lúc chờ ─────────────────────────────────────────────────────────
-   Ba robot nhỏ nhún nhảy cạnh vòng quay: mắt là hai chấm sáng, mỗi con lệch nhịp để nhìn như đang làm việc.
-   Thuần CSS, không JS; ai bật «giảm chuyển động» thì đứng yên. */
+/* ── Dòng «đang xử lý» lúc chờ: một vòng quay + nhãn + số liệu, không còn hiệu ứng robot. ── */
 .working-stage {
   flex-wrap: wrap;
   align-items: center;
   gap: 8px;
-}
-.mascot {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-}
-.mascot-bots {
-  display: inline-flex;
-  align-items: flex-end;
-  gap: 5px;
-  height: 18px;
-}
-.mascot-bot {
-  width: 11px;
-  height: 11px;
-  border-radius: 4px;
-  background:
-    radial-gradient(circle at 32% 42%, var(--nd-bg, #0b0b0c) 1.4px, transparent 1.5px),
-    radial-gradient(circle at 68% 42%, var(--nd-bg, #0b0b0c) 1.4px, transparent 1.5px),
-    linear-gradient(180deg, color-mix(in srgb, var(--accent-text) 78%, white), var(--accent-text));
-  animation: nd-bot-hop 1.5s ease-in-out infinite;
-}
-.mascot-bot.b2 {
-  animation-delay: 0.22s;
-}
-.mascot-bot.b3 {
-  animation-delay: 0.44s;
-}
-@keyframes nd-bot-hop {
-  0%,
-  100% {
-    transform: translateY(0) rotate(0deg);
-  }
-  30% {
-    transform: translateY(-6px) rotate(-7deg);
-  }
-  55% {
-    transform: translateY(-2px) rotate(5deg);
-  }
-  75% {
-    transform: translateY(-4px) rotate(-3deg);
-  }
-}
-@media (prefers-reduced-motion: reduce) {
-  .mascot-bot {
-    animation: none;
-  }
 }
 .agent-row {
   display: flex;
