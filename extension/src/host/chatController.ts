@@ -2410,6 +2410,7 @@ export class ChatController implements vscode.Disposable {
     // Cắt đuôi chỉ để lại một TIỀN TỐ nguyên vẹn của hội thoại cũ nên khối suy luận còn lại vẫn hợp lệ — không đặt
     // `historyEdited` (cờ đó chỉ bỏ suy luận ở một lần gọi rồi tự xoá, lượt sau lại phát lại bản cũ và API trả 400).
     this.session.messages = msgs.slice(0, idx);
+    this.session.lastContextTokens = 0; // xem rewind: số đo cũ không còn đúng với lịch sử đã cắt (xlane)
     this.patch({ transcript: this.view.transcript.slice(0, ti) });
     if (editOnly) {
       // Tệp tải lên: bản hiển thị không còn phần chữ → lấy lại từ bản lưu của tin cuối (nếu còn); phiên mới khôi phục từ kho thì phải đính kèm lại.

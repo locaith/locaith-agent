@@ -336,6 +336,7 @@ export class CheckpointFeature {
       const s = this.d.session();
       const turn = (await this.store!.turns(sid)).find((t) => t.promptId === h.promptId);
       s.messages = cut.keptMessages;
+      s.lastContextTokens = 0; // số đo của lịch sử DÀI đã bị cắt: để lại sẽ làm đồng hồ ngữ cảnh sai và nén/lược nhầm ở lượt sau (xlane)
       s.options = undefined;
       const todos = turn?.todos ? turn.todos.map((x) => ({ ...x })) : s.todos;
       s.todos = todos;
