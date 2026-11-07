@@ -1470,6 +1470,7 @@ export class BrowserController {
     const content = msgs[idx].content;
     // Cắt đuôi chỉ để lại một TIỀN TỐ nguyên vẹn của hội thoại cũ nên khối suy luận còn lại vẫn hợp lệ — không đặt `historyEdited`.
     this.session.messages = msgs.slice(0, idx);
+    this.session.lastContextTokens = 0; // số đo của lịch sử đã bị cắt (xlane)
     this.patch({ transcript: this.view.transcript.slice(0, ti) });
     if (editOnly) {
       // Tệp tải lên: bản hiển thị không còn phần chữ → lấy lại từ bản lưu của tin cuối (nếu còn); phiên mới khôi phục từ kho thì phải đính kèm lại.
