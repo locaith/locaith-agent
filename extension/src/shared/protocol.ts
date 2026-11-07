@@ -159,6 +159,20 @@ export interface CompactInfo {
   summary?: string;
 }
 
+/**
+ * (lane:ctx-compaction) Thanh đo ngữ cảnh. Hai trường đầu là của bản cũ (Remote cũ vẫn đọc được); phần còn lại tuỳ chọn.
+ */
+export interface ContextInfo {
+  usedTokens: number;
+  limitTokens: number;
+  /** usedTokens / limitTokens × 100, làm tròn (0–100+). */
+  percent?: number;
+  /** Số kết quả công cụ cũ đã lược trong phiên (đọc lại được). */
+  clearedResults?: number;
+  /** Số lần tóm tắt toàn bộ trong phiên. */
+  compactions?: number;
+}
+
 export type ABlock =
   | { type: 'text'; id: string; text: string }
   /**
@@ -779,8 +793,8 @@ export interface ViewState {
   /** Thùng rác: các cuộc trò chuyện đã xoá, còn khôi phục được. */
   trash: TrashSummary[];
   workspace: { name: string; folders: string[] } | null;
-  /** Ước lượng token đang dùng so với giới hạn của model. */
-  context: { usedTokens: number; limitTokens: number } | null;
+  /** Ước lượng token đang dùng so với giới hạn của model (+ số liệu giữ ngữ cảnh gọn — lane:ctx-compaction). */
+  context: ContextInfo | null;
   editor: EditorContextInfo | null;
   skills: SkillSummary[];
   slashCommands: SlashCommandInfo[];

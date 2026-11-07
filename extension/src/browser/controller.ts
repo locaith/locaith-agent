@@ -83,7 +83,7 @@ const SLASH: Record<Lang, SlashCommandInfo[]> = {
   vi: [
     { name: 'new', description: 'Bắt đầu cuộc trò chuyện mới' },
     { name: 'clear', description: 'Xoá và bắt đầu lại (giống /new)' },
-    { name: 'compact', description: 'Nén tin nhắn cũ để giải phóng ngữ cảnh' },
+    { name: 'compact', description: 'Nén tin nhắn cũ để giải phóng ngữ cảnh — /compact <giữ lại gì> (tuỳ chọn)' },
     { name: 'model', description: 'Đổi model — /model <tên>' },
     { name: 'mode', description: 'Đổi chế độ quyền — /mode plan' },
     { name: 'thinking', description: 'Đổi mức suy luận — /thinking high' },
@@ -95,7 +95,7 @@ const SLASH: Record<Lang, SlashCommandInfo[]> = {
   en: [
     { name: 'new', description: 'Start a new conversation' },
     { name: 'clear', description: 'Clear and start over (same as /new)' },
-    { name: 'compact', description: 'Compact old messages to free up context' },
+    { name: 'compact', description: 'Compact old messages to free up context — /compact <what to keep> (optional)' },
     { name: 'model', description: 'Change model — /model <name>' },
     { name: 'mode', description: 'Change permission mode — /mode plan' },
     { name: 'thinking', description: 'Change reasoning level — /thinking high' },
@@ -294,7 +294,17 @@ export class BrowserController {
   }
 
   private contextInfo(): ViewState['context'] {
-    return { usedTokens: this.session.lastContextTokens, limitTokens: this.d.providers.contextWindow(this.session.provider, this.session.model) };
+    const usedTokens = this.session.lastContextTokens;
+    const limitTokens = this.d.providers.contextWindow(this.session.provider, this.session.model);
+    // (lane:ctx-compaction) số liệu giữ ngữ cảnh gọn cho thanh đo — đồng bộ với chatController.contextInfo()
+    const stats = this.session.contextStats;
+    return {
+      usedTokens,
+      limitTokens,
+      percent: limitTokens > 0 ? Math.round((usedTokens / limitTokens) * 100) : 0,
+      clearedResults: stats?.clearedResults ?? 0,
+      compactions: stats?.compactions ?? 0,
+    };
   }
 
   private browserState(tabs: TabsInfo = { tab: this.view?.browser?.tab ?? null, viewing: this.view?.browser?.viewing ?? null }, siteAccess = this.view?.browser?.siteAccess ?? false): BrowserViewState {
@@ -1291,7 +1301,7 @@ export class BrowserController {
         await this.startNewSession();
         return true;
       case 'compact':
-        await this.compact();
+        await this.compact(args); // (lane:ctx-compaction) /compact <hướng dẫn>
         return true;
       case 'retry':
         await this.retryLast(false);
@@ -1355,7 +1365,8 @@ export class BrowserController {
     }
   }
 
-  private async compact(): Promise<void> {
+  /** (lane:ctx-compaction) `/compact [hướng dẫn]` — thông báo mang số liệu `compact` cho dòng thời gian. */
+  private async compact(instructions = ''): Promise<void> {
     if (this.busy) return this.toast('info', this.lang === 'vi' ? 'Hãy dừng tác vụ đang chạy trước.' : 'Stop the running task first.');
     if (this.session.messages.length < 4) {
       this.emit({ t: 'notice', level: 'info', text: this.lang === 'vi' ? 'Cuộc trò chuyện còn ngắn, chưa cần nén.' : 'The conversation is short; nothing to compact.' });
@@ -1366,13 +1377,15 @@ export class BrowserController {
     this.abort = abort;
     try {
       const engine = await this.createEngine();
-      const msg = await engine.compactNow(this.session, abort.signal);
-      this.emit({ t: 'notice', level: 'info', text: msg ?? (this.lang === 'vi' ? 'Không có gì để nén.' : 'Nothing to compact.') });
+      const r = await engine.compactWith(this.session, abort.signal, { instructions: instructions.trim() || undefined });
+      if (r) this.emit({ t: 'notice', level: 'info', text: r.text, compact: r.compact });
+      else this.emit({ t: 'notice', level: 'info', text: this.lang === 'vi' ? 'Không có gì để nén.' : 'Nothing to compact.' });
     } catch (err) {
       this.emit({ t: 'notice', level: 'error', text: err instanceof Error ? err.message : String(err) });
     } finally {
       this.abort = null;
       this.setRunning(false);
+      this.patch({ context: this.contextInfo() }); // (lane:ctx-compaction) số đo ngữ cảnh mới sau khi nén
     }
   }
 

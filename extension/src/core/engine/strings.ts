@@ -59,6 +59,11 @@ const vi = {
     'Đã hết số vòng lặp cho phép. KHÔNG gọi thêm công cụ. Hãy tóm tắt ngắn gọn: đã làm được gì, còn lại việc gì, và bước tiếp theo đề xuất.',
   // ── (lane:cc-timeline-ui) ──
   // ── (lane:ctx-compaction) ──
+  compactLine: 'Đã nén cuộc trò chuyện · {mode} · giải phóng {freed} token',
+  compactModeAuto: 'tự động',
+  compactModeManual: 'thủ công',
+  compactModeOverflow: 'tràn ngữ cảnh',
+  clearedResults: 'Đã lược {n} kết quả công cụ cũ để giữ ngữ cảnh gọn — đọc lại được khi cần',
   // ── (lane:output-timeouts) ──
   // ── (lane:loop-guards) ──
   // ── (lane:blind-verifier) ──
@@ -127,6 +132,11 @@ const en: typeof vi = {
     'The loop budget is exhausted. Do NOT call more tools. Briefly summarize: what was done, what remains, and the suggested next step.',
   // ── (lane:cc-timeline-ui) ──
   // ── (lane:ctx-compaction) ──
+  compactLine: 'Compacted chat · {mode} · {freed} tokens freed',
+  compactModeAuto: 'auto',
+  compactModeManual: 'manual',
+  compactModeOverflow: 'overflow',
+  clearedResults: 'Trimmed {n} old tool results to keep the context lean — re-readable when needed',
   // ── (lane:output-timeouts) ──
   // ── (lane:loop-guards) ──
   // ── (lane:blind-verifier) ──

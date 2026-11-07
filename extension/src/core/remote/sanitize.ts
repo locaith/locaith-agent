@@ -3,7 +3,7 @@
  * (kết quả công cụ, đối số, diff, suy luận). Thuần tuý, không import `vscode`.
  */
 
-import type { ABlock, AgentProgress, AttachmentInfo, CompactInfo, DiffInfo, PermissionRequest, QueuedInfo, TItem, ToolBlock, UiEvent, ViewState } from '../../shared/protocol';
+import type { ABlock, AgentProgress, AttachmentInfo, CompactInfo, ContextInfo, DiffInfo, PermissionRequest, QueuedInfo, TItem, ToolBlock, UiEvent, ViewState } from '../../shared/protocol';
 import type { RemoteHostInfo, RemoteProvider, RemoteState } from './protocol';
 import { REMOTE_API_VERSION } from './protocol';
 
@@ -109,6 +109,20 @@ export function sanitizeCompact(c: CompactInfo): CompactInfo {
   return out;
 }
 
+/** (lane:ctx-compaction) Thanh đo ngữ cảnh gửi ra Remote: chỉ các trường đã liệt kê, số nguyên không âm; trường tuỳ chọn chỉ gửi khi có. */
+export function sanitizeContext(c: ContextInfo | null | undefined): ContextInfo | null {
+  if (!c || typeof c !== 'object') return null;
+  const out: ContextInfo = { usedTokens: wholeNumber(c.usedTokens), limitTokens: wholeNumber(c.limitTokens) };
+  const opt = (v: unknown): number | undefined => (typeof v === 'number' && Number.isFinite(v) ? wholeNumber(v) : undefined);
+  const percent = opt(c.percent);
+  const cleared = opt(c.clearedResults);
+  const compactions = opt(c.compactions);
+  if (percent !== undefined) out.percent = Math.min(999, percent);
+  if (cleared !== undefined) out.clearedResults = cleared;
+  if (compactions !== undefined) out.compactions = compactions;
+  return out;
+}
+
 function sanitizeTool(b: ToolBlock): RemoteToolBlock {
   const { images, agent, ...rest } = b;
   return {
@@ -194,7 +208,7 @@ export function toRemoteState(view: ViewState, host: RemoteHostInfo, opts: { can
     swarm: view.swarm === true || view.thinkingLevel === 'swarm',
     providers: remoteProviders(view.providers, view.provider),
     sessions: (view.sessions ?? []).slice(0, MAX_SESSIONS),
-    context: view.context,
+    context: sanitizeContext(view.context),
     allowBypass: view.allowBypass,
     remoteCanBypass: opts.canBypass,
   };
@@ -215,7 +229,7 @@ export function sanitizePatch(p: Partial<ViewState>): Partial<Omit<RemoteState, 
   if (p.swarm !== undefined) out.swarm = p.swarm;
   if (p.providers !== undefined) out.providers = remoteProviders(p.providers, p.provider ?? '');
   if (p.sessions !== undefined) out.sessions = p.sessions.slice(0, MAX_SESSIONS);
-  if (p.context !== undefined) out.context = p.context;
+  if (p.context !== undefined) out.context = sanitizeContext(p.context);
   if (p.allowBypass !== undefined) out.allowBypass = p.allowBypass;
   if (p.transcript !== undefined) Object.assign(out, sanitizeTranscript(p.transcript));
   return Object.keys(out).length ? out : null;

@@ -26,7 +26,9 @@ import type { AttachmentInfo, TodoItem, UiEvent } from '../../shared/protocol';
 import { newId } from '../../shared/transcript';
 import type { SkillRegistry } from '../skills/registry';
 import { sha1 } from '../tools/textUtil';
-import { compactIfNeeded, compactedNotice, stripThinking } from './compaction';
+import { compactIfNeeded, compactNoticeOf, stripThinking } from './compaction';
+import { compactTuningFrom } from './compactTuning'; // (lane:ctx-compaction)
+import type { CompactInfo } from '../../shared/protocol'; // (lane:ctx-compaction)
 import { turnBudgetNote, withBudgetNote } from './completion';
 import { coreRunExtensions } from './extensions';
 import { beginExtensions, newTrace, type ActiveExtension, type FinalizeContext, type FinalizeDecision, type RunExtension, type RunScope, type RunTrace, type TraceCall, type TurnInfo } from './seams';
@@ -371,7 +373,7 @@ export class AgentEngine {
         const boundToPrefix = !!this.d.provider.capabilities.thinkingBoundToPrefix;
         const prefixChanged = boundToPrefix && !!session.promptFingerprint && session.promptFingerprint !== fingerprint;
         if (prefixChanged && atBoundary) session.historyEdited = true;
-        if (session.historyEdited) stripThinking(session);
+        if (session.historyEdited) stripThinking(session, !atBoundary); // (lane:ctx-compaction) giữa vòng công cụ vẫn giữ suy luận của tin assistant đang chờ kết quả
 
         // Id công cụ của một số máy chủ tương thích (`call_0`, `call_1`…) lặp lại giữa các lượt → đổi tên để mỗi lệnh gọi là duy nhất.
         const idMap = new Map<string, string>();
@@ -593,8 +595,13 @@ export class AgentEngine {
     return { action: 'accept' };
   }
 
-  /** Nén thủ công (/compact) hoặc khi lỗi tràn ngữ cảnh. */
-  async compactNow(session: SessionState, signal: AbortSignal): Promise<string | null> {
+  /** Nén thủ công (/compact) hoặc khi lỗi tràn ngữ cảnh. Chỉ trả dòng chữ; cần số liệu cho giao diện thì dùng `compactWith`. */
+  async compactNow(session: SessionState, signal: AbortSignal, opts: { instructions?: string } = {}): Promise<string | null> {
+    return (await this.compactWith(session, signal, opts))?.text ?? null;
+  }
+
+  /** (lane:ctx-compaction) Nén thủ công kèm chỉ dẫn tuỳ chọn của người dùng; trả dòng thông báo + số liệu `CompactInfo` (null = không có gì để nén). */
+  async compactWith(session: SessionState, signal: AbortSignal, opts: { instructions?: string } = {}): Promise<{ text: string; compact: CompactInfo } | null> {
     const lang = this.d.settings.language;
     const c = this.d.compactor ?? { provider: this.d.provider, model: session.model };
     const r = await compactIfNeeded({
@@ -605,12 +612,15 @@ export class AgentEngine {
       signal,
       contextWindow: this.d.settings.contextWindow,
       compactAt: this.d.settings.compactAt,
+      tuning: compactTuningFrom(this.d.settings),
+      instructions: opts.instructions,
       force: true,
+      mode: 'manual',
     });
     // Người dùng chủ động bấm nén: nếu model tóm tắt lỗi (sai khoá, mất mạng…) phải nói thật, không báo "không có gì để nén".
     if (r.error && r.summarizedMessages === 0 && r.pruned === 0) throw new Error(`Không nén được hội thoại: ${r.error}`);
     if (r.summarizedMessages > 0) this.fireCompacted(session);
-    return compactedNotice(lang, r);
+    return compactNoticeOf(lang, r);
   }
 
   // ── nội bộ ────────────────────────────────────────────────────────────────────
@@ -640,14 +650,16 @@ export class AgentEngine {
       signal,
       contextWindow: this.d.settings.contextWindow,
       compactAt: this.d.settings.compactAt,
+      tuning: compactTuningFrom(this.d.settings), // (lane:ctx-compaction)
       force,
+      mode: force ? 'overflow' : 'auto', // (lane:ctx-compaction)
       onStart: () =>
         this.d.emit({ t: 'pill', id, pillId: `${id}:compact`, text: t(lang, 'compacting'), kind: 'working' }),
     });
     if (r.error) this.d.host.log('warn', `Nén ngữ cảnh: không tóm tắt được (${r.error})`);
     if (r.summarizedMessages > 0) this.fireCompacted(session);
-    const msg = compactedNotice(lang, r);
-    if (msg) this.d.emit({ t: 'notice', id, level: 'info', text: msg });
+    const msg = compactNoticeOf(lang, r); // (lane:ctx-compaction) dòng chữ + số liệu thật (tokensFreed, clearedResults, summary)
+    if (msg) this.d.emit({ t: 'notice', id, level: 'info', text: msg.text, compact: msg.compact });
     return r.pruned > 0 || r.summarizedMessages > 0;
   }
 
