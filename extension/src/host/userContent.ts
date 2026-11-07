@@ -145,6 +145,11 @@ export async function buildUserContent(inp: BuildInput): Promise<BuiltContent> {
         if (sel.warning) warnings.push(sel.warning);
         continue;
       }
+      // (lane:ide-context) cùng trần tổng như nhánh tệp thường: nhiều `@tệp#L…` không được đẩy tin vượt MAX_TOTAL_CHARS.
+      if (budget - sel.chars < 0) {
+        warnings.push(`Bỏ qua "${a.label}": vượt giới hạn tổng dung lượng đính kèm.`);
+        continue;
+      }
       budget -= sel.chars;
       parts.push(sel.part);
       selectionAttached = true;
