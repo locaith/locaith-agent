@@ -230,14 +230,19 @@ export interface SummarizeOptions {
 }
 
 /**
- * Mốc cắt khi giữ `keep` tin nhắn gần nhất: lùi về tin NGƯỜI DÙNG không chứa tool_result gần nhất (ranh giới lượt) — đó là
- * chỗ duy nhất mà tin assistant phía trước không còn tool_use đang chờ kết quả ở phía sau. Trả về 0 nếu không có mốc hợp lệ > 1.
+ * Mốc cắt khi giữ `keep` tin nhắn gần nhất, lùi dần về mốc HỢP LỆ gần nhất — mốc mà không cặp tool_use/tool_result nào bị tách đôi:
+ *  - tin NGƯỜI DÙNG không chứa tool_result (ranh giới lượt), hoặc
+ *  - tin ASSISTANT đứng sau một tin người dùng (kết quả trong tin người dùng đó trả cho tool_use ở phía TRƯỚC, cùng nằm trong phần bị nén).
+ * Mốc thứ hai cần thiết cho lần chạy dài chỉ có một tin người dùng rồi hàng chục vòng công cụ: không có nó, nén tự động không bao giờ
+ * tìm được chỗ cắt. Khi phần giữ lại mở đầu bằng tin assistant, tin tổng hợp sẽ không kèm câu "đã nắm" để vai trò vẫn xen kẽ.
+ * Trả về 0 nếu không có mốc hợp lệ > 1.
  */
 export function cutIndexKeepingRecent(messages: readonly ChatMessage[], keep: number): number {
   let cut = messages.length - Math.max(0, keep);
   for (; cut > 1; cut--) {
     const m = messages[cut];
     if (m.role === 'user' && !m.content.some((b) => b.type === 'tool_result')) return cut;
+    if (m.role === 'assistant' && messages[cut - 1].role === 'user') return cut;
   }
   return 0;
 }
@@ -276,6 +281,8 @@ export async function summarizeHistoryDetailed(o: SummarizeOptions): Promise<Sum
   if (cut <= 1) return { removed: 0, summary: '' };
 
   const old = session.messages.slice(0, cut);
+  // Phần bị nén chỉ gồm bản tóm tắt của lần trước (+ câu "đã nắm"): tóm tắt lại chẳng giải phóng gì, chỉ tốn một lần gọi model.
+  if (old.filter((m) => !m.synthetic).length < 2) return { removed: 0, summary: '' };
   const { kept, dropped } = pickPinnedDocs(collectDocBlocks(old), o.pinnedDocChars ?? 240_000);
   const pinned = new Set(kept.map((d) => d.id));
   // Dữ kiện cốt lõi dựng TẤT ĐỊNH từ vết — model chỉ viết phần tường thuật.
@@ -301,14 +308,17 @@ export async function summarizeHistoryDetailed(o: SummarizeOptions): Promise<Sum
       ts: Date.now(),
       content: headContent,
     },
-    {
+  ];
+  // Phần giữ lại mở đầu bằng tin người dùng → chèn câu "đã nắm" để vai trò xen kẽ; mở đầu bằng tin assistant (cắt giữa vòng công cụ) → không chèn.
+  if (session.messages[cut].role === 'user') {
+    head.push({
       role: 'assistant',
       synthetic: true,
       provider: o.provider.id,
       ts: Date.now(),
       content: [{ type: 'text', text: o.language === 'en' ? 'Understood. I have the summary and will continue from here.' : 'Đã nắm tóm tắt trên, tôi sẽ tiếp tục từ đây.' }],
-    },
-  ];
+    });
+  }
   session.messages = [...head, ...session.messages.slice(cut)];
   stripThinking(session);
   session.historyEdited = true;
@@ -372,11 +382,13 @@ export async function compactIfNeeded(
   // Bậc 2: tóm tắt — khi buộc, hoặc khi lược rồi mà vẫn chưa xuống dưới ngưỡng.
   const afterClear = estimateMessagesTokens(session.messages) + RESERVE;
   if (!o.force && afterClear < threshold) return done(0);
+  // Nén do người dùng gọi hoặc do tràn: vẫn giữ `keepRecentMessages` nhưng không quá nửa hội thoại, để /compact luôn làm được gì đó.
+  const keep = o.keepRecentMessages ?? tuning.keepRecentMessages;
+  const keepRecentMessages = o.force ? Math.min(keep, Math.max(2, Math.floor(session.messages.length / 2))) : keep;
+  // Chưa có mốc cắt hợp lệ (lần chạy còn ngắn) → đừng bật dòng "Đang nén" rồi không làm gì.
+  if (o.keepRecentUserTurns === undefined && cutIndexKeepingRecent(session.messages, keepRecentMessages) <= 1) return done(0);
   o.onStart?.();
   try {
-    // Nén do người dùng gọi hoặc do tràn: vẫn giữ `keepRecentMessages` nhưng không quá nửa hội thoại, để /compact luôn làm được gì đó.
-    const keep = o.keepRecentMessages ?? tuning.keepRecentMessages;
-    const keepRecentMessages = o.force ? Math.min(keep, Math.max(2, Math.floor(session.messages.length / 2))) : keep;
     const r = await summarizeHistoryDetailed({ ...o, keepRecentMessages, tuning, pinnedDocChars: o.pinnedDocChars ?? docCharBudget(o.contextWindow) });
     if (r.removed > 0 || pruned > 0) session.lastContextTokens = 0;
     return done(r.removed, r.removed > 0 ? r.summary : undefined);
