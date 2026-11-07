@@ -87,7 +87,7 @@ const LOCALES = {
     extDescription: {
       // GIỚI HẠN CỨNG của Chrome Web Store: ≤ 132 ký tự (đếm theo code point). Vượt là cả gói bị từ chối khi tải lên.
       // KHÔNG liệt kê tên thương hiệu (Claude, ChatGPT, Gemini…): lần nộp đầu bị từ chối mã «Yellow Argon» vì danh sách tên hãng trong mô tả. Xem docs/CHROME-STORE.md.
-      message: 'Trợ lý AI trong thanh bên: đọc trang, tra cứu web, soạn báo cáo. Dùng khoá API của bạn hoặc mô hình của Locaith.',
+      message: 'Trợ lý AI trong thanh bên: đọc trang, tra cứu web, soạn báo cáo. Dùng khoá API của chính bạn.',
     },
     actionTitle: { message: 'Mở Locaith AI' },
     cmdOpen: { message: 'Mở/đóng khung Locaith AI' },
@@ -98,7 +98,7 @@ const LOCALES = {
   en: {
     extName: { message: 'Locaith AI — Browser agent' },
     extDescription: {
-      message: 'Side-panel AI assistant: reads the page, searches the web, drafts reports. Use your own API key or Locaith models.',
+      message: 'Side-panel AI assistant: reads the page, searches the web, drafts reports. Use your own API key.',
     },
     actionTitle: { message: 'Open Locaith AI' },
     cmdOpen: { message: 'Open/close the Locaith AI panel' },

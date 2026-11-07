@@ -222,8 +222,8 @@ describe('manifest và gói build sản phẩm (nguyên tắc ít quyền nhất
     }
     const vi = JSON.parse(fs.readFileSync(path.join(dist, '_locales', 'vi', 'messages.json'), 'utf8'));
     const en = JSON.parse(fs.readFileSync(path.join(dist, '_locales', 'en', 'messages.json'), 'utf8'));
-    expect(vi.extDescription.message).toBe('Trợ lý AI trong thanh bên: đọc trang, tra cứu web, soạn báo cáo. Dùng khoá API của bạn hoặc mô hình của Locaith.');
-    expect(en.extDescription.message).toBe('Side-panel AI assistant: reads the page, searches the web, drafts reports. Use your own API key or Locaith models.');
+    expect(vi.extDescription.message).toBe('Trợ lý AI trong thanh bên: đọc trang, tra cứu web, soạn báo cáo. Dùng khoá API của chính bạn.');
+    expect(en.extDescription.message).toBe('Side-panel AI assistant: reads the page, searches the web, drafts reports. Use your own API key.');
   });
 
   it('bản phát hành không chứa móc kiểm thử, eval, thẻ script nội tuyến; runtime trang là tệp độc lập', () => {
