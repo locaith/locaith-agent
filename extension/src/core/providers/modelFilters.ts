@@ -15,6 +15,22 @@ export interface RawModel {
   name?: string;
   contextWindow?: number;
   maxOutputTokens?: number;
+  /** (lane:sessions-ux) Giá USD / 1 triệu token nếu API danh sách model trả về (OpenRouter: `pricing.prompt/completion` theo token). */
+  pricing?: { inputPerM: number; outputPerM: number };
+}
+
+/** (lane:sessions-ux) Đọc `pricing` kiểu OpenRouter (chuỗi USD mỗi token) → USD / 1 triệu token. Giá thiếu, âm, không phải số → bỏ (không đoán). */
+export function parseListPricing(raw: unknown): { inputPerM: number; outputPerM: number } | undefined {
+  if (!raw || typeof raw !== 'object') return undefined;
+  const o = raw as Record<string, unknown>;
+  const num = (v: unknown): number | undefined => {
+    const n = typeof v === 'number' ? v : typeof v === 'string' && v.trim() ? Number(v) : NaN;
+    return Number.isFinite(n) && n >= 0 && n < 1 ? n : undefined; // > 1 USD mỗi token = dữ liệu lạ (OpenRouter dùng -1 cho "giá thay đổi")
+  };
+  const i = num(o.prompt);
+  const out = num(o.completion);
+  if (i === undefined || out === undefined) return undefined;
+  return { inputPerM: Math.round(i * 1e6 * 1e4) / 1e4, outputPerM: Math.round(out * 1e6 * 1e4) / 1e4 };
 }
 
 function newestFirst(a: RawModel, b: RawModel): number {
@@ -26,6 +42,7 @@ function toInfo(m: RawModel): ModelInfo {
   if (m.createdAt) info.createdAt = m.createdAt;
   if (m.contextWindow) info.contextWindow = m.contextWindow;
   if (m.maxOutputTokens) info.maxOutputTokens = m.maxOutputTokens;
+  if (m.pricing) info.pricing = m.pricing; // (lane:sessions-ux)
   return info;
 }
 

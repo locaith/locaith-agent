@@ -9,8 +9,10 @@
 
 import type { ModelInfo, ThinkingLevel, Usage } from '../core/types';
 import type { DocKind } from './docKinds';
+import type { SessionMeterView, SessionSearchHit } from './sessionsUxTypes'; // (lane:sessions-ux)
 
 export type { DocKind, ModelInfo, ThinkingLevel, Usage };
+export type { SessionMeterView, SessionSearchHit }; // (lane:sessions-ux)
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Kiểu dữ liệu hiển thị
@@ -242,6 +244,8 @@ export interface NoticeItem {
   text: string;
   ts: number;
   compact?: CompactInfo;
+  /** (lane:sessions-ux) Dòng đầu nhánh: «Rẽ nhánh từ …» — bấm để mở cuộc gốc. Tuỳ chọn: bản cũ / Remote cũ chỉ thấy dòng chữ. */
+  fork?: { fromId: string; fromTitle: string };
 }
 
 export type TItem = UserItem | AssistantItem | NoticeItem;
@@ -361,6 +365,8 @@ export interface SessionSummary {
   /** Cuộc trò chuyện được tạo khi mở thư mục làm việc khác. */
   other?: boolean;
   workspaceName?: string;
+  /** (lane:sessions-ux) Đã ghim lên đầu danh sách lịch sử. */
+  pinned?: boolean;
 }
 
 /** Cuộc trò chuyện đã xoá, đang nằm trong Thùng rác (khôi phục được trong 30 ngày). */
@@ -813,6 +819,8 @@ export interface ViewState {
   // ── (lane:bg-tasks) ──
   // ── (lane:ide-context) ──
   // ── (lane:sessions-ux) ──
+  /** Đồng hồ ngữ cảnh + chi phí ở thanh tiêu đề (token vào/ra, số lần nén, ước tính chi phí). */
+  meter?: SessionMeterView;
   // ── (lane:customer-bugs) ──
   // ── (lane:gateway-client) ──
   // ── (lane:mcp-parity) ──
@@ -884,6 +892,8 @@ export type HostMessage =
   // ── (lane:bg-tasks) ──
   // ── (lane:ide-context) ──
   // ── (lane:sessions-ux) ──
+  /** Trả lời `search_sessions`: gửi dần theo lô (`done` = đã quét xong). `query` = đúng truy vấn đã hỏi (bỏ kết quả của truy vấn cũ). */
+  | { type: 'session_search'; reqId: number; query: string; hits: SessionSearchHit[]; done: boolean }
   // ── (lane:customer-bugs) ──
   // ── (lane:gateway-client) ──
   // ── (lane:mcp-parity) ──
@@ -1014,6 +1024,13 @@ export type WebviewMessage =
   // ── (lane:bg-tasks) ──
   // ── (lane:ide-context) ──
   // ── (lane:sessions-ux) ──
+  /** Rẽ nhánh cuộc đang mở thành cuộc mới, sau lượt của tin người dùng `itemId` (thiếu = từ cuối). */
+  | { type: 'fork_session'; itemId?: string }
+  /** Tìm toàn văn trong tiêu đề + nội dung mọi cuộc trò chuyện. Trả lời bằng `session_search`. */
+  | { type: 'search_sessions'; reqId: number; query: string }
+  | { type: 'pin_session'; id: string; pinned: boolean }
+  /** Xoá hàng loạt = chuyển cả nhóm vào Thùng rác. */
+  | { type: 'delete_sessions'; ids: string[] }
   // ── (lane:customer-bugs) ──
   // ── (lane:gateway-client) ──
   // ── (lane:mcp-parity) ──
