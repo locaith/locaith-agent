@@ -149,7 +149,7 @@ describe('bộ kiểm BẮT được từng lỗi của sự cố 0.6.27', () =>
     rejects(mutated((d) => edit(d, 'sidepanel.html', (s) => s.replace('<script src="store-consent.js"></script>\n<script src="panel.js"></script>', '<script src="panel.js"></script>\n<script src="store-consent.js"></script>'))), /TRƯỚC panel\.js/);
     rejects(mutated((d) => fs.rmSync(path.join(d, 'store-consent.js'))), /có store-consent\.js/);
     rejects(mutated((d) => fs.rmSync(path.join(d, 'store-consent-sw.js'))), /có store-consent-sw\.js/);
-    rejects(mutated((d) => edit(d, 'store-consent.js', (s) => s.replace(/const PRIVACY_URL = "[^"]*"/, "const PRIVACY_URL = '__PRIVACY_URL__'"))), /URL chính sách quyền riêng tư thật/);
+    rejects(mutated((d) => edit(d, 'store-consent.js', (s) => s.replace(/const PRIVACY_URL = '[^']*'/, "const PRIVACY_URL = '__PRIVACY_URL__'"))), /URL chính sách quyền riêng tư thật/);
     rejects(mutated((d) => edit(d, 'background.js', (s) => s.replace('store-consent-sw.js', 'khac.js'))), /dịch vụ nền nạp store-consent-sw\.js/);
     rejects(mutated((d) => edit(d, 'store-consent-sw.js', (s) => s.replace('nd.consent.v1', 'nd.consent.v2'))), /cùng khoá đồng ý/);
   });

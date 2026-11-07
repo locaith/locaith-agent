@@ -178,7 +178,7 @@ async function copyStatic() {
     const ui = await readFile(path.join(outdir, 'store-consent.js'), 'utf8');
     const slot = "'__PRIVACY_URL__'";
     if (ui.split(slot).length !== 2) throw new Error('store-consent.js (nguồn) cần đúng một chỗ chèn URL chính sách: ' + slot);
-    await writeFile(path.join(outdir, 'store-consent.js'), ui.replace(slot, () => JSON.stringify(PRIVACY_URL)));
+    await writeFile(path.join(outdir, 'store-consent.js'), ui.replace(slot, () => `'${PRIVACY_URL.replace(/['\\]/g, '')}'`));
   }
   // Font nhúng vào artifact (trang xem trước tự đọc và nhúng dạng data URI).
   await cp(at('media/fonts'), path.join(outdir, 'fonts'), { recursive: true });
