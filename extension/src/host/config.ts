@@ -41,6 +41,11 @@ const SECURE_KEYS = new Set([
   'remote.allowBypass',
   // Khoá của việc «đúng tài khoản là vào được»: một kho mã lạ không được tự bật/tắt hộ chủ máy.
   'remote.trustAccount',
+  // (lane:hooks) Hook là lệnh shell chạy với quyền người dùng: danh sách hook, công tắc, đọc .claude và biến môi trường cho đi qua chỉ từ cài đặt NGƯỜI DÙNG.
+  'hooks',
+  'hooksEnabled',
+  'hooksReadClaudeSettings',
+  'hooksPassEnv',
 ]);
 
 const UI_KEYS: Record<keyof UiSettings, string> = {

@@ -287,13 +287,13 @@ export interface CompactResult {
 
 /** Quyết định và thực hiện nén. `force` bỏ qua ngưỡng (lỗi context_length hoặc lệnh /compact). */
 export async function compactIfNeeded(
-  o: SummarizeOptions & { contextWindow: number; force?: boolean; onStart?: () => void },
+  o: SummarizeOptions & { contextWindow: number; force?: boolean; onStart?: () => void | Promise<void> },
 ): Promise<CompactResult> {
   const { session } = o;
   const at = Math.min(0.95, Math.max(0.5, o.compactAt ?? 0.8));
   const estimate = Math.max(session.lastContextTokens, estimateMessagesTokens(session.messages) + 3000);
   if (!o.force && estimate < o.contextWindow * at) return { pruned: 0, summarizedMessages: 0 };
-  o.onStart?.();
+  await o.onStart?.(); // (lane:hooks) onStart có thể bất đồng bộ (hook PreCompact)
 
   const pruned = pruneOldToolResults(session, o.force ? 3 : 6);
   const after = estimateMessagesTokens(session.messages) + 3000;

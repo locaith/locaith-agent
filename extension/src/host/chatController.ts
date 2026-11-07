@@ -3,6 +3,9 @@ import { AgentEngine, type QueuedMessage, type QueueState, type RunResult } from
 import { coreRunExtensions } from '../core/engine/extensions';
 import { hostRunExtensions } from './hostExtensions';
 import { SlashRegistry, type SlashContext } from './slashRegistry';
+import { hookServiceFor } from './hooks/hostHooks'; // (lane:hooks)
+import { registerHooksSlash } from './hooks/slash'; // (lane:hooks)
+import type { HookService } from '../core/hooks/service'; // (lane:hooks)
 import { loadProjectInstructions } from '../core/engine/instructions';
 import { resumeInstruction } from '../core/engine/resume';
 import { MEMORY_DIR, MEMORY_INDEX, type MemoryScope, type MemorySnapshot } from '../core/engine/memory';
@@ -283,7 +286,8 @@ export class ChatController implements vscode.Disposable {
     // registerVerifySlash(this.slash, this); // (lane:blind-verifier)  /verify
     // registerRewindSlash(this.slash, this); // (lane:checkpoints-rewind)  /rewind
     // registerPermissionsSlash(this.slash, this); // (lane:perm-rules)  /permissions
-    // registerHooksSlash(this.slash, this); // (lane:hooks)  /hooks
+    registerHooksSlash(this.slash, this); // (lane:hooks)  /hooks
+    this.hookService().setNotifier((level, text) => this.emit({ t: 'notice', level, text })); // (lane:hooks)
     // registerCommandsSlash(this.slash, this); // (lane:commands-agents)  lệnh tuỳ chỉnh + /review /simplify /status /doctor /agents /output-style /mcp
     // registerTasksSlash(this.slash, this); // (lane:bg-tasks)  /tasks
     // registerIdeSlash(this.slash, this); // (lane:ide-context)  /problems
@@ -1445,6 +1449,13 @@ export class ChatController implements vscode.Disposable {
         this.emit({ t: 'mode', mode: 'plan' });
         this.emit({ t: 'notice', level: 'warn', text: this.lang === 'vi' ? 'Workspace chưa được tin cậy: trợ lý chỉ được đọc, không sửa tệp hay chạy lệnh.' : 'Workspace is not trusted: the assistant is read-only.' });
       }
+      // (lane:hooks) SessionStart + UserPromptSubmit: hook có thể chặn tin nhắn (nội dung trả lại ô nhập) hoặc thêm ngữ cảnh cho model.
+      const hookGate = await this.hookService().beforeSend(text, abort.signal);
+      if (hookGate.blocked) {
+        this.emit({ t: 'notice', level: 'warn', text: t(this.lang, 'hookPromptBlocked', { reason: hookGate.reason ?? '' }) });
+        this.post({ type: 'draft', text: String(rawText ?? ''), attachments: attachments.filter((a) => a.kind !== 'image') });
+        return;
+      }
       const built = await buildUserContent({
         text,
         attachments,
@@ -1507,6 +1518,7 @@ export class ChatController implements vscode.Disposable {
       takeQueued: () => this.takeForEngine(),
       mcpInstructions: () => this.d.mcp.instructions(),
       onCompacted: (info) => this.saveCompactionToMemory(info.session, info.summary),
+      beforeCompact: (info) => this.hookService().preCompact(info.trigger, info.signal), // (lane:hooks)
       onQueue: (q) => this.setModelQueue(q),
       onConsentRequired: () => this.onConsentRequired(),
       onAccountInvalid: () => void this.d.account?.recheck?.(),
@@ -1574,6 +1586,7 @@ export class ChatController implements vscode.Disposable {
       return;
     }
     await this.saveNow();
+    void this.hookService().sessionEnd(this.session.id, 'clear'); // (lane:hooks)
     this.session = this.freshSession();
     this.seenArtifacts.clear();
     this.view = { ...this.baseView(), providers: this.view.providers, ...this.carryStrips(), ...(await this.listings()), screen: 'chat' };
@@ -1661,6 +1674,7 @@ export class ChatController implements vscode.Disposable {
       if (this.busy) return this.toast('info', this.lang === 'vi' ? 'Hãy dừng tác vụ đang chạy trước.' : 'Stop the running task first.');
       await this.saveNow(); // bản trong Thùng rác phải là bản mới nhất
       await this.d.store.moveToTrash(id);
+      void this.hookService().sessionEnd(this.session.id, 'delete'); // (lane:hooks)
       this.session = this.freshSession();
       this.view = { ...this.baseView(), providers: this.view.providers, ...this.carryStrips(), ...(await this.listings()), screen: 'history' };
       this.post({ type: 'init', state: this.view });
@@ -2326,7 +2340,13 @@ export class ChatController implements vscode.Disposable {
     return Promise.resolve(vscode.workspace.openTextDocument({ content: lines.join('\n'), language: 'markdown' }).then((d) => void vscode.window.showTextDocument(d, { preview: false })));
   }
 
+  /** (lane:hooks) Dịch vụ hook của cuộc trò chuyện này (dùng chung với extension chạy trong vòng lặp và lệnh /hooks). */
+  hookService(): HookService {
+    return hookServiceFor({ deps: this.d, host: this.host, session: () => this.session });
+  }
+
   dispose(): void {
+    void this.hookService().sessionEnd(this.session.id, 'close', 2000); // (lane:hooks)
     this.disposed = true;
     this.queue = [];
     this.detachMcp();

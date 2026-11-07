@@ -317,3 +317,43 @@ describe('hooks — hook DỰ ÁN trong engine thật', () => {
     expect(kit.confirms).toHaveLength(0);
   });
 });
+
+describe('hooks — PreCompact trong engine thật', () => {
+  const prep = (steps: Step[], out: string) => {
+    let svc!: HookService;
+    const h = makeHarness(steps, {
+      hostSettings: { 'terminal.shell': TEST_SHELL },
+      engineDeps: {
+        extensions: [...coreRunExtensions(), hooksRunExtension(() => svc)],
+        beforeCompact: (i) => svc.preCompact(i.trigger, i.signal),
+      },
+    });
+    svc = makeKit({ root: h.dir, userHooks: { PreCompact: [{ hooks: [{ type: 'command', command: recordStdin(out), name: 'luu-truoc-khi-nen' }] }] } }).service;
+    h.provider.completeImpl = async () => 'Tóm tắt: đã trao đổi vài câu.';
+    return h;
+  };
+  const fill = (h: Harness) => {
+    for (let i = 0; i < 4; i++) {
+      h.session.messages.push({ role: 'user', content: [{ type: 'text', text: `câu hỏi ${i}` }] });
+      h.session.messages.push({ role: 'assistant', content: [{ type: 'text', text: `trả lời ${i}` }] });
+    }
+  };
+
+  it('nén thủ công: hook PreCompact chạy ĐÚNG MỘT lần với trigger manual, trước khi nén', async () => {
+    const out = path.join(tmpRoot(), 'pre.txt');
+    const h = prep([() => textTurn('x')], out);
+    fill(h);
+    await h.engine.compactNow(h.session, new AbortController().signal);
+    const evs = fs.readFileSync(out, 'utf8').trim().split('\n').map((l) => JSON.parse(l));
+    expect(evs).toHaveLength(1);
+    expect(evs[0]).toMatchObject({ hook_event_name: 'PreCompact', trigger: 'manual' });
+  });
+
+  it('không nén thì KHÔNG có PreCompact (mỗi vòng chỉ kiểm ngưỡng)', async () => {
+    const out = path.join(tmpRoot(), 'pre.txt');
+    const h = prep([() => textTurn('a'), () => textTurn('b')], out);
+    await h.run('một');
+    await h.run('hai');
+    expect(fs.existsSync(out)).toBe(false);
+  });
+});

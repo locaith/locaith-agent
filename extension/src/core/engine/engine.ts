@@ -84,6 +84,8 @@ export interface EngineDeps {
   mcpInstructions?(): { server: string; text: string }[];
   /** Gọi sau khi một lần nén ngữ cảnh thành công, kèm bản tóm tắt (ví dụ để lưu vào bộ nhớ dài hạn). Lỗi của hook không làm hỏng lượt chạy. */
   onCompacted?(info: { session: SessionState; summary: string }): void | Promise<void>;
+  /** (lane:hooks) Ngay trước khi một lần nén ngữ cảnh THẬT SỰ bắt đầu (đã vượt ngưỡng / bị ép): hook PreCompact. Lỗi của hook không làm hỏng việc nén. */
+  beforeCompact?(info: { session: SessionState; trigger: 'auto' | 'manual' | 'overflow'; signal: AbortSignal }): void | Promise<void>;
   /**
    * Cổng Locaith đầy người dùng: có `state` = đang đứng trong hàng (vị trí, mốc thử lại để đếm ngược); `null` = đã được nhận / bị dừng / hết lượt.
    * Hiển thị ngay trong khung chat (không dùng thông báo hệ thống). Không khai báo (agent con, bản trình duyệt) = chỉ có dòng trạng thái trong lượt trả lời.
@@ -606,6 +608,7 @@ export class AgentEngine {
       contextWindow: this.d.settings.contextWindow,
       compactAt: this.d.settings.compactAt,
       force: true,
+      onStart: () => this.fireBeforeCompact(session, 'manual', signal),
     });
     // Người dùng chủ động bấm nén: nếu model tóm tắt lỗi (sai khoá, mất mạng…) phải nói thật, không báo "không có gì để nén".
     if (r.error && r.summarizedMessages === 0 && r.pruned === 0) throw new Error(`Không nén được hội thoại: ${r.error}`);
@@ -628,6 +631,17 @@ export class AgentEngine {
       .catch((err) => this.d.host.log('warn', `Hook sau khi nén ngữ cảnh lỗi: ${err instanceof Error ? err.message : String(err)}`));
   }
 
+  /** (lane:hooks) Gọi hook PreCompact; ngoại lệ chỉ ghi log. */
+  private async fireBeforeCompact(session: SessionState, trigger: 'auto' | 'manual' | 'overflow', signal: AbortSignal): Promise<void> {
+    const hook = this.d.beforeCompact;
+    if (!hook) return;
+    try {
+      await hook({ session, trigger, signal });
+    } catch (err) {
+      this.d.host.log('warn', `Hook PreCompact lỗi: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  }
+
   private async compact(session: SessionState, signal: AbortSignal, id: string, force: boolean): Promise<boolean> {
     if (!this.d.settings.autoCompact && !force) return false;
     const lang = this.d.settings.language;
@@ -641,8 +655,10 @@ export class AgentEngine {
       contextWindow: this.d.settings.contextWindow,
       compactAt: this.d.settings.compactAt,
       force,
-      onStart: () =>
-        this.d.emit({ t: 'pill', id, pillId: `${id}:compact`, text: t(lang, 'compacting'), kind: 'working' }),
+      onStart: () => {
+        this.d.emit({ t: 'pill', id, pillId: `${id}:compact`, text: t(lang, 'compacting'), kind: 'working' });
+        return this.fireBeforeCompact(session, force ? 'overflow' : 'auto', signal);
+      },
     });
     if (r.error) this.d.host.log('warn', `Nén ngữ cảnh: không tóm tắt được (${r.error})`);
     if (r.summarizedMessages > 0) this.fireCompacted(session);

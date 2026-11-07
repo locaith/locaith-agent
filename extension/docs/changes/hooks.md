@@ -1,0 +1,32 @@
+# Hooks — gắn lệnh shell của bạn vào vòng đời trợ lý
+
+- **Hooks kiểu Claude Code.** Bạn khai báo lệnh shell chạy ở các thời điểm: `SessionStart`, `UserPromptSubmit`, `PreToolUse`, `PostToolUse`, `Stop`, `PreCompact`, `SessionEnd`, `Notification`. Dùng để chặn lệnh nguy hiểm trước khi chạy, tự định dạng tệp sau khi sửa, ép chạy test trước khi cho trợ lý dừng, nạp thêm ngữ cảnh cho model…
+- **Cách khai báo.** Cài đặt người dùng `locaithAgent.hooks` (hook của bạn, luôn chạy) hoặc tệp `.locaith/settings.json` / `.locaith/settings.local.json` trong dự án (khối `"hooks"`):
+
+  ```json
+  { "hooks": { "PreToolUse": [ { "matcher": "run_command|edit_file", "hooks": [ { "type": "command", "command": "node .locaith/guard.js", "timeout": 60 } ] } ] } }
+  ```
+
+  `matcher` chỉ dùng cho `PreToolUse`/`PostToolUse` (và lọc phụ cho `Notification`, `PreCompact`, `SessionEnd`, `SessionStart`). Quy tắc: bỏ trống hoặc `*` = mọi công cụ; chỉ gồm chữ/số/`_`/`-` và `|` (vd `run_command|edit_file`) = so khớp tên chính xác; còn lại hoặc dạng `/mẫu/` = regex khớp toàn bộ tên (vd `mcp__.*`). Tên công cụ của Claude Code cũng khớp: Bash→`run_command`, Edit/MultiEdit→`edit_file`, Write→`write_file`, Read→`read_file`, Glob→`glob`, Grep→`grep`, LS→`list_dir`, WebFetch→`fetch_url`, WebSearch→`web_search`, Task→`agent`.
+- **Lệnh nhận gì, trả gì.** Lệnh chạy bằng shell của extension (cài đặt `locaithAgent.terminal.shell`), thư mục làm việc là gốc workspace, biến `LOCAITH_PROJECT_DIR`, và nhận JSON qua stdin (`session_id`, `cwd`, `hook_event_name`, `tool_name`, `tool_input`, `tool_response` cho PostToolUse, `prompt` cho UserPromptSubmit, `stop_hook_active` cho Stop…).
+  - Thoát mã **0** = ổn. stdout có thể là JSON `{"decision":"block"|"approve","reason":"…","additionalContext":"…","updatedInput":{…},"continue":false,"stopReason":"…"}` (nhận cả dạng `hookSpecificOutput` của Claude Code). Với `UserPromptSubmit`/`SessionStart`, chữ thường trên stdout được thêm làm ngữ cảnh cho model.
+  - Thoát mã **2** = **chặn**, stderr là phản hồi cho model: `PreToolUse` chặn công cụ (trước cả hộp xin quyền); `PostToolUse` thêm phản hồi vào kết quả công cụ; `UserPromptSubmit` chặn tin nhắn (nội dung quay lại ô nhập); `Stop` ép trợ lý làm tiếp (tối đa **8 lần** mỗi lượt, sau đó dừng và báo).
+  - Mã khác, quá hạn (mặc định 60 giây, tối đa 600) hoặc không chạy được = cảnh báo, **không** chặn. Các hook cùng sự kiện chạy song song; một hook chặn thì thắng (lời `approve`/`updatedInput` của hook khác bị bỏ).
+- **Hook không leo thang quyền.** `approve` chỉ là «không phản đối»: không bỏ qua hộp xin quyền, không vượt luật từ chối. Đối số do hook sửa (`updatedInput`) vẫn bị kiểm theo schema và xin quyền theo đối số cuối cùng.
+- **An toàn.** Hook trong dự án chỉ chạy khi workspace **đã tin cậy** và bạn **đã xác nhận**: hộp xác nhận hiện đầy đủ từng lệnh, ghi nhớ theo băm nội dung khối hooks (đổi lệnh thì hỏi lại; đổi phần khác của tệp thì không). Từ chối thì hook không chạy và trợ lý báo ngay trong chat; gõ `/hooks trust` để xem lại. Tiến trình hook **không** nhận khoá API hay biến môi trường lạ — chỉ biến hệ thống cần thiết (PATH, HOME…), biến khai ở `env` của hook, và tên bạn liệt kê ở `locaithAgent.hooksPassEnv`. Lệnh hook được ghi vào nhật ký đã che bí mật.
+- **Hiển thị.** Mỗi lần một sự kiện kích hoạt hook, khung chat có MỘT dòng gọn trong nhóm hoạt động: `Hook PreToolUse · tên ✓ 120 ms` (✗ khi lỗi/chặn/quá hạn). Cảnh báo không chặn hiện thành thông báo riêng. Dòng này cũng hiện ở Remote (locaith.ai).
+- **`/hooks`** liệt kê hook đang hiệu lực theo nguồn (cài đặt người dùng, `.locaith/settings*.json`, `.claude/settings*.json`) kèm kết quả lần chạy gần nhất. `/hooks open` mở (tạo nếu chưa có) `.locaith/settings.json`; `/hooks open user` mở cài đặt người dùng; `/hooks trust` xem lại và cho phép hook của dự án.
+- **Cài đặt mới** (đều chỉ đọc từ cài đặt người dùng, không bao giờ từ workspace):
+  - `locaithAgent.hooks` — danh sách hook của bạn (object như trên).
+  - `locaithAgent.hooksEnabled` — công tắc tổng, mặc định bật.
+  - `locaithAgent.hooksReadClaudeSettings` — mặc định tắt; bật thì đọc thêm `hooks` trong `.claude/settings.json` và `.claude/settings.local.json` của dự án (cùng quy tắc tin cậy + xác nhận; hook đó nhận tên công cụ theo kiểu Claude Code: `Bash`, `Edit` + `file_path`…).
+  - `locaithAgent.hooksPassEnv` — tên biến môi trường cho phép đi qua vào tiến trình hook.
+- **Giới hạn hiện tại.** Hook chỉ chạy trong extension VS Code (không chạy ở bản Chrome, CLI, hay trong agent con). Tin nhắn người dùng xếp hàng giữa chừng một lượt không kích hoạt `UserPromptSubmit`. `Notification` hiện báo khi có yêu cầu xin quyền (`notification_type: permission_prompt`).
+
+## English (short)
+
+- **Hooks, Claude Code style.** Run your own shell commands at `SessionStart`, `UserPromptSubmit`, `PreToolUse`, `PostToolUse`, `Stop`, `PreCompact`, `SessionEnd`, `Notification`. Configure in the user setting `locaithAgent.hooks` (always runs) or in the project's `.locaith/settings.json` / `.locaith/settings.local.json` (`"hooks"` block, same schema as Claude Code).
+- **Contract.** JSON on stdin; exit 0 = ok (optional JSON on stdout: `decision`, `reason`, `additionalContext`, `updatedInput`, `continue:false`); exit 2 = block (stderr goes to the model; `Stop` forces the assistant to continue, max 8 times per turn); any other code / timeout (60 s default) = non-blocking warning. Same-event hooks run in parallel, a block wins. `approve` never bypasses permission prompts or deny rules.
+- **Security.** Project hooks run only in a trusted workspace after you approve the exact commands (re-asked when they change). Hook processes get a minimal allow-listed environment — API keys are never passed (extra names via `locaithAgent.hooksPassEnv`). Setting `locaithAgent.hooksReadClaudeSettings` (off by default) also reads `.claude/settings*.json`, mapping Claude tool names (Bash→run_command, Edit→edit_file…).
+- **UI.** One compact line per hook run in the timeline (`Hook PreToolUse · name ✓ 120 ms`), also on Remote. `/hooks` lists active hooks with the last result; `/hooks open`, `/hooks open user`, `/hooks trust`.
+- **Not yet.** Hooks do not run in the Chrome extension, the CLI, or sub-agents; messages queued mid-turn do not fire `UserPromptSubmit`.

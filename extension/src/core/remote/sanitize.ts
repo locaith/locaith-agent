@@ -130,6 +130,9 @@ export function sanitizeAttachment(a: AttachmentInfo): AttachmentInfo {
   };
 }
 
+/** (lane:hooks) Dòng trạng thái gộp (vd. «Hook PreToolUse · a ✓ 12 ms · b ✗ 40 ms»). */
+const PILL_CAP = 400;
+
 function sanitizeBlock(b: ABlock): ABlock {
   switch (b.type) {
     case 'tool':
@@ -138,6 +141,8 @@ function sanitizeBlock(b: ABlock): ABlock {
       return b.text.length > THINK_CAP ? { ...b, text: capTail(b.text, THINK_CAP) } : b;
     case 'notice':
       return b.compact ? { ...b, compact: sanitizeCompact(b.compact) } : b;
+    case 'pill': // (lane:hooks) dòng «Hook …» gộp nhiều hook: cắt độ dài
+      return b.text.length > PILL_CAP ? { ...b, text: b.text.slice(0, PILL_CAP) } : b;
     default:
       return b;
   }
@@ -229,6 +234,8 @@ export function sanitizeEvent(ev: UiEvent): UiEvent {
       return { ...ev, request: sanitizePermission(ev.request) };
     case 'notice':
       return ev.compact ? { ...ev, compact: sanitizeCompact(ev.compact) } : ev;
+    case 'pill': // (lane:hooks)
+      return ev.text.length > PILL_CAP ? { ...ev, text: ev.text.slice(0, PILL_CAP) } : ev;
     case 'tool_end': {
       const { images, ...rest } = ev;
       return {

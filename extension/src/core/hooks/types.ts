@@ -15,7 +15,7 @@ export const HOOK_MAX_OUTPUT_CHARS = 64_000;
 
 /** Một lệnh hook như người dùng khai báo. */
 export interface HookCommandDef {
-  type: 'command';
+  type?: 'command';
   command: string;
   /** Giây; mặc định 60, tối đa 600. */
   timeout?: number;

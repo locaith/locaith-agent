@@ -69,7 +69,15 @@ export class VsCodeToolHost extends NodeToolHost {
     return this.deps.secrets.get(name);
   }
 
+  /** (lane:hooks) Được gọi khi một yêu cầu xin quyền hiện ra: hook Notification. Lỗi của người nghe không ảnh hưởng việc xin quyền. */
+  permissionListener?: (req: PermissionRequest) => void;
+
   override requestPermission(req: PermissionRequest, signal: AbortSignal): Promise<PermissionDecision> {
+    try {
+      this.permissionListener?.(req);
+    } catch {
+      /* không chặn việc xin quyền */
+    }
     return this.deps.askPermission(req, signal);
   }
 

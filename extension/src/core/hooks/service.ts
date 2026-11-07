@@ -67,6 +67,12 @@ export class HookService {
     return value;
   }
 
+  /** `/hooks trust`: hỏi lại các nguồn dự án đã bị từ chối và nạp lại. */
+  reviewProjectHooks(): void {
+    this.d.sources.reviewAgain();
+    this.invalidate();
+  }
+
   /** Dùng khi cấu hình/tin cậy vừa đổi (`/hooks trust`). */
   invalidate(): void {
     this.cache = null;
@@ -123,6 +129,12 @@ export class HookService {
     this.notifier = fn;
   }
 
+  /** Hiện một thông báo cho người dùng: trong lượt trả lời nếu đang chạy, không thì qua notifier của host. */
+  notify(level: 'info' | 'warn' | 'error', text: string): void {
+    if (this.sink) this.sink.notice(level, text);
+    else this.notifier?.(level, text);
+  }
+
   /** Extension gắn vào lần chạy hiện tại để kết quả hook hiện đúng trong lượt trả lời. */
   bindRun(sink: HookRunSink | null): void {
     this.sink = sink;
@@ -142,7 +154,7 @@ export class HookService {
       const id = this.sink.assistantId();
       this.sink.emit({ t: 'pill', id, pillId: `${id}:hook:${++this.pillSeq}`, text: t(lang, 'hookPill', { event, items: items.join(' · ') }), kind: 'working' });
     }
-    const say = (level: 'info' | 'warn' | 'error', text: string) => (this.sink ? this.sink.notice(level, text) : this.notifier?.(level, text));
+    const say = (level: 'info' | 'warn' | 'error', text: string) => this.notify(level, text);
     for (const w of outcome.warnings) say('warn', t(lang, 'hookWarn', { event, text: w }));
     if (outcome.stop) say('warn', t(lang, 'hookStopped', { event, reason: outcome.stopReason ? `: ${outcome.stopReason}` : '' }));
   }
