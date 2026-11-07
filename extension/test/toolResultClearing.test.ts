@@ -224,7 +224,12 @@ describe('bất biến cặp tool_use ↔ tool_result trên lịch sử ngẫu n
       });
       if (r.cleared > 0) {
         expect(s.historyEdited).toBe(true);
-        expect(s.messages.some((m) => m.content.some((b) => b.type === 'thinking'))).toBe(false);
+        // suy luận bị xoá hết, TRỪ khối của tin assistant đang chờ kết quả (giữa vòng công cụ) — chữ ký của nó còn cần cho lượt gọi kế
+        const lastMsg = s.messages[s.messages.length - 1];
+        const pendingIdx = lastMsg.role === 'user' && lastMsg.content.some((b) => b.type === 'tool_result') ? s.messages.length - 2 : -1;
+        s.messages.forEach((m, k) => {
+          if (k !== pendingIdx) expect(m.content.some((b) => b.type === 'thinking')).toBe(false);
+        });
         // lỗi vẫn là lỗi
         allResults(s.messages).forEach((b, k) => expect(!!b.isError).toBe(!!allResults(msgs)[k].isError));
         const snap = JSON.stringify(s.messages);

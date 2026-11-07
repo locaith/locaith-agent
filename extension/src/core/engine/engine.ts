@@ -373,7 +373,7 @@ export class AgentEngine {
         const boundToPrefix = !!this.d.provider.capabilities.thinkingBoundToPrefix;
         const prefixChanged = boundToPrefix && !!session.promptFingerprint && session.promptFingerprint !== fingerprint;
         if (prefixChanged && atBoundary) session.historyEdited = true;
-        if (session.historyEdited) stripThinking(session);
+        if (session.historyEdited) stripThinking(session, !atBoundary); // (lane:ctx-compaction) giữa vòng công cụ vẫn giữ suy luận của tin assistant đang chờ kết quả
 
         // Id công cụ của một số máy chủ tương thích (`call_0`, `call_1`…) lặp lại giữa các lượt → đổi tên để mỗi lệnh gọi là duy nhất.
         const idMap = new Map<string, string>();

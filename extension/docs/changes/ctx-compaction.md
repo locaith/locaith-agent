@@ -20,3 +20,13 @@ Cài đặt mới (mặc định an toàn, chèn ngay sau `compactAtPercent`): `
 - **Absolute cap** for huge windows: models above 400k compact at 300k tokens unless you set `compactAtPercent` yourself; `agent.compactAtTokens` sets your own cap (0 = auto).
 - **`/compact <instructions>`** feeds your focus into the summarizer prompt.
 - The compaction notice carries real numbers: "Compacted chat · auto · 968k tokens freed" (+ summarized messages, cleared results, summary excerpt) and reaches Remote/Chrome through an optional field of the existing notice. `ViewState.context` gains `percent`, `clearedResults`, `compactions` for the context meter.
+
+## Sửa sau kiểm chứng
+- Nén lần 2 trở đi vẫn giữ danh sách «Đã đọc / Đã sửa/tạo / Đã chạy» của các đoạn đã nén trước đó (không chỉ yêu cầu nguyên văn).
+- Phần «Yêu cầu nguyên văn» có trần theo cửa sổ ngữ cảnh (10%): yêu cầu đầu tiên và các yêu cầu mới nhất giữ nguyên văn, đoạn giữa rút còn 200 ký tự.
+- `clearToolResultsAtPercent = 0` thật sự tắt việc lược, kể cả khi `/compact` hoặc nén tự động.
+- Số «giải phóng N token» dùng một thước đo ước lượng cho cả trước lẫn sau.
+- Giữa vòng công cụ: giữ khối suy luận của bước đang chờ kết quả; nhà cung cấp Anthropic hoãn việc lược tới ranh giới lượt.
+- Bản Chrome/Edge: thanh đo ngữ cảnh có đủ số liệu lược/nén, `/compact <giữ lại gì>`, cập nhật sau khi nén. Bộ đếm lược/nén sống sót qua lưu/mở lại phiên.
+
+Fixes after verification (EN): carry-forward of read/edited/ran lists across compactions, window-relative cap on verbatim requests, `clearToolResultsAtPercent=0` truly disables clearing, single-measure `tokensFreed`, pending thinking preserved mid tool loop, browser parity, persisted context counters.

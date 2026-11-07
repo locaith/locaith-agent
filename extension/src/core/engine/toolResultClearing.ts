@@ -22,7 +22,8 @@ import type { Lang } from './strings';
 import type { SessionState } from './types';
 
 /** Dấu mở đầu của một kết quả đã lược (vi/en) — dùng để nhận ra và không lược lại. */
-const CLEARED_RE = /^\[(?:đã lược|cleared) — /u;
+/** Gồm cả định dạng CŨ của pruneOldToolResults (phiên lưu từ bản trước) để không lược lại và không đếm lại. */
+const CLEARED_RE = /^\[(?:đã lược — |cleared — |Kết quả cũ của )/u;
 
 export const isClearedResult = (b: ToolResultBlock): boolean => CLEARED_RE.test(b.content);
 
@@ -133,7 +134,8 @@ export function clearOldToolResults(session: SessionState, o: ClearOptions): Cle
   const reserve = o.reserveTokens ?? 3000;
   const before = estimateMessagesTokens(session.messages) + reserve;
   const none = { cleared: 0, tokensBefore: before, tokensAfter: before };
-  if (o.clearAtPercent <= 0 && !o.force) return none;
+  // 0 = TẮT, kể cả khi buộc (/compact, tràn ngữ cảnh): người dùng đã tắt thì không lược; bước tóm tắt vẫn chạy bình thường.
+  if (o.clearAtPercent <= 0) return none;
   const start = (o.contextWindow * o.clearAtPercent) / 100;
   if (!o.force && before < start) return none;
   const target = (o.contextWindow * Math.max(0, Math.min(o.targetPercent, o.clearAtPercent || o.targetPercent))) / 100;
@@ -150,7 +152,10 @@ export function clearOldToolResults(session: SessionState, o: ClearOptions): Cle
     cleared++;
   }
   if (cleared === 0) return none;
-  stripThinking(session);
+  // Giữa vòng công cụ (tin cuối chứa tool_result): khối suy luận có chữ ký của tin assistant đang chờ kết quả phải còn nguyên trong lịch sử đã lưu. Ở ranh giới lượt: xoá hết như cũ.
+  const last = session.messages[session.messages.length - 1];
+  const midToolLoop = !!last && last.role === 'user' && last.content.some((b) => b.type === 'tool_result');
+  stripThinking(session, midToolLoop);
   session.historyEdited = true;
   session.lastContextTokens = 0;
   const stats = (session.contextStats ??= { clearedResults: 0, compactions: 0 });

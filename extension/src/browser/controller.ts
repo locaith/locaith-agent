@@ -83,7 +83,7 @@ const SLASH: Record<Lang, SlashCommandInfo[]> = {
   vi: [
     { name: 'new', description: 'Bắt đầu cuộc trò chuyện mới' },
     { name: 'clear', description: 'Xoá và bắt đầu lại (giống /new)' },
-    { name: 'compact', description: 'Nén tin nhắn cũ để giải phóng ngữ cảnh' },
+    { name: 'compact', description: 'Nén tin nhắn cũ để giải phóng ngữ cảnh — /compact <giữ lại gì> (tuỳ chọn)' },
     { name: 'model', description: 'Đổi model — /model <tên>' },
     { name: 'mode', description: 'Đổi chế độ quyền — /mode plan' },
     { name: 'thinking', description: 'Đổi mức suy luận — /thinking high' },
@@ -95,7 +95,7 @@ const SLASH: Record<Lang, SlashCommandInfo[]> = {
   en: [
     { name: 'new', description: 'Start a new conversation' },
     { name: 'clear', description: 'Clear and start over (same as /new)' },
-    { name: 'compact', description: 'Compact old messages to free up context' },
+    { name: 'compact', description: 'Compact old messages to free up context — /compact <what to keep> (optional)' },
     { name: 'model', description: 'Change model — /model <name>' },
     { name: 'mode', description: 'Change permission mode — /mode plan' },
     { name: 'thinking', description: 'Change reasoning level — /thinking high' },
@@ -294,7 +294,17 @@ export class BrowserController {
   }
 
   private contextInfo(): ViewState['context'] {
-    return { usedTokens: this.session.lastContextTokens, limitTokens: this.d.providers.contextWindow(this.session.provider, this.session.model) };
+    const usedTokens = this.session.lastContextTokens;
+    const limitTokens = this.d.providers.contextWindow(this.session.provider, this.session.model);
+    // (lane:ctx-compaction) số liệu giữ ngữ cảnh gọn cho thanh đo — đồng bộ với chatController.contextInfo()
+    const stats = this.session.contextStats;
+    return {
+      usedTokens,
+      limitTokens,
+      percent: limitTokens > 0 ? Math.round((usedTokens / limitTokens) * 100) : 0,
+      clearedResults: stats?.clearedResults ?? 0,
+      compactions: stats?.compactions ?? 0,
+    };
   }
 
   private browserState(tabs: TabsInfo = { tab: this.view?.browser?.tab ?? null, viewing: this.view?.browser?.viewing ?? null }, siteAccess = this.view?.browser?.siteAccess ?? false): BrowserViewState {
@@ -1375,6 +1385,7 @@ export class BrowserController {
     } finally {
       this.abort = null;
       this.setRunning(false);
+      this.patch({ context: this.contextInfo() }); // (lane:ctx-compaction) số đo ngữ cảnh mới sau khi nén
     }
   }
 

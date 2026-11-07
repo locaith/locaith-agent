@@ -28,6 +28,16 @@ const SUMMARY_TAG = '<tom_tat_hoi_thoai_truoc_do>';
 const isObj = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v);
 const text = (v: unknown, max = 4000): string | undefined => (typeof v === 'string' ? v.slice(0, max) : undefined);
 const num = (v: unknown): number | undefined => (typeof v === 'number' && Number.isFinite(v) ? v : undefined);
+
+/** (lane:ctx-compaction) `contextStats` hợp lệ (hai số nguyên không âm) hoặc không có gì. */
+export function contextStatsOf(v: unknown): { contextStats?: { clearedResults: number; compactions: number } } {
+  if (!v || typeof v !== 'object') return {};
+  const o = v as { clearedResults?: unknown; compactions?: unknown };
+  const c = num(o.clearedResults);
+  const n = num(o.compactions);
+  if (c === undefined && n === undefined) return {};
+  return { contextStats: { clearedResults: Math.max(0, Math.floor(c ?? 0)), compactions: Math.max(0, Math.floor(n ?? 0)) } };
+}
 const strList = (v: unknown, maxItems = 200, maxLen = 200): string[] =>
   Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string' && x.length > 0).slice(0, maxItems).map((x) => x.slice(0, maxLen)) : [];
 const strRecord = (v: unknown, maxItems = 500, maxLen = 2_000_000): Record<string, string> => {
@@ -190,6 +200,7 @@ export function migrateSession(raw: unknown, o: MigrateOptions = {}): MigrateRes
     artifacts: sanitizeArtifacts(raw.artifacts),
     historyEdited: raw.historyEdited === true,
     lastContextTokens: num(raw.lastContextTokens) ?? 0,
+    ...contextStatsOf(raw.contextStats), // (lane:ctx-compaction) bộ đếm lược/nén của thanh đo ngữ cảnh
     usageTotals: {
       input: num((raw.usageTotals as { input?: unknown } | undefined)?.input) ?? 0,
       output: num((raw.usageTotals as { output?: unknown } | undefined)?.output) ?? 0,

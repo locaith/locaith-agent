@@ -72,21 +72,66 @@ function cleanRequest(text: string, lang: Lang): string {
   return t.replace(/»/g, '"');
 }
 
-/** Yêu cầu gốc nằm trong bản tóm tắt của lần nén TRƯỚC (tin tổng hợp synthetic) — mang đi tiếp để không bao giờ mất. */
-export function carriedRequests(messages: readonly ChatMessage[]): string[] {
-  const out: string[] = [];
+/** Phần thân của MỘT mục («## …») trong bản tóm tắt cũ: từ tiêu đề tới tiêu đề kế. */
+function sectionBody(body: string, headings: readonly string[]): string | null {
+  const start = Math.max(...headings.map((h) => body.indexOf(h)));
+  if (start < 0) return null;
+  const rest = body.slice(start);
+  const next = rest.slice(1).search(/^## /m);
+  return next >= 0 ? rest.slice(0, next + 1) : rest;
+}
+
+const bulletsOf = (section: string | null): string[] =>
+  section ? section.split(/\r?\n/).slice(1).filter((l) => l.startsWith('- ')).map((l) => l.slice(2).trim()).filter(Boolean) : [];
+
+/**
+ * Dữ kiện nằm trong bản tóm tắt của lần nén TRƯỚC (tin tổng hợp synthetic) — mang đi tiếp để không bao giờ mất:
+ * yêu cầu nguyên văn VÀ ba mục tất định (đã đọc / đã sửa / đã chạy). Phần tường thuật (quyết định, việc còn lại) do model viết lại mỗi lần.
+ */
+export function carriedFacts(messages: readonly ChatMessage[]): SummaryFacts {
+  const out: SummaryFacts = { requests: [], reads: [], edits: [], runs: [] };
   for (const m of messages) {
     if (m.role !== 'user' || !m.synthetic) continue;
     for (const b of m.content) {
       if (b.type !== 'text' || !b.text.includes('<tom_tat_hoi_thoai_truoc_do>')) continue;
       const body = /<tom_tat_hoi_thoai_truoc_do>\n?([\s\S]*?)<\/tom_tat_hoi_thoai_truoc_do>/.exec(b.text)?.[1] ?? '';
-      const start = Math.max(body.indexOf(H.vi.requests), body.indexOf(H.en.requests));
-      if (start < 0) continue;
-      const rest = body.slice(start);
-      const next = rest.slice(1).search(/^## /m);
-      const section = next >= 0 ? rest.slice(0, next + 1) : rest;
-      for (const mm of section.matchAll(REQUEST_ITEM_RE)) out.push(mm[1].trim());
+      const req = sectionBody(body, [H.vi.requests, H.en.requests]);
+      if (req) for (const mm of req.matchAll(REQUEST_ITEM_RE)) out.requests.push(mm[1].trim());
+      out.reads.push(...bulletsOf(sectionBody(body, [H.vi.reads, H.en.reads])));
+      out.edits.push(...bulletsOf(sectionBody(body, [H.vi.edits, H.en.edits])));
+      out.runs.push(...bulletsOf(sectionBody(body, [H.vi.runs, H.en.runs])));
     }
+  }
+  return out;
+}
+
+/** Chỉ phần yêu cầu của `carriedFacts` (giữ tên cũ cho test/nơi gọi khác). */
+export const carriedRequests = (messages: readonly ChatMessage[]): string[] => carriedFacts(messages).requests;
+
+/** Trần phần «Yêu cầu nguyên văn» theo cửa sổ ngữ cảnh: 10% cửa sổ (≈3,5 ký tự/token). Không biết cửa sổ → chỉ các trần tuyệt đối. */
+export function requestBudgetChars(contextWindow: number | undefined): number | undefined {
+  return contextWindow && contextWindow > 0 ? Math.max(8_000, Math.floor(contextWindow * 0.1 * 3.5)) : undefined;
+}
+
+const REQUEST_HEAD = 200;
+const REQUEST_SHRUNK = ' [… rút gọn]';
+
+/**
+ * Cho danh sách yêu cầu (cũ → mới) vừa ngân sách: yêu cầu ĐẦU TIÊN (nguồn gốc cuộc trò chuyện) và các yêu cầu MỚI nhất giữ nguyên văn tới hết ngân sách;
+ * những yêu cầu cũ ở giữa bị rút còn 200 ký tự đầu. Lặp lại qua nhiều lần nén thì tổng không bao giờ phình thêm (mục đã rút không bị rút tiếp).
+ */
+export function fitRequests(requests: readonly string[], budgetChars: number): string[] {
+  const shrink = (r: string): string => (r.endsWith(REQUEST_SHRUNK) || r.length <= REQUEST_HEAD ? r : `${sliceSafe(r, 0, REQUEST_HEAD)}${REQUEST_SHRUNK}`);
+  const out = requests.map(shrink);
+  let left = budgetChars - out.reduce((n, r) => n + r.length, 0);
+  // Trả lại nguyên văn: mục đầu trước, rồi từ mới → cũ, mỗi mục chỉ khi còn đủ ngân sách. Mục đã mang dấu «rút gọn» (từ lần nén trước) không bao giờ được phục hồi.
+  const order = requests.map((_, i) => i).sort((x, y) => (x === 0 ? -1 : y === 0 ? 1 : y - x));
+  for (const i of order) {
+    if (requests[i].endsWith(REQUEST_SHRUNK)) continue;
+    const extra = requests[i].length - out[i].length;
+    if (extra <= 0 || extra > left) continue;
+    out[i] = requests[i];
+    left -= extra;
   }
   return out;
 }
@@ -96,8 +141,9 @@ function isRealUserText(m: ChatMessage): boolean {
 }
 
 /** Dựng dữ kiện tất định từ đoạn hội thoại bị nén. Thuần tuý. */
-export function extractFacts(old: readonly ChatMessage[], lang: Lang): SummaryFacts {
-  const requests = [...carriedRequests(old)];
+export function extractFacts(old: readonly ChatMessage[], lang: Lang, requestBudget?: number): SummaryFacts {
+  const carried = carriedFacts(old);
+  const requests = [...carried.requests];
   for (const m of old) {
     if (!isRealUserText(m)) continue;
     const text = m.content
@@ -111,9 +157,10 @@ export function extractFacts(old: readonly ChatMessage[], lang: Lang): SummaryFa
   const results = new Map<string, ToolResultBlock>();
   for (const m of old) if (m.role === 'user') for (const b of m.content) if (b.type === 'tool_result') results.set(b.toolUseId, b);
 
-  const reads: string[] = [];
+  const reads: string[] = [...carried.reads];
   const edits = new Map<string, string>();
-  const runs: string[] = [];
+  for (const e of carried.edits) edits.set(e.split(' — ')[0], e);
+  const runs: string[] = [...carried.runs];
   const en = lang === 'en';
   for (const m of old) {
     if (m.role !== 'assistant') continue;
@@ -143,7 +190,7 @@ export function extractFacts(old: readonly ChatMessage[], lang: Lang): SummaryFa
     }
   }
   return {
-    requests: requests.slice(-REQUEST_MAX),
+    requests: requestBudget ? fitRequests(requests.slice(-REQUEST_MAX), requestBudget) : requests.slice(-REQUEST_MAX),
     reads: reads.slice(-LIST_MAX),
     edits: [...edits.values()].slice(-LIST_MAX),
     runs: runs.slice(-LIST_MAX),

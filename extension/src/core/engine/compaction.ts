@@ -3,14 +3,15 @@
  *
  * LƯU Ý Anthropic "preserved thinking": khối suy luận chỉ hợp lệ khi phần lịch sử phía trước nó không bị sửa.
  * Vì vậy mọi lần nén đều (1) xoá hết khối suy luận trong lịch sử đã lưu, (2) bật cờ `historyEdited`
- * để adapter không gửi lại chúng. Việc nén chỉ diễn ra giữa các lượt gọi, không bao giờ giữa chừng một chuỗi tool_use.
+ * để adapter không gửi lại chúng. Tóm tắt toàn bộ chỉ chạy khi gần đầy (≥ ngưỡng nén) hoặc bị buộc; bước LƯỢC kết quả (sớm hơn nhiều) giữa vòng công cụ
+ * thì giữ khối suy luận của tin assistant đang chờ kết quả, và với nhà cung cấp ràng buộc suy luận vào tiền tố (Anthropic) thì hoãn tới ranh giới lượt.
  */
 
 import { docCharBudget } from '../../shared/docKinds';
 import type { CompactInfo } from '../../shared/protocol';
 import type { ChatMessage, ContentBlock, LLMProvider } from '../types';
 import { sliceSafe } from '../textSafe';
-import { assembleSummary, extractFacts, narrativePrompt } from './compactSummary';
+import { assembleSummary, extractFacts, narrativePrompt, requestBudgetChars } from './compactSummary';
 import { DEFAULT_COMPACT_TUNING, effectiveCompactThreshold, formatTokens, type CompactTuning } from './compactTuning';
 import { estimateMessagesTokens } from './tokens';
 import { clearOldToolResults } from './toolResultClearing';
@@ -21,9 +22,13 @@ function isRealUserTurn(m: ChatMessage): boolean {
   return m.role === 'user' && !m.synthetic && m.content.some((b) => b.type === 'text' || b.type === 'image');
 }
 
-export function stripThinking(session: SessionState): void {
-  for (const m of session.messages) {
-    if (m.role !== 'assistant') continue;
+/** `keepPending`: giữ khối suy luận của tin assistant ĐANG CHỜ kết quả công cụ (tin cuối là tool_result) — chữ ký của nó còn cần cho lượt gọi kế. */
+export function stripThinking(session: SessionState, keepPending = false): void {
+  const lastIdx = session.messages.length - 1;
+  const pendingIdx = keepPending && lastIdx >= 1 && session.messages[lastIdx].role === 'user' && session.messages[lastIdx].content.some((b) => b.type === 'tool_result') ? lastIdx - 1 : -1;
+  for (let i = 0; i < session.messages.length; i++) {
+    const m = session.messages[i];
+    if (m.role !== 'assistant' || i === pendingIdx) continue;
     if (m.content.some((b) => b.type === 'thinking')) m.content = m.content.filter((b) => b.type !== 'thinking');
   }
 }
@@ -227,6 +232,8 @@ export interface SummarizeOptions {
   instructions?: string;
   /** Tham số giữ ngữ cảnh gọn (xem compactTuning.ts). */
   tuning?: CompactTuning;
+  /** Cửa sổ ngữ cảnh của model: đặt trần cho phần «Yêu cầu nguyên văn» mang theo qua các lần nén (xem requestBudgetChars). */
+  contextWindow?: number;
 }
 
 /**
@@ -238,7 +245,7 @@ export interface SummarizeOptions {
  * Trả về 0 nếu không có mốc hợp lệ > 1.
  */
 export function cutIndexKeepingRecent(messages: readonly ChatMessage[], keep: number): number {
-  let cut = messages.length - Math.max(0, keep);
+  let cut = Math.min(messages.length - 1, messages.length - Math.max(0, keep));
   for (; cut > 1; cut--) {
     const m = messages[cut];
     if (m.role === 'user' && !m.content.some((b) => b.type === 'tool_result')) return cut;
@@ -286,7 +293,7 @@ export async function summarizeHistoryDetailed(o: SummarizeOptions): Promise<Sum
   const { kept, dropped } = pickPinnedDocs(collectDocBlocks(old), o.pinnedDocChars ?? 240_000);
   const pinned = new Set(kept.map((d) => d.id));
   // Dữ kiện cốt lõi dựng TẤT ĐỊNH từ vết — model chỉ viết phần tường thuật.
-  const facts = extractFacts(old, o.language);
+  const facts = extractFacts(old, o.language, requestBudgetChars(o.contextWindow));
   const narrative = await o.provider.complete({
     model: o.model,
     system: narrativePrompt(o.language, o.instructions),
@@ -358,12 +365,17 @@ export async function compactIfNeeded(
   const tuning = o.tuning ?? DEFAULT_COMPACT_TUNING;
   const mode: CompactInfo['mode'] = o.mode ?? (o.force ? 'manual' : 'auto');
   const estimated = estimateMessagesTokens(session.messages) + RESERVE;
+  // Quyết định ngưỡng dùng số token THẬT của lần gọi gần nhất (gồm system + công cụ); còn số «giải phóng» chỉ dùng MỘT thước đo (ước lượng tin nhắn) cho cả trước lẫn sau.
   const before = Math.max(session.lastContextTokens, estimated);
   const threshold = effectiveCompactThreshold(o.contextWindow, o.compactAt, tuning);
   const needCompact = !!o.force || before >= threshold;
 
   // Bậc 1: lược kết quả cũ. Sắp nén toàn bộ thì lược mạnh trước (force), còn không thì chỉ khi vượt ngưỡng lược.
-  const cleared = clearOldToolResults(session, {
+  // Nhà cung cấp ràng buộc suy luận vào tiền tố (Anthropic): lược giữa vòng công cụ sẽ phá chữ ký → chỉ lược ở ranh giới lượt, trừ khi sắp tràn (needCompact).
+  const lastMsg = session.messages[session.messages.length - 1];
+  const midToolLoop = !!lastMsg && lastMsg.role === 'user' && lastMsg.content.some((b) => b.type === 'tool_result');
+  const deferClear = !needCompact && midToolLoop && !!o.provider.capabilities?.thinkingBoundToPrefix;
+  const cleared = deferClear ? { cleared: 0, tokensBefore: estimated, tokensAfter: estimated } : clearOldToolResults(session, {
     contextWindow: o.contextWindow,
     clearAtPercent: tuning.clearAtPercent,
     targetPercent: tuning.clearTargetPercent,
@@ -375,7 +387,7 @@ export async function compactIfNeeded(
   const pruned = cleared.cleared;
   const done = (summarizedMessages: number, summary?: string, error?: string): CompactResult => {
     const tokensAfter = estimateMessagesTokens(session.messages) + RESERVE;
-    return { pruned, summarizedMessages, error, mode, tokensBefore: before, tokensAfter, tokensFreed: Math.max(0, before - tokensAfter), summary };
+    return { pruned, summarizedMessages, error, mode, tokensBefore: estimated, tokensAfter, tokensFreed: Math.max(0, estimated - tokensAfter), summary };
   };
   if (!needCompact) return done(0);
 
@@ -389,7 +401,7 @@ export async function compactIfNeeded(
   if (o.keepRecentUserTurns === undefined && cutIndexKeepingRecent(session.messages, keepRecentMessages) <= 1) return done(0);
   o.onStart?.();
   try {
-    const r = await summarizeHistoryDetailed({ ...o, keepRecentMessages, tuning, pinnedDocChars: o.pinnedDocChars ?? docCharBudget(o.contextWindow) });
+    const r = await summarizeHistoryDetailed({ ...o, keepRecentMessages, tuning, contextWindow: o.contextWindow, pinnedDocChars: o.pinnedDocChars ?? docCharBudget(o.contextWindow) });
     if (r.removed > 0 || pruned > 0) session.lastContextTokens = 0;
     return done(r.removed, r.removed > 0 ? r.summary : undefined);
   } catch (err) {

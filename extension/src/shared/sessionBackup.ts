@@ -9,6 +9,7 @@
 import { newSession, type ArtifactRecord, type SessionState } from '../core/engine/types';
 import type { ChatMessage, ContentBlock } from '../core/types';
 import { DOC_KINDS, type DocKind } from './docKinds';
+import { contextStatsOf } from './sessionMigrate';
 import { MAX_BACKUP_BYTES, PERMISSION_MODES, THINKING_LEVELS, type AssistantItem, type AttachmentInfo, type TItem, type TodoItem } from './protocol';
 
 export const BACKUP_FORMAT = 'ai-agent-sessions';
@@ -207,6 +208,7 @@ export function sanitizeBackupSession(raw: unknown, workspaceKey: string): Backu
     artifacts: sanitizeArtifacts(s.artifacts),
     historyEdited: true,
     lastContextTokens: 0,
+    ...contextStatsOf(s.contextStats), // (lane:ctx-compaction)
     usageTotals: { input: num((s.usageTotals as { input?: unknown } | undefined)?.input) ?? 0, output: num((s.usageTotals as { output?: unknown } | undefined)?.output) ?? 0 },
   });
   return { workspace: workspaceKey, session, transcript, ...(num(raw.deletedAt) !== undefined ? { deletedAt: num(raw.deletedAt) } : {}) };
