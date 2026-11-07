@@ -180,8 +180,10 @@ function workStateText(todos: SessionState['todos'], lang: Lang): string {
       ? 'LIVE TASK LIST of this conversation (not summarized, current truth — continue from here):'
       : 'DANH SÁCH VIỆC ĐANG SỐNG của cuộc trò chuyện này (không bị tóm tắt, là trạng thái hiện tại — tiếp tục từ đây):';
   const lines = todos.slice(0, 60).map((x) => {
-    const box = x.status === 'completed' ? '[x]' : x.status === 'in_progress' ? '[~]' : '[ ]';
-    return `- ${box} ${x.title.replace(/\s+/g, ' ').trim().slice(0, 200)}`;
+    // (lane:loop-guards) [!] = bị chặn, kèm lý do.
+    const box = x.status === 'completed' ? '[x]' : x.status === 'in_progress' ? '[~]' : x.status === 'blocked' ? '[!]' : '[ ]';
+    const note = x.status === 'blocked' && x.note ? ` (${x.note.replace(/\s+/g, ' ').trim().slice(0, 120)})` : '';
+    return `- ${box} ${x.title.replace(/\s+/g, ' ').trim().slice(0, 200)}${note}`;
   });
   return `<trang_thai_cong_viec>\n${head}\n${lines.join('\n')}\n</trang_thai_cong_viec>`;
 }

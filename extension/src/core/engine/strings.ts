@@ -94,6 +94,25 @@ const vi = {
   stopHowNone: 'Chạy tiếp: không cần — hãy kiểm tra kết quả; cần thêm gì thì nhắn tiếp.',
   stopContradiction: 'Lưu ý: trợ lý nói đã hoàn thành toàn bộ nhưng danh sách còn {n} việc chưa xong — hãy tin danh sách.',
   // ── (lane:loop-guards) ──
+  budgetBlock:
+    '[hết ngân sách vòng] Còn {left} vòng — công cụ khám phá ({name}) không được chạy nữa. Chỉ ghi/sửa tệp, chạy một phép kiểm tra, rồi chốt bằng ba phần: đã xong gì · còn lại gì · chạy tiếp bằng lệnh nào.',
+  budgetGrace: '[sắp hết ngân sách] Đây là lần đọc cuối được phép (còn {left} vòng, lượt này chưa ghi/chạy gì). Dùng kết quả này để chốt việc có nghĩa, không khám phá thêm.',
+  loopNote: '[phá vòng lặp] {name} đã trả cùng một kết quả {n} lần liên tiếp. Đổi chiến lược: đọc mã/nguồn trước, thu hẹp phạm vi, hoặc hỏi người dùng một câu cụ thể. Không thử biến thể nữa.',
+  loopBlock:
+    '[phá vòng lặp] Không chạy: {name} đã cho cùng một kết quả {n} lần liên tiếp và lệnh này gần như y hệt lần trước. Đổi hẳn cách làm (công cụ khác, đọc mã, thu hẹp phạm vi), hoặc dừng và nêu rõ vướng mắc với người dùng.',
+  jsonGuide: 'Không tự sửa được an toàn. Nội dung dài, nhiều dấu nháy hay xuống dòng → đừng tự ghép chuỗi JSON: gọi write_file/edit_file với nội dung thô, chia nhỏ nếu cần',
+  jsonGuideStrong:
+    'Đây là lần thứ {n} liên tiếp đối số JSON hỏng. BẮT BUỘC đổi cách: dùng write_file với nội dung thô (không nhúng JSON lồng nhau, không tự thoát dấu nháy), mỗi lần một tệp và ngắn hơn; nếu vẫn kẹt thì nói rõ với người dùng thay vì thử lại',
+  // Cổng hoàn thành: lần nhắc 1 kèm trạng thái THẬT; lần 2 bắt làm KHÁC; lần 3 tự đóng và báo.
+  gateTodosAgain:
+    'Bạn vừa được nhắc mà danh sách vẫn y nguyên: {list}. Lần này KHÔNG lặp lại câu cũ — làm ĐÚNG MỘT trong ba: (1) gọi todo_write đưa trạng thái về đúng thực tế (việc đã làm → completed; việc không làm được → blocked kèm note lý do); (2) nói rõ việc nào không đóng được và thiếu gì; (3) hỏi người dùng đúng một câu cụ thể để gỡ.',
+  gateFinalAnswer:
+    'Câu trả lời cuối đang trỏ vào chỗ khác ("ở trên", "như đã nói") hoặc quá ngắn so với lượt làm việc dài. Người dùng không thấy nhật ký — hãy viết lại ĐẦY ĐỦ, tự đứng được: kết quả (bảng/danh sách/kết luận), bằng chứng đã kiểm, việc còn lại và lệnh chạy tiếp nếu có.',
+  gateFinalClosed:
+    'Đã nhắc {n} lần nhưng vẫn còn việc chưa xong: {list} — đã đánh dấu «bị chặn» để không nhắc nữa{done}. Dừng ở đây để bạn quyết định — nhắn "tiếp tục" để trợ lý làm nốt, hoặc đổi yêu cầu.',
+  gateFinalClosedDone: '; {k} việc có vết làm xong đã được đánh dấu hoàn thành: {doneList}',
+  todoBlockedNoEvidence: 'chưa có vết ghi tệp hay chạy lệnh khớp tên việc; trợ lý đã được nhắc 2 lần mà không cập nhật',
+  todoStatusBlocked: 'bị chặn',
   // ── (lane:blind-verifier) ──
   verifyRunning: 'Kiểm tra độc lập: đang chạy (vòng {round}/{max})',
   verifyPass: 'Đã kiểm tra độc lập: đạt',
@@ -217,6 +236,24 @@ const en: typeof vi = {
   stopHowNone: 'How to continue: not needed — check the result; send another message if you need more.',
   stopContradiction: 'Note: the assistant claimed everything is done, but {n} task(s) in the list are still unfinished — trust the list.',
   // ── (lane:loop-guards) ──
+  budgetBlock:
+    '[turn budget exhausted] {left} turns left — exploratory tools ({name}) are no longer allowed. Only write/edit files, run one check, then wrap up in three parts: what is done · what is left · the exact command to resume.',
+  budgetGrace: '[budget nearly exhausted] This is the last read allowed ({left} turns left, nothing written/run yet this turn). Use this result to wrap up meaningfully; no further exploration.',
+  loopNote: '[loop breaker] {name} returned the same result {n} times in a row. Change strategy: inspect the code/source first, narrow the scope, or ask the user one precise question. Do not try another variation.',
+  loopBlock:
+    '[loop breaker] Not run: {name} produced the same result {n} times in a row and this call is nearly identical to the last one. Change approach entirely (another tool, read the code, narrow the scope), or stop and state the blocker to the user.',
+  jsonGuide: 'Could not be repaired safely. Long content with many quotes or line breaks → do not build JSON strings by hand: call write_file/edit_file with raw content, split it if needed',
+  jsonGuideStrong:
+    'This is the {n}th consecutive call with broken JSON arguments. You MUST change approach: use write_file with raw content (no nested JSON, no manual quote escaping), one shorter file per call; if still stuck, tell the user instead of retrying',
+  gateTodosAgain:
+    'You were just reminded and the list is unchanged: {list}. Do NOT repeat yourself this time — do exactly ONE of three: (1) call todo_write so the statuses match reality (done work → completed; impossible work → blocked with a note); (2) state exactly which task cannot be closed and what is missing; (3) ask the user one precise question.',
+  gateFinalAnswer:
+    'Your final answer points elsewhere ("see above", "as mentioned") or is too short for such a long run. The user does not see the work log — rewrite it in full so it stands on its own: the result (table/list/conclusion), the evidence you checked, what remains and the command to resume if any.',
+  gateFinalClosed:
+    'Reminded {n} time(s) and work is still unfinished: {list} — marked as "blocked" so you are not nagged again{done}. Stopping here so you can decide — reply "continue" to have the assistant finish these, or change the request.',
+  gateFinalClosedDone: '; {k} task(s) with evidence of completion were marked completed: {doneList}',
+  todoBlockedNoEvidence: 'no file write or command run matches this task; the assistant was reminded twice without updating it',
+  todoStatusBlocked: 'blocked',
   // ── (lane:blind-verifier) ──
   verifyRunning: 'Independent check: running (round {round}/{max})',
   verifyPass: 'Independently verified: pass',

@@ -36,8 +36,10 @@ describe('cổng hoàn thành — nhắc có nhãn, lần 3 thì chốt', () => 
     expect(w).toHaveLength(1);
     expect(w[0].text).toContain('Đã nhắc 2 lần');
     expect(w[0].text).toContain('Chạy bộ kiểm thử');
-    // việc dở vẫn nằm nguyên trong phiên (không bị engine tự đóng giùm)
-    expect(h.session.todos.map((x) => x.status)).toEqual(['pending']);
+    // (lane:loop-guards) lần chốt: việc không có vết làm (không ghi tệp/chạy lệnh) bị đánh dấu BỊ CHẶN kèm lý do — không đóng giả là xong, không nhắc nữa
+    expect(h.session.todos.map((x) => x.status)).toEqual(['blocked']);
+    expect(h.session.todos[0].note).toBeTruthy();
+    expect(w[0].text).toContain('bị chặn');
   });
 
   it('lần gọi thứ 4 là lần CHỐT: lịch sử gửi đi kết thúc bằng lời nhắc lần 2, không có lời nhắc lần 3', async () => {

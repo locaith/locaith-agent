@@ -24,12 +24,15 @@ export type { DocKind, ModelInfo, ThinkingLevel, Usage };
  */
 export type PermissionMode = 'default' | 'acceptEdits' | 'plan' | 'bypass';
 
-export type TodoStatus = 'pending' | 'in_progress' | 'completed';
+/** (lane:loop-guards) 'blocked' = việc không đóng được, kèm `note` lý do; phiên cũ không có giá trị này (tuỳ chọn, tương thích ngược). */
+export type TodoStatus = 'pending' | 'in_progress' | 'completed' | 'blocked';
 
 export interface TodoItem {
   id: string;
   title: string;
   status: TodoStatus;
+  /** (lane:loop-guards) Lý do ngắn khi `status === 'blocked'` (tuỳ chọn). */
+  note?: string;
 }
 
 /**
