@@ -189,7 +189,9 @@ describe('manifest và gói build sản phẩm (nguyên tắc ít quyền nhất
     expect(sb).toContain("connect-src 'none'");
     expect(sb).toContain("frame-src 'none'");
     expect(sb).toContain("form-action 'none'");
-    expect(sb).not.toMatch(/https:\/\/(?!cdn\.jsdelivr\.net|cdnjs\.cloudflare\.com|unpkg\.com)/); // chỉ ba CDN trong danh sách cho phép
+    expect(sb).not.toMatch(/https?:/); // bản cửa hàng không tải mã từ internet: không còn CDN nào (bản VS Code vẫn cho ba CDN)
+    expect(sb).toContain("script-src 'self' 'unsafe-inline' 'unsafe-eval';");
+    expect(sb).toContain('font-src data:;');
     expect(manifest.sandbox.pages).toEqual(['artifact-sandbox.html']);
     expect(manifest.web_accessible_resources).toBeUndefined();
     expect(manifest.externally_connectable).toBeUndefined();
@@ -208,6 +210,20 @@ describe('manifest và gói build sản phẩm (nguyên tắc ít quyền nhất
       for (const k of ['menuAskSelection', 'menuExplainSelection', 'menuSummarizePage']) expect(msgs[k]?.message, `${loc}:${k}`).toBeTruthy();
     }
     expect(manifest.default_locale).toBe('vi');
+  });
+
+  it('tên và mô tả ngắn trên cửa hàng không liệt kê tên thương hiệu (lần nộp đầu bị từ chối «Yellow Argon» vì việc này)', () => {
+    for (const loc of ['vi', 'en']) {
+      const msgs = JSON.parse(fs.readFileSync(path.join(dist, '_locales', loc, 'messages.json'), 'utf8'));
+      const { extName, extDescription } = { extName: msgs.extName.message as string, extDescription: msgs.extDescription.message as string };
+      expect(`${extName} ${extDescription}`, loc).not.toMatch(/Claude|ChatGPT|Gemini|DeepSeek|Grok|OpenAI|Anthropic|OpenRouter|xAI|Google/i);
+      expect([...extDescription].length, loc).toBeLessThanOrEqual(132);
+      expect([...extName].length, loc).toBeLessThanOrEqual(75);
+    }
+    const vi = JSON.parse(fs.readFileSync(path.join(dist, '_locales', 'vi', 'messages.json'), 'utf8'));
+    const en = JSON.parse(fs.readFileSync(path.join(dist, '_locales', 'en', 'messages.json'), 'utf8'));
+    expect(vi.extDescription.message).toBe('Trợ lý AI trong thanh bên: đọc trang, tra cứu web, soạn báo cáo. Dùng khoá API của chính bạn.');
+    expect(en.extDescription.message).toBe('Side-panel AI assistant: reads the page, searches the web, drafts reports. Use your own API key.');
   });
 
   it('bản phát hành không chứa móc kiểm thử, eval, thẻ script nội tuyến; runtime trang là tệp độc lập', () => {
