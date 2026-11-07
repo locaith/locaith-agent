@@ -119,3 +119,54 @@ describe('xlane: luật quyền × agent con', () => {
     expect(fs.existsSync(path.join(h.dir, 'secret.txt'))).toBe(false);
   });
 });
+
+describe('xlane: luật quyền × agent kiểm tra độc lập', () => {
+  it('reviewer mù cũng bị luật deny: read_file(secret.txt) bị chặn trong lần kiểm tra', async () => {
+    const { AgentRegistry } = await import('../src/core/agents/definitions');
+    const { Semaphore } = await import('../src/core/agents/semaphore');
+    const { DEFAULT_ENGINE_SETTINGS } = await import('../src/core/engine/types');
+    const { ModelPool } = await import('../src/core/orchestration/pool');
+    const { builtinSkills } = await import('../src/core/skills/builtin');
+    const { SkillRegistry } = await import('../src/core/skills/registry');
+    const { createToolRegistry } = await import('../src/core/tools');
+    const { FakeProvider } = await import('./helpers/fakeProvider');
+    const { makeHarness } = await import('./helpers/harness');
+    const { ConfigService } = await import('../src/host/config');
+    const { PERM_KEYS } = await import('../src/host/permissionRulesService');
+    const { verifierSubExtensions } = await import('../src/host/extensions/verifier');
+    const { createVerifierExtension, runnerFromServices } = await import('../src/core/engine/verifier');
+    const { settingsStub, workspace } = await import('./helpers/vscode-stub');
+    settingsStub.reset();
+    workspace.isTrusted = true;
+    settingsStub.global[PERM_KEYS.deny] = ['read_file(secret.txt)'];
+    const config = new ConfigService();
+    const provider = new FakeProvider([
+      () => toolTurn([{ name: 'write_file', input: { path: 'out.txt', content: 'hello' } }]),
+      () => textTurn('Đã ghi out.txt xong, nội dung đúng như yêu cầu của người dùng và không còn việc nào dở dang.'),
+      () => toolTurn([{ name: 'read_file', input: { path: 'secret.txt' } }]), // reviewer thử đọc tệp bị cấm
+      () => toolTurn([{ name: 'submit_verdict', input: { verdict: 'pass' } }]),
+      () => textTurn('Đạt.'),
+    ]);
+    const svc = {
+      pool: new ModelPool({ summaries: async () => [], get: () => provider }),
+      agents: new AgentRegistry(),
+      skills: new SkillRegistry(builtinSkills()),
+      mode: () => 'off' as const,
+      engineSettings: () => ({ ...DEFAULT_ENGINE_SETTINGS }),
+      provider: () => provider,
+      contextWindow: () => 128_000,
+      log: () => {},
+      limiter: new Semaphore(4),
+      writeLock: new Semaphore(1),
+      extensions: () => verifierSubExtensions({ deps: { config } } as never),
+    };
+    let registry: ReturnType<typeof createToolRegistry> | undefined;
+    const ext = createVerifierExtension({ settings: () => ({ mode: 'auto', maxRounds: 1 }), registry: () => registry!, run: runnerFromServices(svc as never) });
+    const h = makeHarness([], { provider, files: { 'secret.txt': 'BI-MAT' }, engineDeps: { extensions: [ext] } });
+    registry = createToolRegistry({ skills: h.skills, host: h.host });
+    await h.run('ghi out.txt');
+    const seen = JSON.stringify(provider.requests.map((r) => r.messages));
+    expect(seen).not.toContain('BI-MAT');
+    expect(seen).toContain('read_file(secret.txt)');
+  });
+});
