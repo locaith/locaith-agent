@@ -12,6 +12,7 @@ import { Icon } from '../Icons';
 import { Spinner } from '../ui';
 import { DiffView } from './DiffView';
 import { CollapseFoot } from './CollapseFoot';
+import { BeforeAfter } from './BeforeAfter'; // (lane:customer-bugs)
 
 const ARGS_LIMIT = 2400;
 
@@ -121,7 +122,8 @@ function ToolRowView({ block, nested = false }: { block: ToolBlock; nested?: boo
           </button>
         )}
       </div>
-      {block.images && block.images.length > 0 && (
+      {block.name === 'show_before_after' && <BeforeAfter block={block} />}
+      {block.name !== 'show_before_after' && block.images && block.images.length > 0 && (
         <div class="tool-shots">
           {block.images.map((img, i) => {
             const src = `data:${img.mediaType};base64,${img.data}`;

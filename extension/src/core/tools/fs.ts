@@ -47,7 +47,7 @@ export function describePath(r: ResolvedPath): string {
   return differsFromReal(r) ? `${r.abs} → đường dẫn thật: ${r.real}` : r.abs;
 }
 
-function readPermission(r: ResolvedPath): PermissionNeed | null {
+export function readPermission(r: ResolvedPath): PermissionNeed | null {
   if (r.zone === 'outside') {
     return {
       kind: 'outside_workspace',

@@ -814,6 +814,15 @@ const vi = {
   // ── (lane:ide-context) ──
   // ── (lane:sessions-ux) ──
   // ── (lane:customer-bugs) ──
+  'ba.region': 'Ảnh trước và sau',
+  'ba.before': 'Trước',
+  'ba.after': 'Sau',
+  'ba.slide': 'Kéo để so sánh',
+  'ba.sideBySide': 'Hai cột',
+  'ba.slideAria': 'Kéo để so sánh {a} và {b}',
+  'ba.zoom': 'Phóng to',
+  'tool.show_before_after.run': 'Đang dựng ảnh trước và sau',
+  'tool.show_before_after.done': 'Đã so sánh trước và sau',
   // ── (lane:gateway-client) ──
   // ── (lane:mcp-parity) ──
   // ── (lane:instructions-memory) ──
@@ -1614,6 +1623,15 @@ const en: Record<I18nKey, string> = {
   // ── (lane:ide-context) ──
   // ── (lane:sessions-ux) ──
   // ── (lane:customer-bugs) ──
+  'ba.region': 'Before and after',
+  'ba.before': 'Before',
+  'ba.after': 'After',
+  'ba.slide': 'Drag to compare',
+  'ba.sideBySide': 'Side by side',
+  'ba.slideAria': 'Drag to compare {a} and {b}',
+  'ba.zoom': 'Enlarge',
+  'tool.show_before_after.run': 'Preparing before and after',
+  'tool.show_before_after.done': 'Compared before and after',
   // ── (lane:gateway-client) ──
   // ── (lane:mcp-parity) ──
   // ── (lane:instructions-memory) ──

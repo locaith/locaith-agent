@@ -1,0 +1,154 @@
+/* ── Thẻ «Trước | Sau» (components/timeline/BeforeAfter.tsx, lane:customer-bugs) ──────────────────────
+   Hai ảnh cạnh nhau, khung hẹp (≈320px) tự xếp dọc nhờ minmax; không tô nền kín, viền mảnh. Không hiệu ứng chuyển động nên không cần
+   prefers-reduced-motion riêng; tương phản cao đổi viền sang màu tương phản của VS Code. */
+
+.ba {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 2px 0 8px 28px;
+  min-width: 0;
+  max-width: calc(100% - 28px);
+}
+.ba-bar {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  min-width: 0;
+}
+.ba-title {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+  color: var(--fg-muted);
+}
+.ba-mode {
+  flex: none;
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  font-size: 12px;
+  color: var(--accent-text);
+  cursor: pointer;
+  text-decoration: underline;
+  text-decoration-color: color-mix(in srgb, var(--accent-text) 45%, transparent);
+  text-underline-offset: 0.18em;
+}
+.ba-mode:hover,
+.ba-mode:focus-visible {
+  text-decoration-color: currentColor;
+  outline: none;
+}
+
+.ba-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 150px), 1fr));
+  gap: 8px;
+}
+.ba-pane {
+  position: relative;
+  margin: 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.ba-zoom {
+  display: block;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: transparent;
+  overflow: hidden;
+  cursor: zoom-in;
+  line-height: 0;
+}
+.ba-zoom:hover,
+.ba-zoom:focus-visible {
+  border-color: var(--accent-text);
+  outline: none;
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent-text) 35%, transparent);
+}
+.ba-img {
+  display: block;
+  width: 100%;
+  height: auto;
+  max-height: 260px;
+  object-fit: contain;
+  object-position: top left;
+}
+
+/* Nhãn: chữ xám nhỏ, «Sau» dùng màu nhấn; chấm trạng thái phía trước như các dòng khác của dòng thời gian. */
+.ba-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  letter-spacing: 0.02em;
+  color: var(--fg-muted);
+}
+.ba-tag::before {
+  content: '';
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--fg-muted) 70%, transparent);
+}
+.ba-tag.is-after {
+  color: var(--accent-text);
+}
+.ba-tag.is-after::before {
+  background: var(--accent-text);
+}
+
+/* Chế độ trượt: ảnh «Sau» phủ lên ảnh «Trước», cắt theo --pos. */
+.ba-slider {
+  position: relative;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  overflow: hidden;
+  line-height: 0;
+  max-width: 100%;
+}
+.ba-slider .ba-over {
+  position: absolute;
+  inset: 0;
+  height: 100%;
+  clip-path: inset(0 0 0 var(--pos, 50%));
+}
+.ba-slider .ba-tag {
+  position: absolute;
+  top: 6px;
+  padding: 1px 6px;
+  border-radius: 6px;
+  line-height: 1.5;
+  background: color-mix(in srgb, #000 55%, transparent);
+  color: #fff;
+}
+.ba-tag-l {
+  left: 6px;
+}
+.ba-tag-r {
+  right: 6px;
+}
+.ba-range {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 6px;
+  width: calc(100% - 16px);
+  margin: 0 8px;
+  accent-color: var(--accent-text);
+  cursor: ew-resize;
+}
+
+body.vscode-high-contrast .ba-zoom,
+body.vscode-high-contrast .ba-slider,
+body.vscode-high-contrast-light .ba-zoom,
+body.vscode-high-contrast-light .ba-slider {
+  border-color: var(--vscode-contrastBorder, currentColor);
+}

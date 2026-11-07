@@ -12,4 +12,5 @@
 @import './parallel.css';
 @import './extras.css';
 @import './media.css';
+@import './beforeafter.css'; /* (lane:customer-bugs) */
 @import './responsive.css';

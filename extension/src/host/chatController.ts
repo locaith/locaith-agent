@@ -4,6 +4,7 @@ import { coreRunExtensions } from '../core/engine/extensions';
 import { hostRunExtensions } from './hostExtensions';
 import { SlashRegistry, type SlashContext } from './slashRegistry';
 import { openExternalOnce } from '../core/host/openOnce'; // (lane:customer-bugs)
+import { findToolImage } from '../shared/toolImages'; // (lane:customer-bugs)
 import { loadProjectInstructions } from '../core/engine/instructions';
 import { resumeInstruction } from '../core/engine/resume';
 import { MEMORY_DIR, MEMORY_INDEX, type MemoryScope, type MemorySnapshot } from '../core/engine/memory';
@@ -760,6 +761,9 @@ export class ChatController implements vscode.Disposable {
         if (b.type === 'tool_result') for (const im of b.images ?? []) if (imageKey(im.data) === key) return this.post({ type: 'image_data', key, mediaType: im.mediaType, data: im.data });
       }
     }
+    // (lane:customer-bugs) Ảnh do công cụ gửi lên (thẻ «Trước | Sau») chỉ nằm trong transcript đang mở, không nằm trong lịch sử gửi model.
+    const shot = findToolImage(this.view.transcript, key);
+    if (shot) return this.post({ type: 'image_data', key, mediaType: shot.mediaType, data: shot.data });
     this.toast('info', vi ? 'Ảnh gốc không còn trong lịch sử (đã nén ngữ cảnh) nên chỉ xem được bản thu nhỏ.' : 'The original image is no longer in the history (context was compacted); showing the thumbnail.');
   }
 

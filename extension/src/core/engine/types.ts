@@ -31,6 +31,8 @@ export interface ToolResult {
   content: string;
   isError?: boolean;
   images?: ImageBlock[];
+  /** (lane:customer-bugs) Ảnh CHỈ để người dùng xem trong khung chat (thẻ «Trước | Sau»): không gửi cho model nên không tốn token ảnh. Thiếu → dùng `images`. */
+  displayImages?: ImageBlock[];
   /** Số bước của một thao tác lên trang (bản trình duyệt): hiện trên dấu ở trang lẫn trong khung chat để người dùng nhắc lại "bước 3". */
   step?: number;
   /** Chuỗi ngắn cạnh nhãn trên giao diện: "12 kết quả", "+24 −3". */

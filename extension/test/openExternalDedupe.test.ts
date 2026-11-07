@@ -1,9 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import { externalLinkProps } from '../webview/src/externalLink';
 import { OPEN_ONCE_WINDOW_MS, createOpenOnce, openExternalOnce } from '../src/core/host/openOnce';
 
 const posted: unknown[] = [];
 vi.mock('../webview/src/vscode', () => ({ post: (m: unknown) => void posted.push(m) }));
-vi.mock('../webview/src/ctx', () => ({ useApp: () => ({ platform: 'vscode', t: (k: string) => k }) }));
 
 /** Mô phỏng bộ xử lý click có sẵn của webview VS Code: mọi thẻ <a> có `href` đều bị mở thêm một lần ở lớp window (kể cả khi đã preventDefault). */
 function vscodeBuiltinLinkHandler(el: { props: Record<string, unknown> }, opened: string[]): void {
@@ -84,54 +86,46 @@ describe('liên kết Markdown trong webview — không mở hai lần', () => {
     openExternalOnce.reset();
   });
 
-  it('liên kết http(s) KHÔNG có href thật (nếu có, bộ xử lý có sẵn của VS Code sẽ mở thêm một tab)', async () => {
-    const { MdLink } = await import('../webview/src/markdown/Markdown');
-    const el = MdLink({ href: 'https://example.com/a', title: null, children: 'a' }) as unknown as { type: string; props: Record<string, unknown> };
-    expect(el.type).toBe('a');
-    expect(el.props.href).toBeUndefined();
-    expect(el.props['data-href']).toBe('https://example.com/a');
-    expect(el.props.role).toBe('link');
-    expect(el.props.tabIndex).toBe(0);
-    // Mô phỏng VS Code: không có gì để nó mở.
+  it('thuộc tính liên kết KHÔNG có href thật (nếu có, bộ xử lý có sẵn của VS Code sẽ mở thêm một tab)', () => {
+    const props = externalLinkProps('https://example.com/a') as unknown as Record<string, unknown>;
+    expect(props.href).toBeUndefined();
+    expect(props['data-href']).toBe('https://example.com/a');
+    expect(props.role).toBe('link');
+    expect(props.tabIndex).toBe(0);
     const builtin: string[] = [];
-    vscodeBuiltinLinkHandler(el, builtin);
-    expect(builtin).toEqual([]);
+    vscodeBuiltinLinkHandler({ props }, builtin);
+    expect(builtin).toEqual([]); // không có gì để VS Code mở
   });
 
-  it('một cú bấm → đúng một open_external; handler dừng nổi bọt và chặn hành vi mặc định', async () => {
-    const { MdLink } = await import('../webview/src/markdown/Markdown');
-    const el = MdLink({ href: 'https://example.com/b', children: 'b' }) as unknown as { props: Record<string, (e: FakeEvent) => void> };
+  it('Markdown.tsx dùng đúng externalLinkProps cho liên kết http(s), không gắn href={href} lên thẻ <a>', () => {
+    const src = readFileSync(fileURLToPath(new URL('../webview/src/markdown/Markdown.tsx', import.meta.url)), 'utf8');
+    const fn = src.slice(src.indexOf('function MdLink'), src.indexOf('function BlockedImage'));
+    expect(fn).toContain('{...externalLinkProps(href)}');
+    expect(fn).not.toMatch(/<a[^>]*href=/);
+  });
+
+  it('một cú bấm → đúng một open_external; handler dừng nổi bọt và chặn hành vi mặc định', () => {
+    const p = externalLinkProps('https://example.com/b');
     const e = fakeEvent();
-    el.props.onClick(e);
+    p.onClick(e);
     expect(e.defaultPrevented).toBe(true);
     expect(e.propagationStopped).toBe(true);
     expect(posted).toEqual([{ type: 'open_external', url: 'https://example.com/b' }]);
   });
 
-  it('sự kiện bắt hai lần (click + Enter + auxclick giữa) cho cùng một cú bấm vẫn chỉ gửi một lần', async () => {
-    const { MdLink } = await import('../webview/src/markdown/Markdown');
-    const el = MdLink({ href: 'https://example.com/c', children: 'c' }) as unknown as { props: Record<string, (e: FakeEvent) => void> };
-    el.props.onClick(fakeEvent());
-    el.props.onClick(fakeEvent()); // capture + bubble
-    el.props.onKeyDown(fakeEvent({ key: 'Enter' }));
-    el.props.onAuxClick(fakeEvent({ button: 1 }));
+  it('sự kiện bắt hai lần (click + Enter + auxclick giữa) cho cùng một cú bấm vẫn chỉ gửi một lần', () => {
+    const p = externalLinkProps('https://example.com/c');
+    p.onClick(fakeEvent());
+    p.onClick(fakeEvent()); // capture + bubble
+    p.onKeyDown(fakeEvent({ key: 'Enter' }));
+    p.onAuxClick(fakeEvent({ button: 1 }));
     expect(posted).toHaveLength(1);
   });
 
-  it('phím khác Enter và nút phụ không phải giữa không mở gì', async () => {
-    const { MdLink } = await import('../webview/src/markdown/Markdown');
-    const el = MdLink({ href: 'https://example.com/d', children: 'd' }) as unknown as { props: Record<string, (e: FakeEvent) => void> };
-    el.props.onKeyDown(fakeEvent({ key: 'a' }));
-    el.props.onAuxClick(fakeEvent({ button: 2 }));
+  it('phím khác Enter và nút phụ không phải giữa không mở gì', () => {
+    const p = externalLinkProps('https://example.com/d');
+    p.onKeyDown(fakeEvent({ key: 'a' }));
+    p.onAuxClick(fakeEvent({ button: 2 }));
     expect(posted).toHaveLength(0);
-  });
-
-  it('javascript: / vscode: vẫn không thành liên kết bấm được', async () => {
-    const { MdLink } = await import('../webview/src/markdown/Markdown');
-    for (const href of ['javascript:alert(1)', 'vscode://x/y', 'data:text/html,hi']) {
-      const el = MdLink({ href, children: 'x' }) as unknown as { type: string; props: Record<string, unknown> };
-      expect(el.type).toBe('span');
-      expect(el.props.onClick).toBeUndefined();
-    }
   });
 });

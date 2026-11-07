@@ -6,6 +6,7 @@
 import type { ABlock, AgentProgress, AttachmentInfo, CompactInfo, DiffInfo, PermissionRequest, QueuedInfo, TItem, ToolBlock, UiEvent, ViewState } from '../../shared/protocol';
 import type { RemoteHostInfo, RemoteProvider, RemoteState } from './protocol';
 import { REMOTE_API_VERSION } from './protocol';
+import { toolImageKeys } from '../../shared/toolImages'; // (lane:customer-bugs)
 
 /** Số mục transcript gửi trong snapshot (mục cũ hơn bị cắt, kèm `omitted`). */
 export const MAX_ITEMS = 150;
@@ -72,7 +73,8 @@ function sanitizePermission(p: PermissionRequest): PermissionRequest {
   };
 }
 
-export type RemoteToolBlock = Omit<ToolBlock, 'images'> & { imageCount?: number };
+/** `imageKeys` (lane:customer-bugs): khoá để xin ảnh đầy đủ bằng lệnh `get_image` (thẻ «Trước | Sau»); bản cũ bỏ qua trường này. */
+export type RemoteToolBlock = Omit<ToolBlock, 'images'> & { imageCount?: number; imageKeys?: string[] };
 
 const AGENT_ACTIVITY_CAP = 120;
 const wholeNumber = (v: unknown): number => (typeof v === 'number' && Number.isFinite(v) ? Math.min(1e12, Math.max(0, Math.floor(v))) : 0);
@@ -116,7 +118,7 @@ function sanitizeTool(b: ToolBlock): RemoteToolBlock {
     ...(b.output !== undefined ? { output: capTail(b.output, OUT_CAP) } : {}),
     ...(b.diff ? { diff: capDiff(b.diff) } : {}),
     ...(b.permission ? { permission: sanitizePermission(b.permission) } : {}),
-    ...(images && images.length ? { imageCount: images.length } : {}),
+    ...(images && images.length ? { imageCount: images.length, imageKeys: toolImageKeys(images) } : {}),
   };
 }
 
@@ -235,7 +237,7 @@ export function sanitizeEvent(ev: UiEvent): UiEvent {
         ...rest,
         ...(ev.output !== undefined ? { output: capTail(ev.output, OUT_CAP) } : {}),
         ...(ev.diff ? { diff: capDiff(ev.diff) } : {}),
-        ...(images && images.length ? { imageCount: images.length } : {}),
+        ...(images && images.length ? { imageCount: images.length, imageKeys: toolImageKeys(images) } : {}),
       } as UiEvent;
     }
     default:

@@ -43,7 +43,7 @@ function InlineCode({ text }: { text: string }) {
   return <code class="md-code">{text}</code>;
 }
 
-export function MdLink({ href, title, children }: { href: string; title?: string | null; children: ComponentChildren }) {
+function MdLink({ href, title, children }: { href: string; title?: string | null; children: ComponentChildren }) {
   const { platform } = useApp();
   if (/^(https?:|mailto:)/i.test(href)) {
     // (lane:customer-bugs) không đặt `href` thật: bộ xử lý liên kết có sẵn của webview VS Code sẽ mở thêm một tab nữa — xem externalLink.ts.
