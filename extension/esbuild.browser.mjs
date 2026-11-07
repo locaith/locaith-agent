@@ -56,7 +56,9 @@ function manifest() {
     host_permissions: PROVIDER_HOSTS,
     // Quyền đọc/điều khiển mọi trang xin lúc chạy, khi người dùng bấm nút trong Cài đặt (có thể rút lại bất cứ lúc nào).
     // identity: chỉ xin khi người dùng bấm "Đăng nhập" (OAuth) — cần để mở cửa sổ đăng nhập do trình duyệt quản lý.
-    optional_permissions: ['tabs', 'identity'],
+    // KHÔNG khai báo `tabs`: mã không bao giờ xin quyền này (URL/tiêu đề tab có được nhờ quyền trang do người dùng cấp),
+    // và Chrome Web Store bắt khai lý do cho mọi quyền khai báo mà không dùng — đúng lỗi "cần lý do sử dụng quyền tabs".
+    optional_permissions: ['identity'],
     // Phải đúng chuỗi "<all_urls>": chrome.tabs.captureVisibleTab chỉ chấp nhận `<all_urls>` hoặc activeTab (không chấp nhận https://*/* + http://*/*).
     optional_host_permissions: ['<all_urls>'],
     content_security_policy: { extension_pages: "script-src 'self'; object-src 'self'", sandbox: SANDBOX_CSP },

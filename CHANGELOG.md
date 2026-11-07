@@ -6,6 +6,7 @@
 - **Collapse at the bottom, not only at the top.** Opening a group (the work summary, a command or edit group, a tool body, a thinking block, the task group) now puts a "Collapse" row right under the content, so you close it where you are instead of scrolling back to the header.
 - **Chrome: a rating prompt that asks once, at the right moment.** After 3 real messages the chat shows a compact strip — five stars plus a "Rate it" button that opens the Chrome Web Store listing, and an X that turns it off for good. Nothing is gated behind a review, panel opens and slash commands are not counted, and the state lives under its own storage key so changing settings never makes it ask again.
 - **Store upload fix:** the localized description was 188 characters and Chrome rejects the whole package when any locale exceeds 132 ("Bản dịch description trong ngôn ngữ vi quá dài"). The Vietnamese and English descriptions are now 130 and 124 characters, and the browser build fails loudly if any locale string goes over the limit again.
+- **Removed the unused `tabs` permission.** Chrome refused to publish with "Bạn cần đưa ra lý do sử dụng quyền tabs": the permission was declared as optional but no code ever requested it (tab URLs and titles come from the site access the user grants). The manifest now declares only `identity` as optional, so the review no longer has to justify a permission the extension does not use.
 
 ## 0.6.26 - 2026-11-07
 
