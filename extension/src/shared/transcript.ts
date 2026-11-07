@@ -137,11 +137,13 @@ export function applyEvent(items: readonly TItem[], ev: UiEvent): TItem[] {
           args: ev.args,
           state: 'running',
           startedAt: Date.now(),
+          // (lane:perm-rules) luật allow đã cho qua (tuỳ chọn)
+          ...(ev.rule ? { rule: ev.rule } : {}),
         };
         const idx = findLastIndex(blocks, (b) => b.type === 'tool' && b.id === ev.callId);
         // Gửi lại tool_start cho cùng callId (sau khi người dùng duyệt) đưa dòng về trạng thái đang chạy.
         if (idx >= 0) {
-          blocks[idx] = { ...(blocks[idx] as ToolBlock), name: ev.name, args: ev.args, state: 'running', permission: undefined };
+          blocks[idx] = { ...(blocks[idx] as ToolBlock), name: ev.name, args: ev.args, state: 'running', permission: undefined, ...(ev.rule ? { rule: ev.rule } : {}) };
         } else blocks.push(fresh);
         return { ...a, blocks };
       });

@@ -64,6 +64,10 @@ const vi = {
   // ── (lane:blind-verifier) ──
   // ── (lane:checkpoints-rewind) ──
   // ── (lane:perm-rules) ──
+  ruleDenied: 'Bị chặn bởi luật quyền {rule} của người dùng. Không thử lại cách này; nếu việc đó cần thiết, hãy nói rõ để người dùng tự quyết.',
+  rulesWorkspacePending:
+    'Workspace này đề xuất {n} luật «cho phép» trong .vscode/settings.json — chưa áp dụng. Gõ /permissions để xem danh sách và chấp nhận nếu bạn tin dự án.',
+  rulesUntrusted: 'Workspace chưa được tin cậy: mọi luật «cho phép» bị bỏ qua; luật «hỏi» và «chặn» vẫn áp dụng.',
   // ── (lane:hooks) ──
   // ── (lane:commands-agents) ──
   // ── (lane:bg-tasks) ──
@@ -132,6 +136,10 @@ const en: typeof vi = {
   // ── (lane:blind-verifier) ──
   // ── (lane:checkpoints-rewind) ──
   // ── (lane:perm-rules) ──
+  ruleDenied: 'Blocked by the user’s permission rule {rule}. Do not retry this way; if the step is necessary, say so clearly and let the user decide.',
+  rulesWorkspacePending:
+    'This workspace proposes {n} “allow” rule(s) in .vscode/settings.json — not applied yet. Type /permissions to review the list and accept it if you trust the project.',
+  rulesUntrusted: 'Workspace is not trusted: all “allow” rules are ignored; “ask” and “deny” rules still apply.',
   // ── (lane:hooks) ──
   // ── (lane:commands-agents) ──
   // ── (lane:bg-tasks) ──

@@ -18,8 +18,8 @@ import { newId } from '../../shared/transcript';
 import { decidePermission, rememberApproval } from './permissions';
 import { t, type Lang } from './strings';
 import type { ToolRegistry } from './toolRegistry';
-import type { ActiveExtension } from './seams';
-import type { SessionState, ToolContext, ToolHost, ToolResult } from './types';
+import type { ActiveExtension, PermissionAdvice } from './seams';
+import type { SessionState, ToolContext, ToolDef, ToolHost, ToolResult } from './types';
 
 export const MAX_TOOL_RESULT_CHARS = 40_000;
 
@@ -219,8 +219,15 @@ export class ToolDispatcher {
         }
       }
 
-      const verdict = await decidePermission(def, call.input, ctx, session.mode);
-      if (verdict.action === 'deny') return fail(t(language, 'planMode'), 'denied');
+      // (lane:perm-rules) Luật quyền bền (allow/ask/deny theo mẫu): móc `permissionRule` của extension — extension đầu tiên có `hit` thắng, `suggest` gộp lại.
+      const advice = await collectPermissionAdvice(input.hooks, call, def, ctx, this.o.host);
+
+      const verdict = await decidePermission(def, call.input, ctx, session.mode, advice.hit);
+      if (verdict.action === 'deny') {
+        return fail(verdict.reason === 'rule' ? t(language, 'ruleDenied', { rule: verdict.rule.rule }) : t(language, 'planMode'), 'denied');
+      }
+      // (lane:perm-rules) Cho qua nhờ luật: dòng công cụ ghi «cho phép bởi luật …» (trường tuỳ chọn, bản cũ/Remote cũ bỏ qua).
+      if (verdict.action === 'allow' && verdict.rule) emit({ t: 'tool_start', id: assistantId, callId: call.id, name: call.name, args: call.input, rule: verdict.rule.rule });
 
       if (verdict.action === 'ask') {
         const { need } = verdict;
@@ -236,6 +243,9 @@ export class ToolDispatcher {
           planMarkdown: need.planMarkdown,
           canAllowSession: need.kind === 'plan' ? true : !!need.sessionKey && !need.elevated,
           sessionLabel: need.sessionLabel,
+          // (lane:perm-rules) luật ask đã buộc hỏi + đặc tả «Luôn cho phép» đề xuất (không đề xuất cho yêu cầu nâng cao / kế hoạch).
+          ...(verdict.rule ? { rule: verdict.rule.rule } : {}),
+          ...(advice.suggest?.length && !need.elevated && need.kind !== 'plan' ? { suggest: advice.suggest.slice(0, 3) } : {}),
         };
         emit({ t: 'tool_permission', id: assistantId, callId: call.id, request: req });
         const decision = await this.o.host.requestPermission(req, signal);
@@ -280,6 +290,32 @@ export class ToolDispatcher {
       return fail(`Lỗi khi chạy ${def.name}: ${msg}`);
     }
   }
+}
+
+/** (lane:perm-rules) Gom lời khuyên luật quyền từ các extension: `hit` đầu tiên thắng, `suggest` gộp (bỏ trùng). Lỗi của một móc không làm hỏng lệnh. */
+async function collectPermissionAdvice(
+  hooks: readonly ActiveExtension[] | undefined,
+  call: ToolUseBlock,
+  def: ToolDef,
+  ctx: ToolContext,
+  host: ToolHost,
+): Promise<PermissionAdvice> {
+  const out: PermissionAdvice = {};
+  for (const ext of hooks ?? []) {
+    if (!ext.hooks.permissionRule) continue;
+    try {
+      const r = await ext.hooks.permissionRule(call, def, ctx);
+      if (!r) continue;
+      if (r.hit && !out.hit) out.hit = r.hit;
+      for (const s of r.suggest ?? []) {
+        if (typeof s !== 'string' || !s) continue;
+        (out.suggest ??= []).includes(s) || out.suggest.push(s);
+      }
+    } catch (err) {
+      host.log('warn', `Extension "${ext.id}" lỗi ở móc permissionRule: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  }
+  return out;
 }
 
 function raceWithAbort<T>(work: Promise<T>, signal: AbortSignal, timeoutMs: number): Promise<T> {

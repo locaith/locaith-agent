@@ -88,6 +88,10 @@ export interface PermissionRequest {
   canAllowSession: boolean;
   /** Nhãn của lựa chọn phiên, ví dụ "Luôn cho phép `npm test` trong phiên này". */
   sessionLabel?: string;
+  /** (lane:perm-rules) Luật `ask` đã buộc hỏi (dạng `run_command(git push*)`), nếu có. */
+  rule?: string;
+  /** (lane:perm-rules) Đặc tả «Luôn cho phép» đề xuất (phần tử đầu là chính; người dùng sửa được). Thiếu/rỗng = không đề xuất. */
+  suggest?: string[];
 }
 
 export type PillKind = 'thinking' | 'writing' | 'working';
@@ -139,6 +143,8 @@ export interface ToolBlock {
   permission?: PermissionRequest;
   /** Chỉ có ở công cụ `agent` / `workflow_run`: tiến độ sống (xem AgentProgress). Thiếu → dòng công cụ thường như trước. */
   agent?: AgentProgress;
+  /** (lane:perm-rules) Luật `allow` đã cho lệnh này qua không cần hỏi, ví dụ `run_command(npm test:*)`. */
+  rule?: string;
   startedAt: number;
   durationMs?: number;
 }
@@ -261,7 +267,7 @@ export type UiEvent =
   /** Danh sách tác vụ hiện tại (ảnh chụp đầy đủ) + những tiêu đề vừa được thêm lần này. */
   | { t: 'tasks'; id: string; todos: TodoItem[]; added: string[] }
   | { t: 'skill'; id: string; skill: string; unlocked: string[] }
-  | { t: 'tool_start'; id: string; callId: string; name: string; args: Record<string, unknown> }
+  | { t: 'tool_start'; id: string; callId: string; name: string; args: Record<string, unknown>; /* (lane:perm-rules) */ rule?: string }
   | { t: 'tool_progress'; id: string; callId: string; output: string }
   /** Ảnh chụp tiến độ MỚI NHẤT (không phải số gia) của agent con đang chạy — gộp được: chỉ giữ cái cuối cùng cho mỗi callId. */
   | ({ t: 'agent_progress'; id: string; callId: string } & AgentProgress)
@@ -808,6 +814,8 @@ export interface ViewState {
   // ── (lane:blind-verifier) ──
   // ── (lane:checkpoints-rewind) ──
   // ── (lane:perm-rules) ──
+  /** Bộ luật quyền allow/ask/deny (khu quản lý trong Cài đặt, lệnh /permissions). Chỉ bản VS Code; không gửi ra Remote. */
+  permissions?: PermissionsView;
   // ── (lane:hooks) ──
   // ── (lane:commands-agents) ──
   // ── (lane:bg-tasks) ──
@@ -820,6 +828,26 @@ export interface ViewState {
   // ── (lane:tools-parity) ──
   /** Lời mời đánh giá trên Chrome Web Store (chỉ bản trình duyệt, chỉ hiện sau vài lần dùng). */
   rating?: { sends: number };
+}
+
+/** (lane:perm-rules) Một luật quyền đã nạp, kèm nguồn. */
+export interface PermissionRuleInfo {
+  action: 'allow' | 'ask' | 'deny';
+  /** Dạng chữ `tool(spec)` hoặc `tool`. */
+  text: string;
+  source: 'user' | 'workspace';
+}
+
+/** (lane:perm-rules) Trạng thái khu quản lý luật quyền. */
+export interface PermissionsView {
+  /** Luật đang CÓ HIỆU LỰC (luật allow của workspace chỉ có mặt khi đã được xác nhận). */
+  rules: PermissionRuleInfo[];
+  /** Luật allow do workspace đề xuất, chưa được xác nhận (băm nội dung để xác nhận đúng danh sách đang thấy). Thiếu = không có. */
+  workspaceAllowPending?: { hash: string; rules: string[] };
+  /** Workspace chưa tin cậy → mọi luật allow (kể cả của người dùng) bị bỏ qua. */
+  untrusted?: boolean;
+  /** Bật khu quản lý trong Cài đặt (lệnh /permissions vừa gọi). */
+  focus?: boolean;
 }
 
 /** Loại tệp xem trước được ngay trong khung chat (0.6.3). `doc` = HTML/PDF/Word/Excel/PowerPoint: chỉ có thẻ mở, không nhúng. */
@@ -1009,6 +1037,14 @@ export type WebviewMessage =
   // ── (lane:blind-verifier) ──
   // ── (lane:checkpoints-rewind) ──
   // ── (lane:perm-rules) ──
+  /** «Luôn cho phép»: lưu luật `rule` (đã sửa được) vào cài đặt `scope`, rồi cho lệnh đang chờ (`id` của thẻ quyền) chạy. */
+  | { type: 'permission_always'; id: string; rule: string; scope: 'user' | 'workspace' }
+  | { type: 'perm_rules_add'; action: 'allow' | 'ask' | 'deny'; rule: string; scope: 'user' | 'workspace' }
+  | { type: 'perm_rules_remove'; action: 'allow' | 'ask' | 'deny'; rule: string; scope: 'user' | 'workspace' }
+  /** Xác nhận (một lần, theo băm nội dung) danh sách luật allow mà workspace đề xuất. */
+  | { type: 'perm_rules_trust_workspace'; hash: string }
+  /** Mở/đóng khu quản lý luật (bỏ cờ `focus`). */
+  | { type: 'perm_rules_open' }
   // ── (lane:hooks) ──
   // ── (lane:commands-agents) ──
   // ── (lane:bg-tasks) ──
