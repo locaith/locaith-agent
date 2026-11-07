@@ -2,7 +2,6 @@ import { describe, expect, it } from 'vitest';
 import { AgentRegistry } from '../src/core/agents/definitions';
 import { Semaphore } from '../src/core/agents/semaphore';
 import { DEFAULT_ENGINE_SETTINGS, newSession } from '../src/core/engine/types';
-import type { LastRun } from '../src/core/engine/verifier';
 import { NodeToolHost } from '../src/core/host/nodeHost';
 import { ModelPool } from '../src/core/orchestration/pool';
 import { SkillRegistry } from '../src/core/skills/registry';
@@ -55,11 +54,12 @@ describe('/verify', () => {
     const infos: string[] = [];
     const slash = new SlashRegistry();
     let turns = 0;
+    let current = session;
     const c: VerifySlashHost = {
       host: host as any,
       registry,
       deps,
-      session: () => session,
+      session: () => current,
       emit: (ev) => events.push(ev),
       runTurn: async (fn) => {
         turns++;
@@ -69,7 +69,20 @@ describe('/verify', () => {
     registerVerifySlash(slash, c);
     const ctx = (args = ''): SlashContext => ({ args, lang: 'vi', info: (t) => infos.push(`info:${t}`), warn: (t) => infos.push(`warn:${t}`), runPrompt: async () => {}, busy: false });
     const ext = verifierExtension({ deps, host: host as any, registry, session: () => session });
-    return { provider, host, session, registry, events, infos, slash, ctx, ext, turns: () => turns };
+    const scope = () => ({
+      session,
+      settings: DEFAULT_ENGINE_SETTINGS,
+      lang: 'vi' as const,
+      host,
+      provider,
+      signal: new AbortController().signal,
+      input: [{ type: 'text' as const, text: 'làm X' }],
+      trace: { wrote: false, execs: 0, turns: 1, calls: [], writtenPaths: () => [] },
+      emit: () => {},
+      notice: () => {},
+      assistantId: () => 'a0',
+    });
+    return { provider, host, session, registry, events, infos, slash, ctx, ext, scope, setSession: (x: typeof session) => (current = x), turns: () => turns };
   }
 
   it('đăng ký lệnh /verify (vi + en); chưa có lần chạy nào → báo, không chạy lượt; off → báo tắt', async () => {
@@ -120,11 +133,28 @@ describe('/verify', () => {
     expect(r.provider.requests[0].tools.map((t) => t.name)).toContain('submit_verdict');
   });
 
-  it('gói dữ liệu thuộc phiên khác → không chạy', async () => {
-    const r = rig({});
-    const other: LastRun = { sessionId: 'khac', bundle: { requests: [], changes: [], commands: [], todos: [], finalAnswer: '', ranByMain: [] }, lang: 'vi', at: 0 };
-    void other;
+  it('gói dữ liệu thuộc phiên khác → không chạy (gói thật được ghi cho phiên s1, nhưng đang ở phiên khác)', async () => {
+    const r = rig({}, [() => toolTurn([{ name: 'submit_verdict', input: { verdict: 'pass' } }]), () => textTurn('.')]);
+    const hooks = r.ext.begin(r.scope())!;
+    r.session.messages.push({ role: 'user', content: [{ type: 'text', text: 'làm X' }] });
+    await hooks.end!({ stopReason: 'end_turn', turns: 1 });
+    r.setSession(newSession({ id: 'khac', provider: 'fake', model: 'fake-1' }));
     await r.slash.get('verify')!.run(r.ctx());
+    expect(r.infos[0]).toContain('Chưa có lần chạy nào');
     expect(r.turns()).toBe(0);
+    // đối chứng: quay lại đúng phiên thì chạy được
+    r.setSession(r.session);
+    await r.slash.get('verify')!.run(r.ctx());
+    expect(r.turns()).toBe(1);
+  });
+
+  it('lần chạy gần nhất bị Dừng giữa chừng → /verify nói rõ (không im lặng kiểm tra trạng thái cũ)', async () => {
+    const r = rig({}, [() => toolTurn([{ name: 'submit_verdict', input: { verdict: 'pass' } }]), () => textTurn('.')]);
+    const hooks = r.ext.begin(r.scope())!;
+    r.session.messages.push({ role: 'user', content: [{ type: 'text', text: 'làm X' }] });
+    await hooks.end!({ stopReason: 'aborted', turns: 1 });
+    await r.slash.get('verify')!.run(r.ctx());
+    expect(r.infos.some((x) => x.includes('dừng giữa chừng') && x.includes('aborted'))).toBe(true);
+    expect(r.turns()).toBe(1);
   });
 });

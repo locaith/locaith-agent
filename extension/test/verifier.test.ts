@@ -14,6 +14,8 @@ import {
   createVerifierExtension,
   feedbackMessage,
   guardRunCommand,
+  collectChanges,
+  isActionable,
   isVerificationCommand,
   normalizeVerdict,
   runnerFromServices,
@@ -69,6 +71,13 @@ describe('isVerificationCommand', () => {
       'git diff --stat',
       'git log --oneline -n 5',
       'npm test -- --run src/a.test.ts',
+      'npm run build:browser',
+      'npm run lint:css',
+      'git branch --show-current',
+      'git branch -a',
+      'npx playwright test',
+      'npx playwright test e2e/a.spec.ts',
+      'npx vitest run --reporter=verbose',
     ]) {
       expect(isVerificationCommand(c), c).toBe(true);
     }
@@ -105,6 +114,23 @@ describe('isVerificationCommand', () => {
       'git log -p',
       'git status\nrm -rf x',
       'echo hi',
+      // (lane:blind-verifier) lệnh GHI/sửa/chạy dài lọt qua tên script hoặc cờ
+      'npm run lint:fix',
+      'npm run test:update',
+      'npm run build:watch',
+      'npm run lint-fix',
+      'git branch feature-x',
+      'git branch -d x',
+      'npx playwright install',
+      'npx playwright test --ui',
+      'npx playwright test --update-snapshots',
+      'npx cypress open',
+      'npx biome check --apply src',
+      'npx vitest run --outputFile=out.json',
+      'npx vitest run --coverage.reportsDirectory=cov',
+      'pytest --basetemp=tmp',
+      'npx vitest run ../other',
+      'npx vitest run --root=../..',
       'ls',
       'pwd',
       'curl https://x',
@@ -485,17 +511,15 @@ describe('verifier — tích hợp', () => {
       () => toolTurn([{ name: 'run_command', input: { command: 'npm test && rm -rf x' } }]),
       () => toolTurn([{ name: 'submit_verdict', input: { verdict: 'uncertain', unverifiedClaims: ['không chạy được test'] } }]),
       () => textTurn('.'),
-      () => textTurn('đã tự chạy test, xong'),
-      () => toolTurn([{ name: 'submit_verdict', input: { verdict: 'pass' } }]),
-      () => textTurn('.'),
     ]);
     await r.h.run('ghi');
     const rej = r.h.provider.requests[3].messages.flatMap((m) => m.content).find((b) => b.type === 'tool_result')!;
     expect(rej.type === 'tool_result' && rej.isError).toBe(true);
     expect(rej.type === 'tool_result' && rej.content).toMatch(/Rejected/);
     expect(r.h.permissionRequests.filter((p) => p.kind === 'command')).toHaveLength(0);
-    // uncertain có mục → coi là khả thi → chính phải xử lý (vòng 2)
-    expect(verifyStates(r.h.events).map((v) => v.state)).toEqual(['running', 'uncertain', 'running', 'pass']);
+    // uncertain CHỈ có «chưa xác nhận được» → không phải việc model chính làm được → chấp nhận ngay, không tốn vòng 2 (lane:blind-verifier)
+    expect(verifyStates(r.h.events).map((v) => v.state)).toEqual(['running', 'uncertain']);
+    expect(r.h.provider.requests).toHaveLength(5);
     const { existsSync } = await import('node:fs');
     expect(existsSync(r.h.dir + '/a.txt')).toBe(true);
   });
@@ -545,5 +569,32 @@ describe('verifier — transcript & Remote', () => {
     expect(it.verify!.state).toBe('skipped');
     const same = { t: 'notice' as const, level: 'info' as const, text: 'x' };
     expect(sanitizeEvent(same)).toBe(same);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// (lane:blind-verifier) sửa lỗi sau kiểm chứng: việc uỷ quyền, isActionable
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe('kiểm chứng — việc uỷ quyền cho agent con & mục khả thi', () => {
+  const call = (name: string, risk: 'meta' | 'exec' | 'write', input: Record<string, unknown>) => ({ callId: name, name, risk, input, turn: 1, ts: 0, ok: true, resultHead: 'Đã sửa a.ts' });
+
+  it('agent / workflow_run thành công = có thể đã ghi tệp: auto kích hoạt và gói dữ liệu ghi rõ danh sách tệp KHÔNG có', () => {
+    for (const name of ['agent', 'workflow_run']) {
+      const trace = { turns: 2, execs: 0, calls: [call(name, name === 'agent' ? 'meta' : 'exec', { prompt: 'sửa a.ts' })] };
+      expect(shouldVerify({ mode: 'auto', trace, thinkingLevel: 'medium', sessionMode: 'default', stop: 'end_turn', aborted: false, wrapUp: false })).toBe(true);
+    }
+    const ch = collectChanges([call('agent', 'meta', { prompt: 'sửa a.ts' })]);
+    expect(ch).toHaveLength(1);
+    expect(ch[0].text).toMatch(/NOT available[\s\S]*sửa a\.ts[\s\S]*Đã sửa a\.ts/);
+    // agent thất bại → không tính
+    expect(collectChanges([{ ...call('agent', 'meta', { prompt: 'x' }), ok: false }])).toHaveLength(0);
+  });
+
+  it('uncertain chỉ có «chưa xác nhận được» không phải việc khả thi; có thiếu/lỗi hoặc fail thì có', () => {
+    expect(isActionable(normalizeVerdict({ verdict: 'uncertain', unverifiedClaims: ['không chạy được test'] }))).toBe(false);
+    expect(isActionable(normalizeVerdict({ verdict: 'uncertain', defects: ['bug'] }))).toBe(true);
+    expect(isActionable(normalizeVerdict({ verdict: 'fail', missing: ['thiếu'] }))).toBe(true);
+    expect(isActionable(normalizeVerdict({ verdict: 'fail', unverifiedClaims: ['x'] }))).toBe(true);
   });
 });

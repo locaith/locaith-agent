@@ -69,7 +69,13 @@ const META = /[;&|<>`$\r\n(){}'"\\\u0085\u2018-\u201F\u2028\u2029\uFF1B\uFF06\uF
 /** Một đối số/cờ an toàn: không khoảng trắng (đã tách), chỉ ký tự tên tệp/cờ thông thường. */
 const ARG = /^-{0,2}[\w.@:/+,=\u00C0-\u1EF9-]*$/;
 /** Cờ ghi/tương tác/không-dừng: cấm dù lệnh gốc là kiểm chứng (ghi snapshot, sửa tệp, watch, in kết quả ra tệp…). */
-const DENY_FLAG = /^-{1,2}(fix|fix-dry-run|write|w|u|update|update-snapshot|updatesnapshot|watch|watchall|o|out|outdir|outfile|output|output-file|init|install|i|exec|e|eval|print|require|r|import|loader|inspect|inspect-brk|save|save-dev|D|g|global|force|f|reporter-options)(=.*)?$/i;
+const DENY_FLAG = /^-{1,2}(fix|fix-dry-run|write|w|u|update|update-snapshot|updatesnapshot|watch|watchall|o|out|outdir|outfile|output|output-file|init|install|i|exec|e|eval|print|require|r|import|loader|inspect|inspect-brk|save|save-dev|D|g|global|force|f|reporter-options|update-snapshots|apply|apply-unsafe|ui|headed|debug|open|codegen|interactive|delete|move|copy|set-upstream|set-upstream-to|unset-upstream|basetemp|outputfile|output-dir|outputdir|cache-location|junitxml|resultlog|log-file)(=.*)?$/i;
+/** Cờ ghi báo cáo/độ phủ ra thư mục tuỳ ý: so theo TIỀN TỐ (`--coverage.reportsDirectory=…`, `--report-dir`…). (lane:blind-verifier) */
+const DENY_PREFIX = /^-{1,2}(coverage[.-](reports?[-_]?directory|directory|dir|output)|reports?[-_]?(dir|directory|file|path)|out(put)?[-_.]?(dir|file|path))/i;
+/** Hậu tố của tên script npm (`lint:fix`, `test:update`…) cho thấy script GHI/sửa/chạy dài, không phải kiểm chứng. */
+const SCRIPT_WRITE_SEGMENT = /^(fix|fixes|update|updates|u|write|watch|serve|dev|start|deploy|publish|release|clean|install|open|codegen|format|apply|snapshot|snapshots|ui|migrate|generate|gen)$/;
+/** `npx playwright|cypress` chỉ hợp lệ khi chạy bộ kiểm thử (không install / open / codegen / show-report…). */
+const RUNNER_SUBCOMMAND: Record<string, string> = { playwright: 'test', cypress: 'run' };
 
 /** Lệnh gốc + "động từ" đầu tiên phải khớp MỘT trong các mẫu này (so trên 1–3 token đầu, chữ thường). */
 const HEADS: RegExp[] = [
@@ -90,7 +96,8 @@ const HEADS: RegExp[] = [
   /^(swift|dart|flutter|mix|composer|bundle)\s+(test|build|analyze|compile)$/,
   /^(bundle\s+exec\s+rspec)$/,
   /^(deno)\s+(test|check|lint|fmt)$/,
-  /^git\s+(status|diff|log|show|branch|rev-parse|ls-files)$/,
+  // `git branch` KHÔNG ở đây: chỉ dạng liệt kê (isReadOnlyCommand) mới chỉ-đọc; `git branch x` / --delete / --move đổi kho.
+  /^git\s+(status|diff|log|show|rev-parse|ls-files)$/,
 ];
 
 /** Cờ chỉ hợp lệ khi lệnh gốc là `prettier`/`black`/`isort`/`ruff`/`cargo fmt`/`go fmt`/`deno fmt`… (phải là kiểm tra, không ghi). */
@@ -120,8 +127,17 @@ export function isVerificationCommand(command: string): boolean {
   if (head < 0) return false;
   for (const a of tokens.slice(head)) {
     if (a === '--') continue; // `npm test -- <đối số>` hợp lệ
-    if (!ARG.test(a) || DENY_FLAG.test(a)) return false;
+    if (!ARG.test(a) || DENY_FLAG.test(a) || DENY_PREFIX.test(a)) return false;
+    if (/(^|[=/])\.\.([/\\]|$)/.test(a)) return false; // không trỏ ra ngoài thư mục làm việc
   }
+  // npm script có hậu tố ghi/sửa (`lint:fix`, `test:update`, `build:watch`…) KHÔNG phải kiểm chứng.
+  if (/^(npm|pnpm|yarn|bun)$/.test(lower[0]) && head > 1) {
+    const script = lower.slice(1, head).filter((x) => x !== 'run').join(' ');
+    if (script.split(/[:\-_]/).slice(1).some((seg) => SCRIPT_WRITE_SEGMENT.test(seg))) return false;
+  }
+  // playwright / cypress: chỉ bộ lệnh chạy kiểm thử.
+  const runner = lower.find((x, i) => i <= 2 && Object.prototype.hasOwnProperty.call(RUNNER_SUBCOMMAND, x));
+  if (runner && lower[lower.indexOf(runner) + 1] !== RUNNER_SUBCOMMAND[runner]) return false;
   // git: chỉ các dạng chỉ-đọc + đường dẫn; cấm mọi cờ ghi (-m, --amend, …) — đã lọc bởi DENY_FLAG và ARG; thêm chặn `git log -p` quá dài không cần.
   if (lower[0] === 'git' && tokens.slice(head).some((a) => /^-{1,2}(amend|m|message|all|no-verify|signoff|interactive|patch|p)$/.test(a))) return false;
   // Trình định dạng chỉ được chạy ở chế độ KIỂM TRA.
@@ -220,9 +236,22 @@ export function collectRequests(messages: readonly { role: string; content: Cont
   return out;
 }
 
+/** Công cụ uỷ quyền: agent con / workflow có thể đã sửa tệp mà luồng chính không thấy từng tệp (lane:blind-verifier). */
+const DELEGATING_TOOLS = new Set(['agent', 'workflow_run']);
+
 export function collectChanges(calls: readonly TraceCall[]): ChangeEntry[] {
   const out: ChangeEntry[] = [];
   for (const c of calls) {
+    if (DELEGATING_TOOLS.has(c.name) && c.ok) {
+      const task = typeof c.input.prompt === 'string' ? c.input.prompt : typeof c.input.name === 'string' ? c.input.name : '';
+      out.push({
+        path: `(${c.name})`,
+        kind: 'other',
+        tool: c.name,
+        text: `Delegated work — the list of files it changed is NOT available here; run git status / git diff and read them yourself.\nTask: ${task.slice(0, 400)}\nResult head: ${c.resultHead.slice(0, 600)}`,
+      });
+      continue;
+    }
     if (c.risk !== 'write' || !c.ok || ARTIFACT_TOOLS.has(c.name)) continue;
     const path = typeof c.input.path === 'string' ? c.input.path : '';
     if (c.name === 'write_file') out.push({ path, kind: 'write', tool: c.name, text: headOf(String(c.input.content ?? ''), FILE_HEAD_LINES, FILE_HEAD_CHARS) });
@@ -342,8 +371,12 @@ export function normalizeVerdict(input: unknown): Verdict {
   return { verdict, missing, defects, unverifiedClaims, ...(summary ? { summary } : {}) };
 }
 
+/**
+ * Có việc model chính LÀM ĐƯỢC không: chỉ khi có mục thiếu hoặc lỗi đã xác nhận. `unverifiedClaims` đơn thuần ("không chạy được test", "chưa thấy tệp")
+ * là giới hạn của người kiểm tra, không phải việc để sửa — ép model chính xử lý chỉ đốt vòng và token (lane:blind-verifier).
+ */
 export function isActionable(v: Verdict): boolean {
-  return v.missing.length + v.defects.length + v.unverifiedClaims.length > 0;
+  return v.missing.length + v.defects.length > 0 || (v.verdict === 'fail' && v.unverifiedClaims.length > 0);
 }
 
 export function createVerdictTool(onVerdict: (v: Verdict) => void): ToolDef {
@@ -430,13 +463,14 @@ export interface VerifierAgentResult {
 
 export type VerifierRunner = (req: VerifierAgentRequest) => Promise<VerifierAgentResult>;
 
-export function verifierAgentDef(model: string | undefined, maxTurns: number): AgentDef {
+export function verifierAgentDef(model: string | undefined, maxTurns: number, toolNames?: readonly string[]): AgentDef {
   return {
     name: 'verifier',
     description: 'Independent blind reviewer of the last run.',
     tier: 'inherit',
     ...(model && model.includes(':') ? { model } : {}),
-    tools: 'all',
+    // Danh sách tên CỤ THỂ (kho của agent kiểm tra đã được thu hẹp): `'all'` rơi về bộ chỉ-đọc ở chế độ lập kế hoạch và làm mất `submit_verdict`.
+    tools: toolNames ? [...toolNames] : 'all',
     maxTurns,
     thinking: 'high',
     prompt: verifierPrompt,
@@ -448,7 +482,7 @@ export function verifierAgentDef(model: string | undefined, maxTurns: number): A
 export function runnerFromServices(svc: Omit<AgentServices, 'registry'>): VerifierRunner {
   return async (req) => {
     const services: AgentServices = { ...svc, registry: () => req.registry };
-    const r = await runSubAgent(services, req.ctx, { def: verifierAgentDef(req.model, req.maxTurns), prompt: req.task, label: 'verifier', maxTurns: req.maxTurns, maxChars: 4000 });
+    const r = await runSubAgent(services, req.ctx, { def: verifierAgentDef(req.model, req.maxTurns, req.registry.all().map((d) => d.name)), prompt: req.task, label: 'verifier', maxTurns: req.maxTurns, maxChars: 4000 });
     return { stopReason: r.stopReason, error: r.error, inputTokens: r.inputTokens, outputTokens: r.outputTokens, model: r.model };
   };
 }
@@ -544,7 +578,7 @@ export function shouldVerify(i: TriggerInput): boolean {
   if (i.sessionMode === 'plan') return false;
   if (i.mode === 'always' || i.force) return true;
   if (THINKING_RANK[i.thinkingLevel] < THINKING_RANK.medium) return false;
-  const wrote = i.trace.calls.some((c) => c.risk === 'write' && c.ok && !ARTIFACT_TOOLS.has(c.name));
+  const wrote = i.trace.calls.some((c) => c.ok && ((c.risk === 'write' && !ARTIFACT_TOOLS.has(c.name)) || DELEGATING_TOOLS.has(c.name)));
   if (wrote) return true;
   return i.trace.execs >= 3 && i.trace.turns >= 4;
 }
@@ -623,6 +657,19 @@ export interface LastRun {
   bundle: VerifyBundle;
   lang: Lang;
   at: number;
+  /** Lý do kết thúc lần chạy (end_turn / aborted / error / max_turns…). Khác 'end_turn' = lần chạy dừng giữa chừng. */
+  stopReason?: string;
+}
+
+/** Chữ của tin trợ lý CUỐI sau vị trí `startIdx` (lần chạy không tới finalize thì dùng cái này làm "câu trả lời cuối"). */
+function lastAssistantText(messages: readonly { role: string; content: ContentBlock[] }[], startIdx: number): string {
+  for (let i = messages.length - 1; i > startIdx; i--) {
+    const m = messages[i];
+    if (m.role !== 'assistant') continue;
+    const txt = m.content.filter((b): b is Extract<ContentBlock, { type: 'text' }> => b.type === 'text').map((b) => b.text).join('\n').trim();
+    if (txt) return txt;
+  }
+  return '';
 }
 
 export interface VerifierDeps {
@@ -717,6 +764,12 @@ export function createVerifierExtension(deps: VerifierDeps): RunExtension {
           rounds = 0;
         },
         finalize: decide,
+        // Mọi đường thoát (Dừng / lỗi / hết vòng / từ chối) cũng ghi gói dữ liệu → `/verify` không kiểm tra nhầm lần chạy TRƯỚC (lane:blind-verifier).
+        end(info) {
+          if (deps.settings().mode === 'off') return;
+          const bundle = buildBundle({ session: scope.session, input: scope.input, startIdx, trace: scope.trace, outputs, finalAnswer: lastAssistantText(scope.session.messages, startIdx) });
+          deps.onLastRun?.({ sessionId: scope.session.id, bundle, lang: scope.lang, at: Date.now(), stopReason: info.stopReason });
+        },
       };
     },
   };

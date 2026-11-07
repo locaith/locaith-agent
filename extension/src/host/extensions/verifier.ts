@@ -112,6 +112,8 @@ export function registerVerifySlash(slash: SlashRegistry, c: VerifySlashHost): v
         sctx.info(t(lang, 'verifyNothing'));
         return;
       }
+      // Lần chạy gần nhất kết thúc không bình thường (Dừng / lỗi / hết vòng): nói rõ để người dùng biết đang kiểm tra trạng thái nào.
+      if (last.stopReason && last.stopReason !== 'end_turn') sctx.info(t(lang, 'verifyStaleRun', { reason: last.stopReason }));
       if (state.busy) {
         sctx.warn(t(lang, 'verifySkipped', { reason: t(lang, 'verifyReasonBusy') }));
         return;
