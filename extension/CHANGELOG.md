@@ -3,7 +3,7 @@
 ## 0.6.27 - 2026-11-07
 
 - **Chrome: a rating prompt that asks once, at the right moment.** After 3 real messages the chat shows a compact strip — five stars plus a "Rate it" button that opens the Chrome Web Store listing, and an X that turns it off for good. Nothing is gated behind a review, panel opens and slash commands are not counted, and the state lives under its own storage key so changing settings never makes it ask again.
-
+- **Store upload fix:** the localized description was 188 characters, and Chrome rejects the whole package when any locale exceeds 132. Vietnamese is now 130 characters and English 124; the browser build fails loudly if a locale string goes over the limit again.
 - **Memory is now always in context — for every model, not just Locaith.** The persistent memory index (`.locaith/memory/MEMORY.md` for the project, `~/.locaith/memory/MEMORY.md` for you) is re-read from disk on every turn and injected as a `<memory>` block, so it survives any number of compactions and does not depend on the model deciding to call a tool. A new `remember` tool writes one dated line (`user` / `feedback` / `project` / `reference`), refuses secrets, skips duplicates, and works across providers; the `ghi-nho-memory` skill is no longer limited to Locaith models.
 - **Collapse at the bottom, not only at the top.** Opening a group (the work summary, a command or edit group, a tool body, a thinking block, the task group) now puts a "Collapse" row right under the content, so you close it where you are instead of scrolling back to the header.
 

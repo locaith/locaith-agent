@@ -79,7 +79,8 @@ const LOCALES = {
   vi: {
     extName: { message: 'Locaith AI — Trợ lý trình duyệt' },
     extDescription: {
-      message: 'Trợ lý AI tự chủ ngay trong trình duyệt: đọc trang đang xem, tra cứu web, dựng báo cáo và (khi bạn cho phép) thao tác thay bạn. Dùng Claude, ChatGPT, Gemini, DeepSeek, Grok hoặc API riêng.',
+      // GIỚI HẠN CỨNG của Chrome Web Store: ≤ 132 ký tự (đếm theo code point). Vượt là cả gói bị từ chối khi tải lên.
+      message: 'Trợ lý AI trong trình duyệt: đọc trang, tra cứu web, thao tác thay bạn khi được phép. Dùng Claude, ChatGPT, Gemini hoặc API riêng.',
     },
     actionTitle: { message: 'Mở Locaith AI' },
     cmdOpen: { message: 'Mở/đóng khung Locaith AI' },
@@ -90,7 +91,7 @@ const LOCALES = {
   en: {
     extName: { message: 'Locaith AI — Browser agent' },
     extDescription: {
-      message: 'An autonomous AI agent in your browser: reads the page you are viewing, searches the web, builds reports and (with your approval) acts for you. Works with Claude, ChatGPT, Gemini, DeepSeek, Grok or your own API.',
+      message: 'AI agent in your browser: reads pages, searches the web and acts for you when allowed. Works with Claude, ChatGPT or Gemini.',
     },
     actionTitle: { message: 'Open Locaith AI' },
     cmdOpen: { message: 'Open/close the Locaith AI panel' },
@@ -99,6 +100,18 @@ const LOCALES = {
     menuSummarizePage: { message: 'Summarize this page' },
   },
 };
+
+/**
+ * Chrome Web Store từ chối CẢ GÓI nếu một chuỗi bản địa hoá vượt giới hạn của nó — và thông báo lỗi lại hiện ra
+ * như "sự cố khi tải tệp", rất khó đoán. Chặn ngay lúc build: mô tả ≤ 132 ký tự (giới hạn của trường description),
+ * tên ≤ 75. Đếm theo code point để ký tự tiếng Việt có dấu không bị tính sai.
+ */
+for (const [loc, strings] of Object.entries(LOCALES)) {
+  const desc = [...strings.extDescription.message].length;
+  const name = [...strings.extName.message].length;
+  if (desc > 132) throw new Error(`_locales/${loc}: extDescription ${desc} ký tự > 132 (giới hạn Chrome Web Store)`);
+  if (name > 75) throw new Error(`_locales/${loc}: extName ${name} ký tự > 75 (giới hạn Chrome Web Store)`);
+}
 
 // ── esbuild ─────────────────────────────────────────────────────────────────
 const common = {
