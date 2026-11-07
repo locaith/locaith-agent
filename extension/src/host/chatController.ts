@@ -6,6 +6,8 @@ import { registerVerifySlash } from './extensions/verifier'; // (lane:blind-veri
 import { SlashRegistry, type SlashContext } from './slashRegistry';
 import { commandsOutputStyle, registerCommandsSlash, type CommandsLaneAccess } from './commandsSlash'; // (lane:commands-agents)
 import { attachPermissionsFeature, type PermissionsFeature } from './permissionsFeature'; // (lane:perm-rules)
+import { handleSessionsUxMessage, registerSessionsSlash, type SessionsUxPort } from './sessionsUx'; // (lane:sessions-ux)
+import { buildMeter, findPricing } from '../shared/sessionMeter'; // (lane:sessions-ux)
 import { loadProjectInstructions } from '../core/engine/instructions';
 import { resumeInstruction } from '../core/engine/resume';
 import { MEMORY_DIR, MEMORY_INDEX, type MemoryScope, type MemorySnapshot } from '../core/engine/memory';
@@ -307,7 +309,7 @@ export class ChatController implements vscode.Disposable {
     registerCommandsSlash(this.slash, this); // (lane:commands-agents)  lệnh tuỳ chỉnh + /review /simplify /status /doctor /agents /output-style /mcp
     // registerTasksSlash(this.slash, this); // (lane:bg-tasks)  /tasks
     registerIdeSlash(this.slash, { diagnostics: (q) => this.host.diagnostics(q) }); // (lane:ide-context)  /problems
-    // registerSessionsSlash(this.slash, this); // (lane:sessions-ux)  /fork /cost /context
+    registerSessionsSlash(this.slash, this); // (lane:sessions-ux)  /fork /cost /context
     // registerMcpSlash(this.slash, this); // (lane:mcp-parity)  /mcp__<server>__<prompt>
     // registerMemorySlash(this.slash, this); // (lane:instructions-memory)  /memory /remember
     this.session = this.freshSession();
@@ -409,6 +411,36 @@ export class ChatController implements vscode.Disposable {
         return self.busy;
       },
     };
+  }
+
+  // ── (lane:sessions-ux) cổng cho rẽ nhánh / tìm kiếm / ghim / đồng hồ (logic ở sessionsUx.ts) ──
+  sessionsUxPort(): SessionsUxPort {
+    // eslint-disable-next-line @typescript-eslint/no-this-alias
+    const self = this;
+    return {
+      get lang() {
+        return self.lang;
+      },
+      get busy() {
+        return self.busy;
+      },
+      store: this.d.store,
+      session: () => this.session,
+      transcript: () => this.view?.transcript ?? [],
+      context: () => this.contextInfo(),
+      pricing: () => this.view?.providers?.find((p) => p.id === this.session.provider)?.models.find((m) => m.id === this.session.model)?.pricing,
+      saveNow: () => this.saveNow(),
+      open: (id) => this.loadSession(id),
+      refreshListings: async () => this.patch(await this.listings()),
+      post: (msg) => this.post(msg),
+      notice: (level, text) => this.emit({ t: 'notice', level, text }),
+      toast: (level, text) => this.toast(level, text),
+    };
+  }
+
+  /** Đồng hồ cho (transcript, phiên) chỉ định; mặc định là cuộc đang mở. Khi dựng view MỚI phải truyền transcript mới, vì this.view lúc đó còn là view cũ. */
+  private meterPatch(transcript?: readonly TItem[], session: SessionState = this.session): Pick<ViewState, 'meter'> {
+    return { meter: buildMeter(session, transcript ?? this.view?.transcript ?? [], findPricing(this.view?.providers, session.provider, session.model)) };
   }
 
   private async orchestrationInfo(): Promise<OrchestrationInfo> {
@@ -629,6 +661,7 @@ export class ChatController implements vscode.Disposable {
       ...(this.d.account ? { account: this.d.account.view() } : {}),
       ...(this.d.remote ? { remote: this.d.remote.view() } : {}),
       ...(this.d.locaith ? { locaith: this.locaithView() } : {}),
+      ...this.meterPatch(), // (lane:sessions-ux)
     };
   }
 
@@ -901,7 +934,7 @@ export class ChatController implements vscode.Disposable {
         this.patch({ skills: this.skillSummaries() });
         break;
       case 'usage':
-        this.patch({ context: this.contextInfo() });
+        this.patch({ context: this.contextInfo(), ...this.meterPatch() }); // (lane:sessions-ux) + đồng hồ chi phí
         break;
       case 'mode':
         this.patch({ mode: ev.mode });
@@ -1260,6 +1293,12 @@ export class ChatController implements vscode.Disposable {
         return;
       case 'apply_code':
         return this.applyCode(m.code, m.lang, m.mode);
+      // (lane:sessions-ux) rẽ nhánh · tìm toàn văn · ghim · xoá hàng loạt
+      case 'fork_session':
+      case 'search_sessions':
+      case 'pin_session':
+      case 'delete_sessions':
+        return handleSessionsUxMessage(this.sessionsUxPort(), m);
     }
   }
 
@@ -1646,7 +1685,7 @@ export class ChatController implements vscode.Disposable {
       this.setModelQueue(null);
       this.flushNow();
       void this.saveNow().then(async () => {
-        const extra = { ...(await this.listings()), context: this.contextInfo() };
+        const extra = { ...(await this.listings()), context: this.contextInfo(), ...this.meterPatch() }; // (lane:sessions-ux) + meter
         this.patch(extra);
         // Đang xem cuộc khác: patch() bị chặn, nhưng danh sách phiên vẫn phải cập nhật để thấy "vừa xong".
         if (this.viewing) this.post({ type: 'patch', patch: extra });
@@ -1672,7 +1711,7 @@ export class ChatController implements vscode.Disposable {
     await this.saveNow();
     this.session = this.freshSession();
     this.seenArtifacts.clear();
-    this.view = { ...this.baseView(), providers: this.view.providers, ...this.carryStrips(), ...(await this.listings()), screen: 'chat' };
+    this.view = { ...this.baseView(), ...this.meterPatch([]), providers: this.view.providers, ...this.carryStrips(), ...(await this.listings()), screen: 'chat' };
     this.post({ type: 'init', state: this.view });
   }
 
@@ -1690,6 +1729,7 @@ export class ChatController implements vscode.Disposable {
         type: 'init',
         state: {
           ...this.baseView(),
+          ...this.meterPatch(rec.items, p.session), // (lane:sessions-ux)
           sessionId: p.session.id,
           title: p.session.title,
           provider: p.session.provider,
@@ -1737,7 +1777,7 @@ export class ChatController implements vscode.Disposable {
     // Phiên cũ có thể thiếu transcript (chỉ còn vài lượt cuối): dựng lại từ messages, giữ bản gốc, rồi ghi bản đã hàn gắn.
     const rec = reconcileTranscript(p.session.messages, p.transcript);
     if (rec.rebuilt) await this.d.store.backupRaw(p.session.id);
-    this.view = { ...this.baseView(), transcript: rec.items, providers: this.view.providers, ...this.carryStrips(), ...(await this.listings()), screen: 'chat' };
+    this.view = { ...this.baseView(), ...this.meterPatch(rec.items), transcript: rec.items, providers: this.view.providers, ...this.carryStrips(), ...(await this.listings()), screen: 'chat' };
     this.post({ type: 'init', state: this.view });
     if (p.migrated) {
       const n = rec.rebuilt ? '' : this.lang === 'vi' ? ' Cuộc trò chuyện này đã được nâng cấp theo bản mới — dùng tiếp bình thường.' : ' This conversation was upgraded to the current version — just continue it.';
@@ -1758,7 +1798,7 @@ export class ChatController implements vscode.Disposable {
       await this.saveNow(); // bản trong Thùng rác phải là bản mới nhất
       await this.d.store.moveToTrash(id);
       this.session = this.freshSession();
-      this.view = { ...this.baseView(), providers: this.view.providers, ...this.carryStrips(), ...(await this.listings()), screen: 'history' };
+      this.view = { ...this.baseView(), ...this.meterPatch([]), providers: this.view.providers, ...this.carryStrips(), ...(await this.listings()), screen: 'history' };
       this.post({ type: 'init', state: this.view });
       this.toast('info', trashedMsg);
       return;

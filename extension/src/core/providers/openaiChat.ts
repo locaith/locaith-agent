@@ -57,7 +57,7 @@ import {
   type HttpContext,
   type RetryState,
 } from './http';
-import { selectDeepseekModels, selectGenericModels, type RawModel } from './modelFilters';
+import { parseListPricing, selectDeepseekModels, selectGenericModels, type RawModel } from './modelFilters';
 
 export const DEEPSEEK_DEFAULT_BASE_URL = 'https://api.deepseek.com';
 const DEEPSEEK_MAX_TOKENS = 393_216;
@@ -602,6 +602,7 @@ export class OpenAIChatProvider implements LLMProvider {
           contextWindow: typeof m.context_length === 'number' ? m.context_length : undefined,
           // OpenRouter: top_provider.max_completion_tokens · cổng Locaith: max_output_tokens ngay ở cấp trên.
           maxOutputTokens: typeof m.max_output_tokens === 'number' ? m.max_output_tokens : typeof top.max_completion_tokens === 'number' ? top.max_completion_tokens : undefined,
+          pricing: parseListPricing(m.pricing), // (lane:sessions-ux) chỉ khi hãng trả giá (OpenRouter)
         };
       });
     return this.flavor === 'deepseek' ? selectDeepseekModels(raw) : selectGenericModels(raw);

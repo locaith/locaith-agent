@@ -35,6 +35,7 @@ import { repairToolArgs } from './guards/jsonRepair'; // (lane:loop-guards)
 import { beginExtensions, newTrace, type ActiveExtension, type FinalizeContext, type FinalizeDecision, type RunExtension, type RunScope, type RunTrace, type TraceCall, type TurnInfo } from './seams';
 import { buildSystemPrompt } from './context';
 import { formatMemoryBlock } from './memory';
+import { recordPromptStats } from './promptStats'; // (lane:sessions-ux)
 import { ToolDispatcher } from './dispatcher';
 import { StreamInterceptor, type PillBudget } from './interceptor';
 import { t, type Lang } from './strings';
@@ -365,6 +366,7 @@ export class AgentEngine {
           providerId: session.provider,
           outputStyle: session.outputStyle ?? this.d.outputStyle?.() ?? null, // (lane:commands-agents)
         });
+        recordPromptStats(session, system, specs, memory); // (lane:sessions-ux) số đo cho /context — chỉ hiển thị
 
         partialText = '';
         const interceptor = new StreamInterceptor({

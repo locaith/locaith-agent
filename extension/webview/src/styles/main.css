@@ -10,6 +10,7 @@
 @import './mcp.css';
 @import './queue.css';
 @import './parallel.css';
+@import './sessions-ux.css'; /* (lane:sessions-ux) */
 @import './extras.css';
 @import './media.css';
 @import './responsive.css';

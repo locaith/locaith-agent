@@ -82,7 +82,7 @@ export function ChatView({ view, hasAnyKey }: { view: ViewState; hasAnyKey: bool
                 return (
                   <Fragment key={item.id}>
                     {before}
-                    <UserMessage item={item} canEdit={i === lastUserIdx && !view.running} />
+                    <UserMessage item={item} canEdit={i === lastUserIdx && !view.running} busy={view.running} />
                   </Fragment>
                 );
               if (item.kind === 'assistant')

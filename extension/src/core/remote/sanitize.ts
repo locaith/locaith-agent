@@ -3,7 +3,7 @@
  * (kết quả công cụ, đối số, diff, suy luận). Thuần tuý, không import `vscode`.
  */
 
-import type { ABlock, AgentProgress, AttachmentInfo, CompactInfo, ContextInfo, DiffInfo, PermissionRequest, QueuedInfo, SuggestionOption, TItem, TodoItem, ToolBlock, UiEvent, VerifyInfo, ViewState } from '../../shared/protocol';
+import type { ABlock, AgentProgress, AttachmentInfo, CompactInfo, ContextInfo, DiffInfo, PermissionRequest, QueuedInfo, SessionMeterView, SuggestionOption, TItem, TodoItem, ToolBlock, UiEvent, VerifyInfo, ViewState } from '../../shared/protocol';
 import type { RemoteHostInfo, RemoteProvider, RemoteState } from './protocol';
 import { REMOTE_API_VERSION } from './protocol';
 
@@ -210,10 +210,32 @@ function sanitizeBlock(b: ABlock): ABlock {
   }
 }
 
+/** (lane:sessions-ux) Đồng hồ ngữ cảnh/chi phí: chỉ số hữu hạn không âm (chi phí thiếu thì giữ thiếu — không bịa). */
+export function sanitizeMeter(m: SessionMeterView): SessionMeterView {
+  const out: SessionMeterView = { inputTokens: wholeNumber(m?.inputTokens), outputTokens: wholeNumber(m?.outputTokens), compactions: wholeNumber(m?.compactions), clearedResults: wholeNumber(m?.clearedResults) };
+  if (typeof m?.costUsd === 'number' && Number.isFinite(m.costUsd) && m.costUsd >= 0) out.costUsd = Math.min(1e6, m.costUsd);
+  return out;
+}
+
+/** (lane:sessions-ux) Liên kết ngược của cuộc nhánh: mã an toàn + tiêu đề đã cắt; sai dạng thì bỏ (dòng chữ của notice vẫn đủ nghĩa). */
+export function sanitizeFork(f: { fromId: string; fromTitle: string } | undefined): { fromId: string; fromTitle: string } | undefined {
+  if (!f || typeof f.fromId !== 'string' || !/^[\w-]{1,200}$/.test(f.fromId)) return undefined;
+  return { fromId: f.fromId, fromTitle: cap(String(f.fromTitle ?? ''), 120) };
+}
+
 export function sanitizeItem(it: TItem): TItem {
   if (it.kind === 'user') return { ...it, attachments: it.attachments.map(sanitizeAttachment) };
   if (it.kind === 'assistant') return { ...it, blocks: it.blocks.map(sanitizeBlock) };
-  if (it.kind === 'notice' && (it.compact || it.verify)) return { ...it, ...(it.compact ? { compact: sanitizeCompact(it.compact) } : {}), ...(it.verify ? { verify: sanitizeVerify(it.verify) } : {}) };
+  if (it.kind === 'notice' && (it.compact || it.verify || it.fork)) {
+    const { fork, ...rest } = it; // (lane:sessions-ux)
+    const f = sanitizeFork(fork);
+    return {
+      ...rest,
+      ...(it.compact ? { compact: sanitizeCompact(it.compact) } : {}),
+      ...(it.verify ? { verify: sanitizeVerify(it.verify) } : {}),
+      ...(f ? { fork: f } : {}),
+    };
+  }
   return it;
 }
 
@@ -287,6 +309,7 @@ export function toRemoteState(view: ViewState, host: RemoteHostInfo, opts: { can
     providers: remoteProviders(view.providers, view.provider),
     sessions: (view.sessions ?? []).slice(0, MAX_SESSIONS),
     context: sanitizeContext(view.context),
+    ...(view.meter ? { meter: sanitizeMeter(view.meter) } : {}), // (lane:sessions-ux)
     allowBypass: view.allowBypass,
     remoteCanBypass: opts.canBypass,
     ...(view.options?.length ? { options: sanitizeOptions(view.options) } : {}),
@@ -309,6 +332,7 @@ export function sanitizePatch(p: Partial<ViewState>): Partial<Omit<RemoteState, 
   if (p.providers !== undefined) out.providers = remoteProviders(p.providers, p.provider ?? '');
   if (p.sessions !== undefined) out.sessions = p.sessions.slice(0, MAX_SESSIONS);
   if (p.context !== undefined) out.context = sanitizeContext(p.context);
+  if (p.meter !== undefined) out.meter = sanitizeMeter(p.meter); // (lane:sessions-ux)
   if (p.allowBypass !== undefined) out.allowBypass = p.allowBypass;
   if (p.transcript !== undefined) Object.assign(out, sanitizeTranscript(p.transcript));
   if (p.options !== undefined) out.options = sanitizeOptions(p.options); // (lane:output-timeouts) rỗng = thu hồi nút

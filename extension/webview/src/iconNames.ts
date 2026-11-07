@@ -55,4 +55,8 @@ export type IconName =
   | 'radio'
   | 'film'
   | 'music'
-  | 'play';
+  | 'play'
+  // (lane:sessions-ux)
+  | 'more'
+  | 'branch'
+  | 'pin';

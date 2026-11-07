@@ -310,6 +310,29 @@ const SHAPES: Record<IconName, VNode> = {
       <path d="M5 20h14" />
     </>
   ),
+  // (lane:sessions-ux)
+  more: (
+    <>
+      <circle cx="5" cy="12" r="1.2" fill="currentColor" />
+      <circle cx="12" cy="12" r="1.2" fill="currentColor" />
+      <circle cx="19" cy="12" r="1.2" fill="currentColor" />
+    </>
+  ),
+  branch: (
+    <>
+      <circle cx="6" cy="5" r="2" />
+      <circle cx="6" cy="19" r="2" />
+      <circle cx="18" cy="8" r="2" />
+      <path d="M6 7v10" />
+      <path d="M18 10c0 4-6 3-12 7" />
+    </>
+  ),
+  pin: (
+    <>
+      <path d="M9 4h6l-1 5 3 3v2H7v-2l3-3z" />
+      <path d="M12 14v6" />
+    </>
+  ),
 };
 
 export function Icon({ name, size = 16, class: cls }: { name: IconName; size?: number; class?: string }) {

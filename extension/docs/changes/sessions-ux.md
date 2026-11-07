@@ -1,0 +1,18 @@
+# Phiên: rẽ nhánh, tìm kiếm, đồng hồ ngữ cảnh/chi phí (lane sessions-ux)
+
+- **Rẽ nhánh từ một tin nhắn.** Rê chuột vào tin nhắn của bạn, bấm «⋯» rồi «Rẽ nhánh từ đây»: extension tạo cuộc trò chuyện mới chứa lịch sử tới hết lượt đó (không bao giờ có lệnh công cụ dở dang), tiêu đề «… (nhánh)», chuyển sang cuộc mới và để dòng «Rẽ nhánh từ …» ở đầu (bấm để quay lại cuộc gốc). Cuộc gốc giữ nguyên. Nhánh không thừa hưởng quyền «cho phép trong phiên này», dấu vân tay tệp đã đọc và số liệu token; chế độ «Bỏ qua mọi xác nhận» được hạ về mặc định. Todo và artifact liên quan được chép. Gõ `/fork` để rẽ từ cuối cuộc trò chuyện. Chỉ rẽ được khi trợ lý đang rảnh.
+- **Menu «⋯» trên tin nhắn của bạn** (thay nút bút chì): Sao chép · Sửa và gửi lại (chỉ tin cuối, khi trợ lý rảnh) · Rẽ nhánh từ đây. Gọn ở khung hẹp 320px; luôn hiện trên màn cảm ứng.
+- **Chip «ngữ cảnh 38%» ở thanh tiêu đề** với thanh mảnh đổi màu (xanh, vàng khi trên 60%, đỏ khi trên 80%). Bấm để xem: token đã dùng/cửa sổ, số lần nén, số kết quả công cụ đã lược, token vào/ra cả cuộc và **ước tính** chi phí (chỉ hiện khi danh mục model có giá thật, ví dụ OpenRouter; không có giá thì không hiện — không bịa). Khung rất hẹp chỉ hiện «38%».
+- **`/context`**: bảng chia nhỏ ngữ cảnh (system prompt, định nghĩa công cụ, ký ức, tin nhắn của bạn, câu trả lời, lệnh gọi công cụ, kết quả công cụ) — các phần là ước lượng, tổng do hãng báo. **`/cost`**: token vào/ra và ước tính chi phí cuộc trò chuyện, hoặc nói rõ «không có giá» cho model đó. Cả hai chạy được lúc trợ lý đang làm việc.
+- **Lịch sử: tìm toàn văn.** Ô tìm ở màn Lịch sử giờ tìm cả trong **nội dung** tin nhắn và câu trả lời (không phân biệt hoa/thường và dấu tiếng Việt: «hop dong» tìm ra «Hợp đồng»), hiện trích đoạn có chữ khớp được làm nổi và số chỗ khớp. Chỉ mục dựng lười lúc tìm lần đầu, quét theo lô nên không treo giao diện; kết quả hiện dần.
+- **Lịch sử: nhóm theo ngày, ghim, chọn nhiều.** Nhóm «Đã ghim · Hôm nay · Hôm qua · 7 ngày qua · 30 ngày qua · Cũ hơn». Nút ghim ở mỗi hàng (ghim lưu ở tệp `pinned.list.json` cạnh kho phiên). «Chọn nhiều» → tick các cuộc → «Xóa N cuộc» (hỏi lại, chuyển vào Thùng rác, khôi phục được trong 30 ngày; cuộc đang mở không chọn được). Đổi tên, sao lưu từng cuộc: vẫn như cũ.
+- **Chrome/Edge**: cùng chip, menu «⋯», rẽ nhánh, tìm kiếm, ghim, `/fork` `/context` `/cost`.
+- **Remote (locaith.ai)**: số liệu đồng hồ đi kèm trạng thái (trường `meter`, tuỳ chọn); dòng «Rẽ nhánh từ …» đi qua như một dòng thông báo thường (trường `fork` tuỳ chọn); lệnh Remote `fork_session` và `pin_session` được chấp nhận. Tìm toàn văn và xoá hàng loạt chưa mở cho Remote (cần kênh trả lời riêng ở trang web).
+- Cài đặt mới: không có.
+
+## English (short)
+
+- **Branch from here**: "⋯" menu on your messages (Copy · Edit and resend · Branch from here) and `/fork` create a new conversation with the history up to that turn (never a dangling tool call), titled "… (branch)", with a "Branched from …" link back. Session-scoped permissions, read-file fingerprints and token totals are not inherited.
+- **Header chip "context 38%"** with a thin bar (amber above 60%, red above 80%); click for tokens used/window, compactions, cleared tool results, input/output tokens and an **estimated** cost — shown only when the model catalog has a real price. `/context` breaks the context down by part; `/cost` prints tokens and estimated cost.
+- **History**: full-text search over titles and message text (accent-insensitive, highlighted snippets, batched index), day groups, pinning, multi-select delete to the Trash.
+- Chrome/Edge get the same; Remote receives the meter, the branch link and `fork_session` / `pin_session`.

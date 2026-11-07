@@ -320,6 +320,8 @@ export interface ModelInfo {
   /** Unix ms; dùng để xếp mới nhất lên đầu. */
   createdAt?: number;
   note?: string;
+  /** (lane:sessions-ux) Giá niêm yết USD / 1 triệu token, CHỈ khi hãng trả trong danh sách model (vd. OpenRouter). Thiếu = không biết giá. */
+  pricing?: { inputPerM: number; outputPerM: number };
 }
 
 export interface ModelListResult {

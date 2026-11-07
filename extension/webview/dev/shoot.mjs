@@ -220,6 +220,28 @@ const SHOTS = [
   { name: 'cut-forced-dark-420', q: { scenario: 'cut-forced', theme: 'dark' }, w: 420, h: 900 },
   { name: 'cut-continue-en-hc-420', q: { scenario: 'cut-continue', theme: 'hc', lang: 'en' }, w: 420, h: 900 },
   { name: '16-history-dark-420', q: { scenario: 'history', theme: 'dark' }, w: 420, h: 700 },
+  // (lane:sessions-ux)
+  { name: '16b-sessions-history-dark-420', q: { scenario: 'sessions-ux-history', theme: 'dark' }, w: 420, h: 760 },
+  {
+    name: '16c-sessions-meter-dark-420',
+    q: { scenario: 'sessions-ux', theme: 'dark' },
+    w: 420,
+    h: 520,
+    act: async (p) => {
+      await p.click('.meter-chip');
+      await wait(250);
+    },
+  },
+  {
+    name: '16d-sessions-msgmenu-dark-320',
+    q: { scenario: 'sessions-ux', theme: 'dark' },
+    w: 320,
+    h: 520,
+    act: async (p) => {
+      await p.click('.msg-menu-btn');
+      await wait(250);
+    },
+  },
   { name: '17-settings-dark-420-full', q: { scenario: 'settings', theme: 'dark', expand: '1' }, w: 420, h: 900, full: true },
   { name: '18-settings-nokeys-light-420', q: { scenario: 'settings-nokeys', theme: 'light' }, w: 420, h: 900 },
   {
