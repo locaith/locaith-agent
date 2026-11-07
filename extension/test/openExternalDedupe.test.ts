@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { externalLinkProps } from '../webview/src/externalLink';
+import { externalLinkProps, webviewOpenOnce } from '../webview/src/externalLink';
 import { OPEN_ONCE_WINDOW_MS, createOpenOnce, openExternalOnce } from '../src/core/host/openOnce';
 
 const posted: unknown[] = [];
@@ -83,7 +83,7 @@ describe('createOpenOnce / openExternalOnce (chống nảy đúp openExternal)',
 describe('liên kết Markdown trong webview — không mở hai lần', () => {
   beforeEach(() => {
     posted.length = 0;
-    openExternalOnce.reset();
+    webviewOpenOnce.reset();
   });
 
   it('thuộc tính liên kết KHÔNG có href thật (nếu có, bộ xử lý có sẵn của VS Code sẽ mở thêm một tab)', () => {
