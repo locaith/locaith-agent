@@ -2200,8 +2200,11 @@ export class ChatController implements vscode.Disposable {
       // Khôi phục mã từ XA (Remote) khi chế độ quyền chưa tự nhận sửa tệp: người ngồi ở máy phải xác nhận bằng hộp thoại của VS Code.
       askApproval: async (title, detail) => {
         const yes = this.lang === 'vi' ? 'Khôi phục' : 'Restore';
-        const pick = await vscode.window.showWarningMessage(title, { modal: true, detail }, yes);
-        return pick === yes;
+        try {
+          return (await vscode.window.showWarningMessage(title, { modal: true, detail }, yes)) === yes;
+        } catch {
+          return false;
+        }
       },
       openDiff: (rel, abs, before) => d.diffs.openAgainstFile(rel, abs, before),
       log: (level, msg) => d.logger.log(level, msg),
