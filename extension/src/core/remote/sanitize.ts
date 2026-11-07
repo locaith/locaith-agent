@@ -6,6 +6,7 @@
 import type { ABlock, AgentProgress, AttachmentInfo, CompactInfo, DiffInfo, PermissionRequest, QueuedInfo, TItem, ToolBlock, UiEvent, ViewState } from '../../shared/protocol';
 import type { RemoteHostInfo, RemoteProvider, RemoteState } from './protocol';
 import { REMOTE_API_VERSION } from './protocol';
+import { capBgTasks } from '../../shared/bgTasks'; // (lane:bg-tasks)
 
 /** Số mục transcript gửi trong snapshot (mục cũ hơn bị cắt, kèm `omitted`). */
 export const MAX_ITEMS = 150;
@@ -191,6 +192,7 @@ export function toRemoteState(view: ViewState, host: RemoteHostInfo, opts: { can
     context: view.context,
     allowBypass: view.allowBypass,
     remoteCanBypass: opts.canBypass,
+    ...(view.bgTasks?.length ? { bgTasks: capBgTasks(view.bgTasks) } : {}), // (lane:bg-tasks)
   };
 }
 
@@ -212,6 +214,7 @@ export function sanitizePatch(p: Partial<ViewState>): Partial<Omit<RemoteState, 
   if (p.context !== undefined) out.context = p.context;
   if (p.allowBypass !== undefined) out.allowBypass = p.allowBypass;
   if (p.transcript !== undefined) Object.assign(out, sanitizeTranscript(p.transcript));
+  if ('bgTasks' in p) out.bgTasks = capBgTasks(p.bgTasks); // (lane:bg-tasks) vắng/undefined = hết tác vụ → []
   return Object.keys(out).length ? out : null;
 }
 

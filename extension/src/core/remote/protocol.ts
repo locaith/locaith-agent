@@ -62,6 +62,8 @@ export interface RemoteState {
   allowBypass: boolean;
   /** Trang từ xa có được phép tự chuyển sang chế độ bypass không (mặc định không). */
   remoteCanBypass: boolean;
+  /** (lane:bg-tasks) Tác vụ nền của cuộc trò chuyện (tuỳ chọn — trang cũ bỏ qua). */
+  bgTasks?: import('../../shared/bgTasks').BgTaskView[];
 }
 
 export type RemoteStreamMsg =
@@ -77,7 +79,7 @@ export type RemoteStreamMsg =
 /** Các lệnh trang từ xa được phép gửi — tập con của WebviewMessage. Mọi thứ khác (xoá lịch sử, khoá API, MCP, mở tệp…) chỉ làm được trong VS Code. */
 export type RemoteCommand = Extract<
   WebviewMessage,
-  { type: 'send' | 'stop' | 'retry' | 'compact' | 'new_session' | 'load_session' | 'rename_session' | 'queue_remove' | 'set_model' | 'set_mode' | 'set_thinking' | 'set_swarm' | 'permission_response' | 'get_image' }
+  { type: 'send' | 'stop' | 'retry' | 'compact' | 'new_session' | 'load_session' | 'rename_session' | 'queue_remove' | 'set_model' | 'set_mode' | 'set_thinking' | 'set_swarm' | 'permission_response' | 'get_image' | 'bg_task' }
 >;
 
 export const MAX_TEXT_CHARS = 50_000;
@@ -159,6 +161,12 @@ export function parseCommand(raw: unknown, opts: { canBypass: boolean }): ParseR
     case 'get_image': {
       if (typeof o.key !== 'string' || o.key.length === 0 || o.key.length > 200) return bad('bad_key');
       return { ok: true, cmd: { type: 'get_image', key: o.key } };
+    }
+    // (lane:bg-tasks) từ xa chỉ được DỪNG tác vụ nền (sao chép / mở editor là thao tác trên máy VS Code).
+    case 'bg_task': {
+      if (typeof o.id !== 'string' || !/^bg\d{1,6}$/.test(o.id)) return bad('bad_id');
+      if (o.action !== 'stop') return bad('bad_action');
+      return { ok: true, cmd: { type: 'bg_task', id: o.id, action: 'stop' } };
     }
     default:
       return bad('unknown_command');

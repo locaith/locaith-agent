@@ -811,6 +811,8 @@ export interface ViewState {
   // ── (lane:hooks) ──
   // ── (lane:commands-agents) ──
   // ── (lane:bg-tasks) ──
+  /** (lane:bg-tasks) Tác vụ nền của cuộc trò chuyện đang mở (chip «N tác vụ nền»). Vắng = không có. */
+  bgTasks?: import('./bgTasks').BgTaskView[];
   // ── (lane:ide-context) ──
   // ── (lane:sessions-ux) ──
   // ── (lane:customer-bugs) ──
@@ -1012,6 +1014,8 @@ export type WebviewMessage =
   // ── (lane:hooks) ──
   // ── (lane:commands-agents) ──
   // ── (lane:bg-tasks) ──
+  /** (lane:bg-tasks) Thao tác trên một tác vụ nền: Dừng / Sao chép đầu ra / Xem đầy đủ trong editor. */
+  | { type: 'bg_task'; id: string; action: import('./bgTasks').BgTaskAction }
   // ── (lane:ide-context) ──
   // ── (lane:sessions-ux) ──
   // ── (lane:customer-bugs) ──

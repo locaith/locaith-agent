@@ -67,6 +67,12 @@ const vi = {
   // ── (lane:hooks) ──
   // ── (lane:commands-agents) ──
   // ── (lane:bg-tasks) ──
+  bgTaskEnded: '[Tác vụ nền {id} ({command}) đã kết thúc: {status} sau {dur}.{tail}]',
+  bgTaskTail: ' {n} dòng cuối:\n{lines}',
+  bgTaskExit: 'exit {code}',
+  bgTaskKilledByUser: 'người dùng đã dừng',
+  bgTaskKilled: 'bị dừng',
+  bgTaskFailedStart: 'không khởi chạy được ({error})',
   // ── (lane:ide-context) ──
   // ── (lane:sessions-ux) ──
   // ── (lane:customer-bugs) ──
@@ -135,6 +141,12 @@ const en: typeof vi = {
   // ── (lane:hooks) ──
   // ── (lane:commands-agents) ──
   // ── (lane:bg-tasks) ──
+  bgTaskEnded: '[Background task {id} ({command}) ended: {status} after {dur}.{tail}]',
+  bgTaskTail: ' Last {n} lines:\n{lines}',
+  bgTaskExit: 'exit {code}',
+  bgTaskKilledByUser: 'stopped by the user',
+  bgTaskKilled: 'killed',
+  bgTaskFailedStart: 'failed to start ({error})',
   // ── (lane:ide-context) ──
   // ── (lane:sessions-ux) ──
   // ── (lane:customer-bugs) ──

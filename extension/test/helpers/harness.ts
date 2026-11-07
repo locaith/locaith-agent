@@ -59,6 +59,8 @@ export interface HarnessOptions {
   sessionProvider?: string;
   /** Kho kỹ năng thay cho kho dựng sẵn (kiểm thử kỹ năng riêng của một họ mô hình). */
   skillsRegistry?: SkillRegistry;
+  /** (lane:bg-tasks) Shell của host thật (test tiến trình nhanh hơn với 'cmd' trên Windows). */
+  shellPreference?: string;
 }
 
 export function makeHarness(script: Step[], opts: HarnessOptions = {}): Harness {
@@ -68,6 +70,7 @@ export function makeHarness(script: Step[], opts: HarnessOptions = {}): Harness 
   const host = new NodeToolHost({
     roots: [dir],
     settings: opts.hostSettings,
+    shellPreference: opts.shellPreference,
     secrets: opts.secrets,
     fetchImpl: opts.fetchImpl,
     onPermission: async (req) => {

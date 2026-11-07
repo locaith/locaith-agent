@@ -3,6 +3,8 @@ import { AgentEngine, type QueuedMessage, type QueueState, type RunResult } from
 import { coreRunExtensions } from '../core/engine/extensions';
 import { hostRunExtensions } from './hostExtensions';
 import { SlashRegistry, type SlashContext } from './slashRegistry';
+import { handleBgTaskMessage, registerTasksSlash, type BgTasksBridge } from './tasksSlash'; // (lane:bg-tasks)
+import { getTaskManager } from '../core/tasks/backgroundTasks'; // (lane:bg-tasks)
 import { loadProjectInstructions } from '../core/engine/instructions';
 import { resumeInstruction } from '../core/engine/resume';
 import { MEMORY_DIR, MEMORY_INDEX, type MemoryScope, type MemorySnapshot } from '../core/engine/memory';
@@ -285,7 +287,7 @@ export class ChatController implements vscode.Disposable {
     // registerPermissionsSlash(this.slash, this); // (lane:perm-rules)  /permissions
     // registerHooksSlash(this.slash, this); // (lane:hooks)  /hooks
     // registerCommandsSlash(this.slash, this); // (lane:commands-agents)  lệnh tuỳ chỉnh + /review /simplify /status /doctor /agents /output-style /mcp
-    // registerTasksSlash(this.slash, this); // (lane:bg-tasks)  /tasks
+    registerTasksSlash(this.slash, this); // (lane:bg-tasks)  /tasks
     // registerIdeSlash(this.slash, this); // (lane:ide-context)  /problems
     // registerSessionsSlash(this.slash, this); // (lane:sessions-ux)  /fork /cost /context
     // registerMcpSlash(this.slash, this); // (lane:mcp-parity)  /mcp__<server>__<prompt>
@@ -404,6 +406,11 @@ export class ChatController implements vscode.Disposable {
   /** MCP đổi trạng thái (khởi động xong, lỗi, dừng): làm mới danh sách nếu Chợ đang mở. */
   async refreshMarketIfOpen(): Promise<void> {
     if (this.marketOpen && !this.disposed && this.webview) await this.sendMarket(true);
+  }
+
+  /** (lane:bg-tasks) Cầu nối cho tasksSlash.ts: host + vá ViewState từ ngoài controller. */
+  bgTasksBridge(): BgTasksBridge {
+    return { host: this.host, sessionId: () => this.session.id, patch: (p) => this.patch(p), lang: () => this.lang, disposed: () => this.disposed, addMirror: (m) => this.addMirror(m) };
   }
 
   /** Ảnh chụp trạng thái — chỉ dùng cho kiểm thử tích hợp. */
@@ -1207,6 +1214,8 @@ export class ChatController implements vscode.Disposable {
         return;
       case 'apply_code':
         return this.applyCode(m.code, m.lang, m.mode);
+      case 'bg_task': // (lane:bg-tasks) Dừng / Sao chép / Xem đầy đủ một tác vụ nền
+        return handleBgTaskMessage(this, m);
     }
   }
 
@@ -1656,6 +1665,7 @@ export class ChatController implements vscode.Disposable {
 
   /** Xoá = chuyển vào Thùng rác (khôi phục được trong 30 ngày), không mất nội dung nào, kể cả tệp bối cảnh đã tải lên. */
   private async deleteSession(id: string): Promise<void> {
+    if (id !== this.session.id || !this.busy) void getTaskManager(this.host).disposeSession(id); // (lane:bg-tasks) xoá cuộc trò chuyện = dừng tác vụ nền của nó
     const trashedMsg = this.lang === 'vi' ? 'Đã chuyển vào Thùng rác — khôi phục được trong 30 ngày.' : 'Moved to the Trash — you can restore it for 30 days.';
     if (id === this.session.id) {
       if (this.busy) return this.toast('info', this.lang === 'vi' ? 'Hãy dừng tác vụ đang chạy trước.' : 'Stop the running task first.');
@@ -2335,6 +2345,7 @@ export class ChatController implements vscode.Disposable {
     this.chromeUnsub?.();
     this.locaithSub?.dispose();
     this.stop();
+    void getTaskManager(this.host).disposeAll(); // (lane:bg-tasks) đóng khung chat / tắt extension = không để tiến trình nền mồ côi
     if (this.flushTimer) clearTimeout(this.flushTimer);
     void this.saveNow();
   }
