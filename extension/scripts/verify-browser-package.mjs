@@ -149,6 +149,13 @@ export function verifyBrowserPackage(dir, opts = {}) {
   }
   if (optPerms.includes('identity')) check(/permissions\s*:\s*\[\s*["']identity["']\s*\]/.test(code), 'mã có xin quyền «identity» lúc chạy');
 
+  // ── đánh giá một chạm (src/browser/rating.ts): mã gửi sao tới `<máy chủ>/api/feedback`. Máy chủ đó PHẢI nằm trong host_permissions
+  //    (backend không cho CORS với origin tiện ích → thiếu quyền là mọi lần chạm sao đều lỗi âm thầm), và thông báo đồng ý phải nói việc đó.
+  const feedbackOrigins = [...new Set([...code.matchAll(/https:\/\/[a-z0-9.-]+(?=\/api\/feedback)/gi)].map((m) => m[0]))];
+  for (const origin of feedbackOrigins) {
+    check((manifest.host_permissions ?? []).includes(`${origin}/*`), `host_permissions có ${origin}/* (điểm gửi đánh giá một chạm)`, 'mã gửi đánh giá tới máy chủ này nhưng manifest không khai báo → trình duyệt chặn (CORS)');
+  }
+
   // ── chuỗi giao diện bản trình duyệt nói đúng nơi lưu khoá API
   for (const key of ['set.providers.hint.browser', 'welcome.nokey.body.browser']) {
     const v = readBundledString(panel, key);
@@ -170,6 +177,7 @@ export function verifyBrowserPackage(dir, opts = {}) {
     const ui = files.includes('store-consent.js') ? text('store-consent.js') : '';
     const url = /const PRIVACY_URL = ["']([^"']*)["']/.exec(ui)?.[1] ?? '';
     check(/^https:\/\/[^\s/]+\/\S+/.test(url) && !url.includes('__PRIVACY_URL__'), 'store-consent.js có URL chính sách quyền riêng tư thật (không còn chỗ giữ chỗ)', url || 'không thấy PRIVACY_URL');
+    if (feedbackOrigins.length) check(/chạm một ngôi sao/.test(ui) && /tap a star/i.test(ui) && /Locaith/.test(ui), 'thông báo đồng ý nói việc chấm sao được gửi tới Locaith', 'mã có gửi đánh giá về Locaith nhưng thông báo đồng ý không nhắc (cần nói trước khi dữ liệu rời máy)');
     const key = /const KEY = ["']([^"']+)["']/.exec(ui)?.[1];
     const sw = files.includes('store-consent-sw.js') ? text('store-consent-sw.js') : '';
     check(!!key && sw.includes(`'${key}'`), 'giao diện và cổng nền dùng cùng khoá đồng ý', `giao diện: ${key}`);

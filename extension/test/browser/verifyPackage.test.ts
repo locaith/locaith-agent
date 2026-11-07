@@ -56,6 +56,24 @@ afterAll(() => {
   fs.rmSync(tmp, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 });
 });
 
+describe('đánh giá một chạm: điểm gửi và thông báo đồng ý phải khớp nhau', () => {
+  it('gói thật có máy chủ gửi đánh giá trong host_permissions và thông báo đồng ý nhắc tới việc chấm sao', () => {
+    const { passed } = verifyBrowserPackage(good, { root: ROOT });
+    expect(passed).toContain('host_permissions có https://studio-api.locaith.com/* (điểm gửi đánh giá một chạm)');
+    expect(passed).toContain('thông báo đồng ý nói việc chấm sao được gửi tới Locaith');
+  });
+
+  it('thiếu host_permissions của máy chủ nhận đánh giá → bị chặn (nếu không mọi lần chạm sao đều lỗi CORS âm thầm)', () => {
+    const dir = mutated((d) => editManifest(d, (m) => void (m.host_permissions = (m.host_permissions as string[]).filter((h) => !h.includes('studio-api.locaith.com')))));
+    expect(() => verifyBrowserPackage(dir, { root: ROOT })).toThrow(/host_permissions có https:\/\/studio-api\.locaith\.com\/\*/);
+  });
+
+  it('thông báo đồng ý không còn nhắc việc gửi sao về Locaith → bị chặn', () => {
+    const dir = mutated((d) => edit(d, 'store-consent.js', (s) => s.replace(/If YOU tap a star[^']*/, '').replace(/Nếu BẠN tự chạm một ngôi sao[^']*/, '')));
+    expect(() => verifyBrowserPackage(dir, { root: ROOT })).toThrow(/thông báo đồng ý nói việc chấm sao/);
+  });
+});
+
 describe('gói phát hành dựng thật', () => {
   it('đạt toàn bộ bộ kiểm', () => {
     const { passed } = verifyBrowserPackage(good, { root: ROOT });
