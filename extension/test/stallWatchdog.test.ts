@@ -125,4 +125,28 @@ describe('stallWatchdog — watchStream (fake timers)', () => {
     expect((err as StallError).kind).toBe('total');
     expect((err as StallError).limitMs).toBe(12_000);
   });
+
+  it('queue/retry rồi IM HẲN → vẫn kêu sau thời gian chờ đã báo + ngưỡng im lặng (không chờ vô hạn)', async () => {
+    for (const first of [
+      { type: 'retry', attempt: 1, maxAttempts: 3, delayMs: 2_000, reason: 'busy' } as ProviderEvent,
+      { type: 'queue', position: 1, ahead: 0, attempt: 1, waitMs: 2_000, retryAt: Date.now() + 2_000 } as ProviderEvent,
+    ]) {
+      const ac = new AbortController();
+      async function* src(): AsyncGenerator<ProviderEvent> {
+        yield first;
+        await new Promise<never>((_, reject) => ac.signal.addEventListener('abort', () => reject(new Error('aborted')), { once: true }));
+      }
+      let at = -1;
+      const t0 = Date.now();
+      const run = (async () => {
+        for await (const _ of watchStream(src(), { stallMs: 5_000, totalMs: 600_000 }, { onTimeout: () => { at = Date.now() - t0; ac.abort(); } })) void _;
+      })();
+      const failed = run.catch((e) => e);
+      await vi.advanceTimersByTimeAsync(6_900);
+      expect(at).toBe(-1); // chưa tới 2 s + 5 s
+      await vi.advanceTimersByTimeAsync(300);
+      expect(await failed).toBeInstanceOf(StallError);
+      expect(at).toBeGreaterThanOrEqual(7_000);
+    }
+  });
 });

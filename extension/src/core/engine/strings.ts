@@ -60,6 +60,8 @@ const vi = {
   // ── (lane:cc-timeline-ui) ──
   // ── (lane:ctx-compaction) ──
   // ── (lane:output-timeouts) ──
+  maxTokensEmptyRetry: 'Suy luận đã dùng hết giới hạn độ dài mà chưa có câu trả lời, đang thử lại với giới hạn cao hơn',
+  maxTokensEmptyStop: 'Suy luận đã dùng hết giới hạn độ dài mà chưa có câu trả lời. Hãy thử giảm mức suy luận hoặc tăng locaithAgent.agent.maxOutputTokens.',
   wrapUpFacts: 'Vết thật của lượt này (do harness ghi, không phải do bạn kể): {files}; {execs}; việc chưa xong trong danh sách: {pending}.',
   factsFiles: 'đã sửa {n} tệp ({list})',
   factsNoFiles: 'chưa sửa tệp nào',
@@ -154,6 +156,8 @@ const en: typeof vi = {
   // ── (lane:cc-timeline-ui) ──
   // ── (lane:ctx-compaction) ──
   // ── (lane:output-timeouts) ──
+  maxTokensEmptyRetry: 'Reasoning used up the length limit before any answer, retrying with a higher limit',
+  maxTokensEmptyStop: 'Reasoning used up the length limit before any answer. Try a lower reasoning level or raise locaithAgent.agent.maxOutputTokens.',
   wrapUpFacts: 'Real trace of this run (recorded by the harness, not by you): {files}; {execs}; unfinished tasks in the list: {pending}.',
   factsFiles: 'changed {n} file(s) ({list})',
   factsNoFiles: 'no files changed',

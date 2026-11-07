@@ -8,12 +8,35 @@
  * giới hạn thật của model lấy từ danh mục). Hàm thuần, tất định — mỗi luật có test.
  */
 
+import type { ThinkingLevel } from '../types';
+
 /** Trần cho lượt thường (trả lời, so sánh, sửa mã nhỏ). */
 export const SHORT_OUTPUT_TOKENS = 8_000;
 /** Trần "dài" mặc định khi không biết trần model (bằng mặc định của cài đặt). */
 export const LONG_OUTPUT_TOKENS = 32_000;
 
+/**
+ * Ngân sách suy luận chừa thêm cho lượt thường theo mức suy luận. Token suy luận tính CHUNG vào trần đầu ra (Claude kiểu budget,
+ * Gemini 2.5 thinkingBudget, DeepSeek reasoner…): trần 8k ở mức medium/high có thể bị suy luận nuốt hết ⇒ `max_tokens` mà chưa có chữ.
+ * Số bằng ngân sách adapter xin (medium 8192, high 24576); max/swarm = trần đầy đủ.
+ */
+export function reasoningReserve(level: ThinkingLevel | undefined): number {
+  switch (level) {
+    case 'medium':
+      return 8_192;
+    case 'high':
+      return 24_576;
+    case 'max':
+    case 'swarm':
+      return Number.POSITIVE_INFINITY;
+    default:
+      return 0;
+  }
+}
+
 export interface OutputBudgetInput {
+  /** Mức suy luận của phiên: medium trở lên được cộng ngân sách suy luận vào trần lượt thường. */
+  thinkingLevel?: ThinkingLevel;
   /** Chữ người dùng gõ ở tin mở lượt (đã bỏ phần đính kèm). */
   userText: string;
   /** Cài đặt `agent.maxOutputTokens` — luôn là TỐI ĐA. */
@@ -39,23 +62,33 @@ export interface OutputBudget {
  * Yêu cầu kiểu "viết dài": báo cáo, tài liệu, bản đầy đủ, viết tiếp, dịch cả tệp, bài viết/blog, kịch bản, hướng dẫn chi tiết…
  * Tiếng Việt có dấu lẫn không dấu, tiếng Anh. Tất định (regex), không gọi model.
  */
-const LONG_FORM_RE = new RegExp(
-  [
+const LONG_FORM_WORDS = [
     // vi
     'báo cáo', 'bao cao', 'tài liệu', 'tai lieu', 'bản đầy đủ', 'ban day du', 'đầy đủ', 'day du', 'viết dài', 'viet dai', 'chi tiết nhất', 'toàn bộ nội dung',
     'viết tiếp', 'viet tiep', 'phần tiếp', 'phan tiep', 'bài viết', 'bai viet', 'bài blog', 'kịch bản', 'kich ban', 'hướng dẫn chi tiết', 'huong dan chi tiet',
-    'biên bản', 'bien ban', 'đề án', 'de an', 'luận văn', 'luan van', 'giáo trình', 'giao trinh', 'sách', 'ebook', 'whitepaper', 'dịch toàn bộ', 'dich toan bo',
+    'biên bản', 'bien ban', 'đề án', 'de an', 'luận văn', 'luan van', 'giáo trình', 'giao trinh', 'viết sách', 'cuốn sách', 'quyển sách', 'ebook', 'whitepaper', 'dịch toàn bộ', 'dich toan bo',
     'soạn thảo', 'soan thao', 'hợp đồng', 'hop dong', 'kế hoạch chi tiết', 'ke hoach chi tiet', 'changelog đầy đủ', 'tổng hợp đầy đủ', 'phân tích chi tiết', 'phan tich chi tiet',
     // en
     'report', 'full document', 'document', 'documentation', 'whole document', 'complete version', 'full version', 'in full', 'long[- ]form', 'write (?:it )?long',
     'continue (?:writing|the (?:report|document|article))', 'next part', 'blog post', 'article', 'essay', 'white ?paper', 'specification', 'spec sheet', 'detailed guide',
     'comprehensive', 'exhaustive', 'thesis', 'book chapter', 'translate the (?:whole|entire)', 'proposal', 'contract', 'detailed plan', 'full changelog',
-  ].join('|'),
-  'i',
+].join('|');
+
+/**
+ * Khớp theo TỪ TRỌN VẸN (ranh giới Unicode, chịu được dấu tiếng Việt): "document" không khớp trong "document.getElementById",
+ * "contract" không khớp "contractor", "thesis" không khớp "parenthesis", "sách" không khớp "chính sách", "de an" không khớp "made an".
+ * Cho phép số nhiều (reports, documents).
+ */
+const LONG_FORM_RE = new RegExp(
+  `(?<![\\p{L}\\p{M}\\p{N}_]|[\\p{L}_]\\.)(?:${LONG_FORM_WORDS})(?:e?s)?(?![\\p{L}\\p{M}\\p{N}_]|\\.[\\p{L}_])`,
+  'iu',
 );
 
-/** Chuỗi đánh dấu mà chính harness gắn vào câu "viết tiếp" (nút «Chạy tiếp phần N» / tự nối tiếp): luôn là viết dài. */
-const CONTINUATION_MARK_RE = /\[(?:tiếp phần|continue part|part) \d+\]|viết tiếp phần \d+|continue part \d+/i;
+/**
+ * Chuỗi đánh dấu mà chính harness gắn vào câu "viết tiếp" (nút «Chạy tiếp phần N» / tự nối tiếp): luôn là viết dài.
+ * Phải khớp CẢ HAI ngôn ngữ: `continuePartPrompt` (vi: «Viết tiếp phần N…», en: «Continue with part N…») và `partMarker` (en: «[continued in part N]»).
+ */
+const CONTINUATION_MARK_RE = /\[(?:tiếp phần|continued in part|continue part|part) \d+(?:\/\d+)?\]|viết tiếp phần \d+|continue(?:d)? (?:with|in) part \d+|continue part \d+/i;
 
 export function isLongFormRequest(text: string): boolean {
   const s = (text ?? '').replace(/\s+/g, ' ').trim();
@@ -77,5 +110,5 @@ export function pickOutputBudget(i: OutputBudgetInput): OutputBudget {
   if (i.continuation) return { tokens: cap, reason: 'continuation' };
   if (i.longWriteSeen) return { tokens: cap, reason: 'long-write' };
   if (isLongFormRequest(i.userText)) return { tokens: cap, reason: 'long-request' };
-  return { tokens: Math.min(SHORT_OUTPUT_TOKENS, cap), reason: 'short' };
+  return { tokens: Math.min(SHORT_OUTPUT_TOKENS + reasoningReserve(i.thinkingLevel), cap), reason: 'short' };
 }

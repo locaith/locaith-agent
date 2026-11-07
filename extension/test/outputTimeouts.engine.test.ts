@@ -56,7 +56,7 @@ describe('H05 — chạm trần đầu ra: cắt đúng ranh giới, đánh dấ
   });
 
   it('lần gọi nối tiếp dùng trần ĐẦY ĐỦ dù câu hỏi ban đầu là lượt thường (8k)', async () => {
-    const h = makeHarness([() => cutTurn('Một. Hai dở'), () => textTurn('Xong.')]);
+    const h = makeHarness([() => cutTurn('Một. Hai dở'), () => textTurn('Xong.')], { thinkingLevel: 'low' });
     await h.run('hỏi ngắn');
     expect(h.provider.requests.map((r) => r.maxOutputTokens)).toEqual([SHORT_OUTPUT_TOKENS, LONG_OUTPUT_TOKENS]);
   });
@@ -94,7 +94,7 @@ describe('H05 — chạm trần đầu ra: cắt đúng ranh giới, đánh dấ
   it('chạm trần khi đang gọi công cụ → lệnh cuối không chạy (đối số cụt), lần gọi kế được trần đầy đủ', async () => {
     const h = makeHarness(
       [() => toolTurn([{ name: 'list_dir', input: {} }, { name: 'write_file', input: { path: 'big.txt', content: 'cụt' } }], { stopReason: 'max_tokens' }), () => textTurn('ok')],
-      { files: { 'x.txt': '1' } },
+      { files: { 'x.txt': '1' }, thinkingLevel: 'low' },
     );
     await h.run('x');
     const { existsSync } = await import('node:fs');
@@ -108,7 +108,7 @@ describe('H05 — chạm trần đầu ra: cắt đúng ranh giới, đánh dấ
 
 describe('H04 — trần đầu ra thích ứng truyền tới nhà cung cấp', () => {
   it('lượt thường → 8.000; yêu cầu báo cáo/tài liệu → trần đầy đủ; kẹp theo trần model; tắt thích ứng → luôn tối đa', async () => {
-    const a = makeHarness([() => textTurn('ok')]);
+    const a = makeHarness([() => textTurn('ok')], { thinkingLevel: 'low' });
     await a.run('sửa lỗi ở hàm parse');
     expect(a.provider.requests[0].maxOutputTokens).toBe(SHORT_OUTPUT_TOKENS);
 
@@ -130,7 +130,7 @@ describe('H04 — trần đầu ra thích ứng truyền tới nhà cung cấp',
   });
 
   it('sau khi gọi công cụ ghi nội dung dài (write_file) → các lần gọi sau trong cùng lượt dùng trần đầy đủ', async () => {
-    const h = makeHarness([() => toolTurn([{ name: 'write_file', input: { path: 'a.md', content: 'x' } }]), () => toolTurn([{ name: 'read_file', input: { path: 'a.md' } }]), () => textTurn('ok')]);
+    const h = makeHarness([() => toolTurn([{ name: 'write_file', input: { path: 'a.md', content: 'x' } }]), () => toolTurn([{ name: 'read_file', input: { path: 'a.md' } }]), () => textTurn('ok')], { thinkingLevel: 'low' });
     await h.run('tạo a.md');
     // (cổng hoàn thành có thể thêm lần gọi "kiểm chứng" ở cuối — mọi lần sau write_file đều phải là trần đầy đủ)
     const caps = h.provider.requests.map((r) => r.maxOutputTokens);
@@ -372,5 +372,44 @@ describe('B08 — bị buộc dừng thì nói thật', () => {
     await h.run('x');
     expect(eventsOf(h.events, 'notice')).toHaveLength(0);
     expect(eventsOf(h.events, 'options')).toHaveLength(0);
+  });
+});
+
+describe('H05 — chạm trần khi chưa có chữ nào (suy luận nuốt trần)', () => {
+  const emptyCut = (): ProviderEvent[] => [{ type: 'done', stopReason: 'max_tokens', usage: USAGE, message: { role: 'assistant', content: [{ type: 'thinking', text: 'nghĩ mãi', provider: 'fake' }] } }];
+
+  it('lần thử lại dùng trần cao hơn lần đầu và không có tin assistant rỗng trong lịch sử', async () => {
+    const h = makeHarness([emptyCut, () => textTurn('Có rồi.')], { thinkingLevel: 'low' });
+    await h.run('hỏi ngắn');
+    expect(h.provider.requests.map((r) => r.maxOutputTokens)).toEqual([SHORT_OUTPUT_TOKENS, LONG_OUTPUT_TOKENS]);
+    expect(eventsOf(h.events, 'notice').map((n) => n.text)).toContain(t('vi', 'maxTokensEmptyRetry'));
+    expect(h.session.messages.filter((m) => m.role === 'assistant').map((m) => textOf(m))).toEqual(['Có rồi.']);
+  });
+
+  it('vẫn rỗng sau khi thử lại → dừng với thông báo nguyên nhân, không vòng lặp vô hạn, không tin rỗng', async () => {
+    const h = makeHarness([emptyCut, emptyCut, () => textTurn('không được tới đây')], { thinkingLevel: 'low' });
+    const r = await h.run('hỏi ngắn');
+    expect(r.stopReason).toBe('end_turn');
+    expect(h.provider.requests).toHaveLength(2);
+    expect(eventsOf(h.events, 'notice').map((n) => n.text)).toContain(t('vi', 'maxTokensEmptyStop'));
+    expect(h.session.messages.filter((m) => m.role === 'assistant')).toHaveLength(0);
+  });
+
+  it('đã ở trần đầy đủ mà vẫn rỗng → không thử lại vô ích, dừng ngay', async () => {
+    const h = makeHarness([emptyCut, () => textTurn('không được tới đây')]);
+    await h.run('Viết báo cáo đầy đủ');
+    expect(h.provider.requests).toHaveLength(1);
+    expect(eventsOf(h.events, 'notice').map((n) => n.text)).toContain(t('vi', 'maxTokensEmptyStop'));
+  });
+});
+
+describe('H04 — mức suy luận được chừa ngân sách suy luận', () => {
+  it('medium → 8000 + 8192; max → trần đầy đủ', async () => {
+    const a = makeHarness([() => textTurn('ok')], { thinkingLevel: 'medium' });
+    await a.run('sửa lỗi ở hàm parse');
+    expect(a.provider.requests[0].maxOutputTokens).toBe(SHORT_OUTPUT_TOKENS + 8_192);
+    const b = makeHarness([() => textTurn('ok')], { thinkingLevel: 'max' });
+    await b.run('sửa lỗi ở hàm parse');
+    expect(b.provider.requests[0].maxOutputTokens).toBe(LONG_OUTPUT_TOKENS);
   });
 });

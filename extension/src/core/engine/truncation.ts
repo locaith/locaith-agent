@@ -87,6 +87,9 @@ export function trimToBoundary(input: string): TrimResult {
     return keep(lines.join('\n'), `\n${fence}`);
   }
 
+  // Số fence chẵn mà dòng cuối chính là một fence ⇒ đó là dấu ĐÓNG của khối mã vừa xong (không có xuống dòng cuối): giữ nguyên, đừng xoá.
+  if (/(?:^|\n)\s{0,3}(?:```|~~~)[ \t]*$/.test(text)) return keep(text);
+
   // Kết thúc sạch: dấu câu cuối câu hoặc xuống dòng (một mục/đoạn đã xong).
   if (text.endsWith('\n') || SENTENCE_END.test(text)) return keep(text);
 

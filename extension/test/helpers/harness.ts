@@ -38,6 +38,8 @@ export interface Harness {
 export interface HarnessOptions {
   files?: Record<string, string>;
   settings?: Partial<EngineSettings>;
+  /** Mức suy luận của phiên (mặc định 'medium'). */
+  thinkingLevel?: SessionState['thinkingLevel'];
   hostSettings?: Record<string, unknown>;
   secrets?: Record<string, string>;
   /** Quyết định cho mọi yêu cầu xin phép (mặc định: allow). */
@@ -94,7 +96,7 @@ export function makeHarness(script: Step[], opts: HarnessOptions = {}): Harness 
     ...opts.engineDeps,
   };
   const engine = new AgentEngine(deps);
-  const session = newSession({ id: 's1', provider: opts.sessionProvider ?? 'fake', model: 'fake-1', thinkingLevel: 'medium' });
+  const session = newSession({ id: 's1', provider: opts.sessionProvider ?? 'fake', model: 'fake-1', thinkingLevel: opts.thinkingLevel ?? 'medium' });
   return {
     dir,
     host,

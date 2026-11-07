@@ -75,13 +75,13 @@ describe('ADV-3 · stopReason=max_tokens mà model KHÔNG sinh chữ nào (suy l
 
 describe('ADV-4 · trần 8k thích ứng không trừ ngân sách suy luận của adapter', () => {
   it('Gemini 2.5 mức medium: thinkingBudget 8192 ≥ maxOutputTokens 8000 → suy luận một mình đã có thể nuốt hết trần', () => {
-    const cap = pickOutputBudget({ userText: 'sửa lỗi hàm parse', maxSetting: 32_000, modelCap: 65_536, longWriteSeen: false, continuation: false, adaptive: true }).tokens;
+    const cap = pickOutputBudget({ userText: 'sửa lỗi hàm parse', thinkingLevel: 'medium', maxSetting: 32_000, modelCap: 65_536, longWriteSeen: false, continuation: false, adaptive: true }).tokens;
     const cfg = buildThinkingConfig('gemini-2.5-pro', 'medium', true, { noThinkingConfig: false, levelOverride: undefined }) as { thinkingBudget: number };
     expect(cfg.thinkingBudget).toBeLessThan(cap);
   });
 
   it('Claude 4.x (kiểu budget) mức high: budget_tokens bị kéo từ 24576 xuống 7999 vì max_tokens=8000', () => {
-    const cap = pickOutputBudget({ userText: 'sửa lỗi hàm parse', maxSetting: 32_000, modelCap: 64_000, longWriteSeen: false, continuation: false, adaptive: true }).tokens;
+    const cap = pickOutputBudget({ userText: 'sửa lỗi hàm parse', thinkingLevel: 'high', maxSetting: 32_000, modelCap: 64_000, longWriteSeen: false, continuation: false, adaptive: true }).tokens;
     const p = buildThinkingParams('claude-sonnet-4-5', 'high', true, cap);
     expect((p.thinking as { budget_tokens: number }).budget_tokens).toBe(24_576);
   });

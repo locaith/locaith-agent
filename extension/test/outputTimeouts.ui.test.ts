@@ -140,3 +140,27 @@ describe('giao diện & cài đặt — hai ngôn ngữ, khai báo đủ', () =>
     expect(stallSetting(99_999)).toBe(600);
   });
 });
+
+describe('transcript — trimTail bỏ qua dòng trạng thái / thông báo đứng sau chữ', () => {
+  it('chữ dở + dòng «Đang soạn…» + thông báo thử lại → trimTail vẫn cắt đúng chữ dở và gỡ dòng trạng thái đang chạy', () => {
+    let items = applyEvent(start(), { t: 'text', id: 'a1', delta: 'Xong câu một. Câu hai dở' });
+    items = applyEvent(items, { t: 'pill', id: 'a1', pillId: 'p1', text: 'Đang soạn nội dung', kind: 'writing' });
+    items = applyEvent(items, { t: 'notice', id: 'a1', level: 'warn', text: 'thử lại' });
+    items = applyEvent(items, { t: 'text', id: 'a1', delta: '', trimTail: 'Xong câu một. Câu hai dở'.length });
+    items = applyEvent(items, { t: 'text', id: 'a1', delta: 'Lần hai.' });
+    const a = items[0] as Extract<TItem, { kind: 'assistant' }>;
+    expect(a.blocks.filter((b) => b.type === 'text').map((b) => (b as { text: string }).text).join('')).toBe('Lần hai.');
+    expect(a.blocks.some((b) => b.type === 'pill' && b.active)).toBe(false);
+  });
+
+  it('cắt qua nhiều khối chữ (chữ, suy luận, chữ) → bỏ khối chữ cạn, không đụng khối công cụ của lượt trước', () => {
+    let items = applyEvent(start(), { t: 'tool_start', id: 'a1', callId: 'c1', name: 'read_file', args: {} });
+    items = applyEvent(items, { t: 'text', id: 'a1', delta: 'AAA' });
+    items = applyEvent(items, { t: 'thinking', id: 'a1', delta: 'nghĩ' });
+    items = applyEvent(items, { t: 'text', id: 'a1', delta: 'BBBB' });
+    items = applyEvent(items, { t: 'text', id: 'a1', delta: '', trimTail: 7 });
+    const a = items[0] as Extract<TItem, { kind: 'assistant' }>;
+    expect(a.blocks.filter((b) => b.type === 'text').map((b) => (b as { text: string }).text).join('')).toBe('');
+    expect(a.blocks.some((b) => b.type === 'tool')).toBe(true);
+  });
+});

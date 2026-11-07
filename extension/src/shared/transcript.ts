@@ -66,10 +66,29 @@ function appendStreamText(a: AssistantItem, type: 'text' | 'thinking', delta: st
 /** (lane:output-timeouts) Bỏ `n` ký tự cuối của khối văn bản cuối (harness lùi câu trả lời bị cắt về ranh giới câu). Không có khối văn bản cuối → giữ nguyên. */
 function trimTailText(a: AssistantItem, n: number | undefined): AssistantItem {
   if (!n || n <= 0) return a;
-  const last = a.blocks[a.blocks.length - 1];
-  if (!last || last.type !== 'text') return a;
+  // Đi ngược từ cuối, BỎ QUA dòng trạng thái / khối suy luận đứng sau chữ (vd. «Đang soạn…» của write_file bị treo), cắt `n` ký tự
+  // từ các khối chữ gần nhất; khối chữ cạn hết thì bỏ khối. Gặp khối khác (công cụ…) là dừng — không bao giờ xoá phần của lượt trước.
+  let remaining = Math.floor(n);
   const blocks = a.blocks.slice();
-  blocks[blocks.length - 1] = { ...last, text: last.text.slice(0, Math.max(0, last.text.length - Math.floor(n))) };
+  let changed = false;
+  for (let i = blocks.length - 1; i >= 0 && remaining > 0; i--) {
+    const b = blocks[i];
+    if (b.type === 'pill' || b.type === 'thinking' || b.type === 'notice') continue;
+    if (b.type !== 'text') break;
+    const cut = Math.min(remaining, b.text.length);
+    remaining -= cut;
+    changed = true;
+    // Khối cạn mà còn phải cắt tiếp ở khối trước → bỏ khối; khối cuối cùng được cắt giữ lại (có thể rỗng như trước đây).
+    if (cut >= b.text.length && remaining > 0) blocks.splice(i, 1);
+    else blocks[i] = { ...b, text: b.text.slice(0, b.text.length - cut) };
+  }
+  if (!changed) return a;
+  // Dòng trạng thái đang hoạt động («Đang soạn…», «Đang suy nghĩ…») đứng cuối là của lần stream bị bỏ: gỡ luôn để không treo mãi.
+  while (blocks.length > 0) {
+    const tail = blocks[blocks.length - 1];
+    if (tail.type === 'pill' && tail.active) blocks.pop();
+    else break;
+  }
   return { ...a, blocks };
 }
 

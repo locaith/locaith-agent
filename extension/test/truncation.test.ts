@@ -88,3 +88,18 @@ describe('truncation — lùi về ranh giới câu/mục', () => {
     expect(continueWorkOption('en')).toMatchObject({ id: 'continue-work', kind: 'continue', label: 'Continue' });
   });
 });
+
+describe('trimToBoundary — dấu đóng khối mã ở cuối chuỗi', () => {
+  it('cắt ngay sau ``` hoặc ~~~ đóng (không xuống dòng) → giữ nguyên, không làm hở khối mã', () => {
+    for (const text of ['Mã:\n```ts\nconst a = 1;\n```', 'Ví dụ.\n\n~~~bash\nnpm test\n~~~']) {
+      const r = trimToBoundary(text);
+      expect(r.removed).toBe(0);
+      expect(r.text).toBe(text.replace(/[ \t]+$/, ''));
+      expect(r.closedFence).toBe(false);
+    }
+  });
+
+  it('dòng mở khối ```ts ở cuối (số fence lẻ) vẫn bị bỏ như cũ', () => {
+    expect(trimToBoundary('Mã:\n```ts').text).toBe('Mã:');
+  });
+});

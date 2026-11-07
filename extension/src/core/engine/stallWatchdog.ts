@@ -98,26 +98,33 @@ export function pausesClock(ev: ProviderEvent): boolean {
   return ev.type === 'queue' || ev.type === 'retry';
 }
 
+/** Thời gian chờ mà sự kiện queue/retry đã báo trước (ms): retry → `delayMs`; queue → `waitMs` hoặc `retryAt - now`. Không biết → 0. */
+function pauseDurationMs(ev: ProviderEvent, nowMs: number): number {
+  const n = ev.type === 'retry' ? ev.delayMs : ev.type === 'queue' ? (Number.isFinite(ev.waitMs) ? ev.waitMs : ev.retryAt - nowMs) : 0;
+  return Number.isFinite(n) && n > 0 ? n : 0;
+}
+
 /**
  * Bọc luồng sự kiện của nhà cung cấp bằng watchdog. Mỗi lần chờ sự kiện kế tiếp đua với một bộ hẹn giờ; đang "tạm dừng đồng hồ"
- * (sau `queue`/`retry`) thì chờ không giới hạn cho tới sự kiện kế. Vượt ngưỡng → `onTimeout` rồi ném `StallError`;
+ * (sau `queue`/`retry`) thì chờ thêm đúng thời gian đã báo (delayMs/waitMs) cộng một ngưỡng im lặng. Vượt ngưỡng → `onTimeout` rồi ném `StallError`;
  * promise `next()` còn treo được nuốt lỗi (nhà cung cấp sẽ ném 'aborted' khi engine huỷ).
  */
 export async function* watchStream<T extends ProviderEvent>(source: AsyncIterable<T>, policy: StallPolicy, opts: WatchOptions): AsyncGenerator<T, void, void> {
   const now = opts.now ?? Date.now;
   const it = source[Symbol.asyncIterator]();
   let paused = false;
+  let pauseMs = 0;
   let activeMs = 0;
   let segmentStart = now();
   try {
     while (true) {
       const pending = it.next();
       let result: IteratorResult<T>;
-      if (paused) {
-        result = await pending;
-      } else {
-        const budget = Math.max(1, Math.min(policy.stallMs, policy.totalMs - activeMs));
-        const kind: StallError['kind'] = policy.totalMs - activeMs <= policy.stallMs ? 'total' : 'stall';
+      {
+        // Đang tạm dừng đồng hồ (sau queue/retry): thời gian chờ đã báo (`pauseMs`) không tính, nhưng SAU đó vẫn phải có sự kiện trong
+        // `stallMs` — nếu không, model treo ngay sau một lần retry sẽ được chờ vô hạn. Trần tổng chỉ tính thời gian hoạt động nên không áp.
+        const budget = paused ? Math.max(1, pauseMs + policy.stallMs) : Math.max(1, Math.min(policy.stallMs, policy.totalMs - activeMs));
+        const kind: StallError['kind'] = !paused && policy.totalMs - activeMs <= policy.stallMs ? 'total' : 'stall';
         let timer: ReturnType<typeof setTimeout> | undefined;
         const timeout = new Promise<never>((_, reject) => {
           timer = setTimeout(() => reject(new StallError(kind, kind === 'total' ? policy.totalMs : policy.stallMs)), budget);
@@ -140,6 +147,7 @@ export async function* watchStream<T extends ProviderEvent>(source: AsyncIterabl
       if (result.done) return;
       const ev = result.value;
       paused = pausesClock(ev);
+      pauseMs = paused ? pauseDurationMs(ev, now()) : 0;
       yield ev;
       // Thời gian engine xử lý sự kiện (await trong vòng for) không phải lỗi của model: đặt lại mốc sau khi yield.
       segmentStart = now();

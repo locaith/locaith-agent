@@ -47,3 +47,29 @@ describe('outputBudget — trần đầu ra thích ứng', () => {
     expect(pickOutputBudget({ ...base, userText: 'hỏi ngắn', modelCap: 0 }).tokens).toBe(SHORT_OUTPUT_TOKENS); // modelCap vô nghĩa → bỏ qua
   });
 });
+
+describe('outputBudget — ranh giới từ, tiếng Anh, ngân sách suy luận', () => {
+  it('khớp theo từ trọn vẹn: mã nguồn / từ ghép không bị coi là yêu cầu viết dài; số nhiều vẫn khớp', () => {
+    for (const q of ['check document.getElementById in app.js', 'rename the contractor variable', 'the parenthesis is unbalanced', 'sửa chính sách CORS', 'I made an edit to parse.ts']) {
+      expect(isLongFormRequest(q), q).toBe(false);
+    }
+    for (const q of ['write the reports for Q3', 'Viết báo cáo, tài liệu', 'gửi cho mình các documents đầy đủ', 'viết sách về Go', '(report)']) {
+      expect(isLongFormRequest(q), q).toBe(true);
+    }
+  });
+
+  it('nút tiếp nối tiếng Anh và dấu «[continued in part N]» được coi là viết tiếp', () => {
+    expect(isLongFormRequest('Continue with part 4 from exactly where you stopped: do not repeat earlier parts')).toBe(true);
+    expect(isLongFormRequest('[continued in part 3/5]')).toBe(true);
+  });
+
+  it('mức suy luận medium/high được cộng ngân sách suy luận vào trần lượt thường (kẹp theo cài đặt/trần model); max = trần đầy đủ; low/off không đổi', () => {
+    const b = { ...base, userText: 'sửa lỗi hàm parse' };
+    expect(pickOutputBudget({ ...b, thinkingLevel: 'off' }).tokens).toBe(SHORT_OUTPUT_TOKENS);
+    expect(pickOutputBudget({ ...b, thinkingLevel: 'low' }).tokens).toBe(SHORT_OUTPUT_TOKENS);
+    expect(pickOutputBudget({ ...b, thinkingLevel: 'medium' }).tokens).toBe(SHORT_OUTPUT_TOKENS + 8_192);
+    expect(pickOutputBudget({ ...b, thinkingLevel: 'high' }).tokens).toBe(LONG_OUTPUT_TOKENS);
+    expect(pickOutputBudget({ ...b, thinkingLevel: 'max', modelCap: 20_000 }).tokens).toBe(20_000);
+    expect(pickOutputBudget({ ...b, thinkingLevel: 'swarm' }).tokens).toBe(LONG_OUTPUT_TOKENS);
+  });
+});

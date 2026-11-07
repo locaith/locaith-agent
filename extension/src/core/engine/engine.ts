@@ -235,6 +235,7 @@ export class AgentEngine {
       .join('\n');
     let longWriteSeen = false;
     let lastCallHitMax = false;
+    let emptyCutRetried = false; // (lane:output-timeouts) đã thử lại một lần khi max_tokens mà chưa có chữ
     let stallRetried = false;
     let partialText = '';
     /** Chữ của lần gọi bị treo thứ nhất (đã xoá khỏi giao diện để thử lại) — dùng lại nếu lần thử lại cũng treo mà không sinh gì. */
@@ -421,6 +422,7 @@ export class AgentEngine {
           longWriteSeen,
           continuation: lastCallHitMax,
           adaptive: settings.adaptiveOutputTokens !== false,
+          thinkingLevel: session.thinkingLevel,
         });
         const call = new AbortController();
         const onOuterAbort = () => call.abort();
@@ -476,9 +478,9 @@ export class AgentEngine {
             const sec = Math.round(watchdog.stall.limitMs / 1000);
             if (!stallRetried) {
               stallRetried = true;
-              notice('warn', t(lang, 'stallRetry', { sec }));
               erasedPartial = partialText;
               if (partialText) emit({ t: 'text', id, delta: '', trimTail: partialText.length });
+              notice('warn', t(lang, 'stallRetry', { sec }));
               turns--; // lần thử lại không tính vào ngân sách vòng
               trace.turns = turns;
               continue;
@@ -569,6 +571,19 @@ export class AgentEngine {
             for (const ext of active) this.safeCall(ext, 'queuedTurn', () => ext.hooks.queuedTurn?.(), hostLog);
             continue;
           }
+        }
+        if (stop === 'max_tokens' && !wrapUp && !textOf(message).trim()) {
+          // (lane:output-timeouts) Chạm trần mà CHƯA có chữ nào (suy luận nuốt hết trần): không có «phần 1» để nối tiếp. Bỏ tin rỗng khỏi lịch sử
+          // (Anthropic/Gemini từ chối content rỗng) và thử lại đúng một lần với trần đầy đủ; vẫn rỗng thì dừng kèm thông báo rõ nguyên nhân.
+          session.messages.pop();
+          const fullTokens = pickOutputBudget({ userText: userInputText, maxSetting: settings.maxOutputTokens, modelCap: settings.modelMaxOutputTokens, longWriteSeen, continuation: true, adaptive: true, thinkingLevel: session.thinkingLevel }).tokens;
+          if (!emptyCutRetried && fullTokens > outputBudget.tokens) {
+            emptyCutRetried = true;
+            notice('warn', t(lang, 'maxTokensEmptyRetry'));
+            continue;
+          }
+          notice('warn', t(lang, 'maxTokensEmptyStop'));
+          break;
         }
         if (stop === 'max_tokens' && !wrapUp) {
           // (lane:output-timeouts) Cắt về ranh giới câu/mục (đóng khối mã dở), hiện «[tiếp phần N]», rồi tự nối tiếp tối đa 2 lần;
