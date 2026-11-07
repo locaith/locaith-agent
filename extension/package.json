@@ -915,6 +915,7 @@
     "build:browser:prod": "node esbuild.browser.mjs --production",
     "watch:browser": "node esbuild.browser.mjs --watch",
     "test:browser-e2e": "vitest run --config vitest.e2e.config.mts",
+    "verify:browser": "node scripts/verify-browser-package.mjs dist-browser",
     "package:browser": "npm run typecheck && node esbuild.browser.mjs --production && node scripts/pack-browser.mjs",
     "build:market": "node scripts/build-market.mjs",
     "notices": "node scripts/gen-notices.mjs",
