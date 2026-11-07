@@ -59,7 +59,7 @@ The service writes the message in Vietnamese; the extension shows it **verbatim*
 | `locaith_quota` (daily spend cap, or the service's own balance used up) | shown as is — “come back tomorrow” — the turn stops, **never retried** (the reset may be hours away). In *Failover* mode another provider you configured can take over |
 | `locaith_rate_limited` | retried automatically **only if** the service says to wait ≤ 60 s; otherwise the message is shown and the turn stops |
 | `locaith_unavailable` (maintenance) | retried **once** after a few seconds, then the service's message |
-| `locaith_unauthorized` (401) | your device token was revoked or expired: the extension **re-checks your account right away** (it locks and asks you to sign in again if it was revoked) instead of telling you to enter an API key |
+| `locaith_unauthorized` (401) | your device token was rejected: the token is flagged bad, the extension refreshes it **exactly once** (re-reads the store, then asks the account service) and resends the request **exactly once**; a second 401 stops the turn, locks the session ("Sign in again") and never loops. Parallel 401s cause one refresh. It never tells you to enter an API key |
 | `locaith_model_not_found` | the message is shown; pick another model |
 | `locaith_consent_required` (403) | the data-notice card reopens (the record on the server is missing or older than the current notice); after you agree press **Retry** |
 
@@ -88,7 +88,7 @@ other provider the system prompt stays byte-for-byte what it was, so their promp
 
 * Provider id `locaith` (label *Locaith AI Local*), `openai-chat` with the DeepSeek flavour (thinking, `reasoning_content`, tool calls pass through the gateway unchanged).
 * The gateway address is `https://studio-api.locaith.com/api/llm/v1`; override it with the user setting `locaithAgent.baseUrls` → `{ "locaith": "http://127.0.0.1:8671/api/llm/v1" }`.
-* Headers on every request: `X-Locaith-Client: vscode/<version>`, `X-Locaith-Session: <session id>`, `X-Locaith-Queue: ticket` (ask for the 429 + ticket protocol and a countdown instead of
+* Headers on every request: `X-Locaith-Client: vscode/<version>` (or `browser/…`, `cli/…`), `X-Locaith-Device: <16-hex one-way hash of the device id>`, `X-Locaith-Session: <16-hex one-way hash of the chat session id>` (see docs/GATEWAY-LOGGING.md), `X-Locaith-Queue: ticket` (ask for the 429 + ticket protocol and a countdown instead of
   a held-open request), `X-Locaith-Ticket` while queued. There is **no** consent header: consent is the server-side per-account record (`GET/POST /consent`).
 * The browser edition (`src/browser`, shares `src/core`) does **not** register this provider: it has no account sign-in. The Chrome/Edge package integrates through data only (see the
   service-side doc, section 8b).
