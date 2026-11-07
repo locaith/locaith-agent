@@ -223,14 +223,15 @@
   min-width: 0;
 }
 .cc-io.is-out {
-  background: color-mix(in srgb, var(--fg) 5%, var(--code-bg));
+  background: color-mix(in srgb, var(--fg) 3.5%, var(--code-bg));
 }
 .cc-io-label {
-  padding-top: 7px;
+  padding-top: 6px;
   padding-left: 8px;
   font-size: var(--nd-fs-xs);
-  line-height: 1;
-  font-weight: 600;
+  /* cao đúng bằng dòng đầu của ô chữ đơn cách bên cạnh → thẳng baseline */
+  line-height: calc(var(--nd-fs-code) * 1.55);
+  font-weight: 400;
   letter-spacing: 0.02em;
   color: var(--fg-faint);
   user-select: none;
@@ -545,13 +546,99 @@
 .task-group-body > .collapse-foot {
   margin-left: 26px;
 }
+.collapse-foot {
+  color: var(--fg-muted);
+}
+.collapse-foot .icon {
+  display: none;
+}
 .collapse-foot:hover {
   background: transparent;
+  color: var(--fg);
+  text-decoration: underline;
+}
+.collapse-foot:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 1px;
   text-decoration: underline;
 }
 /* Nhiều «Thu gọn» xếp liền nhau ở cuối các khối lồng nhau: chỉ giữ cái NGOÀI CÙNG (cái trong đã nằm trong khối mà cái ngoài sắp đóng). */
 :has(+ .collapse-foot) .collapse-foot {
   display: none;
+}
+
+/* ── Cột phải thẳng một hàng ──
+   Nút «mở tệp» ẩn (opacity 0) vẫn chiếm 28 px bên phải các hàng Đọc/Ghi/Sửa nên chevron và số liệu của các hàng này lệch với hàng Tìm/Lệnh
+   (mắt đọc thành đường dọc đứt). Đường dẫn ở dòng đã là liên kết bấm mở tệp (role=link) nên bỏ hẳn nút thừa. */
+.cc-tool .tool-open {
+  display: none;
+}
+/* Chữ phụ bên phải (số dòng, kết quả, thời lượng): xám vừa đủ rõ, không đậm; khe hở rõ giữa số liệu và chevron. */
+.cc-tool .tool-meta-text,
+.cc-group .tool-meta-text {
+  color: var(--fg-muted);
+  font-weight: 400;
+}
+.cc-head .tool-meta,
+.cc-tool .tool-meta {
+  gap: 6px;
+}
+
+/* ── Thẻ diff trong dòng công cụ: tên tệp + «+a −b» đã có ở dòng ngay trên → bỏ lặp; chỉ còn «Mở diff trong editor» (và nhãn Tệp mới). ── */
+.cc-tool .diff {
+  border: 1px solid color-mix(in srgb, var(--line-soft) 55%, transparent);
+  border-radius: 8px;
+}
+.cc-tool .diff-head {
+  justify-content: flex-end;
+  padding: 3px 8px;
+  border-bottom: 0;
+  background: transparent;
+}
+.cc-tool .diff-head .diff-path,
+.cc-tool .diff-head .diff-stat {
+  display: none;
+}
+.cc-tool .diff-hunk,
+.cc-tool .diff-more {
+  background: transparent;
+  border-top: 0;
+}
+
+/* ── Focus nằm TRONG hộp (hộp có overflow:hidden sẽ cắt outline ngoài) ── */
+.cc-io-pre.is-toggle:focus-visible,
+.cc-preview-more:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: -2px;
+}
+
+/* ── Tương phản cao / forced-colors: bỏ viền thì hộp phải vẫn thấy được ── */
+body.vscode-high-contrast .cc-inout,
+body.vscode-high-contrast-light .cc-inout,
+body.vscode-high-contrast .cc-preview-pre,
+body.vscode-high-contrast-light .cc-preview-pre,
+body.vscode-high-contrast .cc-tool .diff,
+body.vscode-high-contrast-light .cc-tool .diff {
+  border-color: var(--vscode-contrastBorder, var(--fg));
+}
+body.vscode-high-contrast .cc-io.is-out,
+body.vscode-high-contrast-light .cc-io.is-out {
+  background: transparent;
+  border-top: 1px solid var(--vscode-contrastBorder, var(--fg));
+}
+@media (forced-colors: active) {
+  .cc-inout,
+  .cc-preview-pre,
+  .cc-tool .diff {
+    border-color: CanvasText;
+  }
+  .cc-io.is-out {
+    background: transparent;
+    border-top: 1px solid CanvasText;
+  }
+  .cc-dot {
+    forced-color-adjust: none;
+  }
 }
 
 /* ── dòng agent: bộ số in đậm nhẹ ── */
