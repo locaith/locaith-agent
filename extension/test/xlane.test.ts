@@ -170,3 +170,17 @@ describe('xlane: luật quyền × agent kiểm tra độc lập', () => {
     expect(seen).toContain('read_file(secret.txt)');
   });
 });
+
+describe('xlane: Remote × lệnh gạch chéo đổi quyền', () => {
+  it('isLocalOnlySlash: chặn /permissions allow|trust, /hooks trust|open, /agents new; cho phép dạng chỉ đọc', async () => {
+    const { isLocalOnlySlash } = await import('../src/shared/slashMode');
+    for (const t of ['/permissions allow run_command(*)', '  /PERMISSIONS trust', '/permissions remove x', '/hooks trust', '/hooks open user', '/agents new foo']) expect(isLocalOnlySlash(t), t).toBe(true);
+    for (const t of ['/permissions', '/permissions test npm test', '/hooks', '/agents', '/context', 'permissions allow x', 'hello /hooks trust']) expect(isLocalOnlySlash(t), t).toBe(false);
+  });
+
+  it('ChatController.handleRemote từ chối tin send mang /permissions allow (không thêm luật từ xa)', async () => {
+    const h = makeControllerHarness({ script: [() => textTurn('xong')] });
+    harnesses.push(h);
+    await expect(h.ctl.handleRemote({ type: 'send', text: '/permissions allow run_command(*)', attachments: [] } as WebviewMessage, 'điện thoại')).rejects.toThrow('slash_local_only');
+  });
+});
