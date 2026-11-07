@@ -767,6 +767,8 @@ export interface ViewState {
   chromePair?: ChromePairView;
   /** Mô hình Locaith: đồng ý thông báo dữ liệu + thẻ thông báo (chỉ bản VS Code). */
   locaith?: LocaithView;
+  /** Lời mời đánh giá trên Chrome Web Store (chỉ bản trình duyệt, chỉ hiện sau vài lần dùng). */
+  rating?: { sends: number };
 }
 
 /** Loại tệp xem trước được ngay trong khung chat (0.6.3). `doc` = HTML/PDF/Word/Excel/PowerPoint: chỉ có thẻ mở, không nhúng. */
@@ -913,6 +915,9 @@ export type WebviewMessage =
   | { type: 'bio_install' }
   | { type: 'chrome_pair_allow'; id: string }
   | { type: 'chrome_pair_deny'; id: string }
+  /** Lời mời đánh giá trên Chrome Web Store: mở trang đánh giá, hoặc tắt hẳn. */
+  | { type: 'rating_rate' }
+  | { type: 'rating_dismiss' }
   | { type: 'bio_auto_retry' }
   | { type: 'bio_auto_decline' }
   /** Ẩn dải Trí nhớ sinh học: việc cài/bật vẫn chạy ngầm (KHÔNG từ chối). */

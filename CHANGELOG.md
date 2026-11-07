@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.6.27 - 2026-11-07
+
+- **Memory is now always in context — for every model, not just Locaith.** The persistent memory index (`.locaith/memory/MEMORY.md` for the project, `~/.locaith/memory/MEMORY.md` for you) is re-read from disk on every turn and injected as a `<memory>` block, so it survives any number of compactions and does not depend on the model deciding to call a tool. A new `remember` tool writes one dated line (`user` / `feedback` / `project` / `reference`), refuses secrets, skips duplicates, and works across providers; the `ghi-nho-memory` skill is no longer limited to Locaith models.
+- **Collapse at the bottom, not only at the top.** Opening a group (the work summary, a command or edit group, a tool body, a thinking block, the task group) now puts a "Collapse" row right under the content, so you close it where you are instead of scrolling back to the header.
+- **Chrome: a rating prompt that asks once, at the right moment.** After 3 real messages the chat shows a compact strip — five stars plus a "Rate it" button that opens the Chrome Web Store listing, and an X that turns it off for good. Nothing is gated behind a review, panel opens and slash commands are not counted, and the state lives under its own storage key so changing settings never makes it ask again.
+
 ## 0.6.26 - 2026-11-07
 
 - **A request now runs to the end, and "done" has to be proven.** The engine gained a completion gate instead of a reminder: while the task list still has unfinished work it names the remaining items and keeps going (at most twice), and a run that edited files without running anything that can fail is sent back to run the real check (tests / typecheck / build / the product) before it may report success. It never fires after you press Stop and never loops forever.
@@ -7,6 +13,7 @@
 - **Options are buttons now, not a "next steps" paragraph.** The agent calls `offer_options` with 2–4 self-contained choices; they render under the conversation, and clicking one sends that instruction and does the whole job. The prompt forbids closing a reply with a prose list of next steps. The "remaining steps" panel is collapsed to one line by default — open it only if you want to pick a step.
 - **The plan survives compaction.** The live task list is re-attached to the summary on every compaction, so a long run does not forget what is left after the context is trimmed.
 - **Default loop budget 30 → 60 turns**, so a multi-part request finishes in one run instead of stopping to be restarted.
+
 ## 0.6.20 - 2026-11-06
 
 - **The Swarm switch is always readable.** Below ~470 px the picker labels are hidden to save space, which also hid the word "Swarm" and left only an icon — with a state you could not see. The Swarm switch now keeps its label at every width, dims when off and gets a violet fill plus a cyan ring when on.

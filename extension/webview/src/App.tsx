@@ -16,6 +16,7 @@ import { TodoPanel } from './components/TodoPanel';
 import { ModelQueueStrip } from './components/ModelQueue';
 import { ChromePairStrip } from './components/ChromePairStrip';
 import { MemoryStrip } from './components/MemoryStrip';
+import { RatingStrip } from './components/RatingStrip';
 import { RemoteStrip } from './components/RemoteView';
 import { Toasts, type ToastItem } from './components/Toasts';
 import { AccountGate } from './components/AccountGate';
@@ -247,6 +248,7 @@ export function App() {
           {view.remote && <RemoteStrip remote={view.remote} />}
           {view.chromePair && <ChromePairStrip pair={view.chromePair} />}
           {view.memory && <MemoryStrip memory={view.memory} />}
+          {view.platform === 'browser' && view.rating && <RatingStrip sends={view.rating.sends} />}
           <TodoPanel todos={view.todos} running={view.running} />
           <OptionsBar options={view.options} running={view.running} />
           <Composer view={view} />

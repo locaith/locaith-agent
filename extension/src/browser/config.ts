@@ -5,6 +5,7 @@
 
 import { DEFAULT_ENGINE_SETTINGS, type EngineSettings } from '../core/engine/types';
 import type { CustomProviderConfig } from '../core/providers/registry';
+import { EMPTY_RATING, countRatingSend, denyRating, markRated, sanitizeRating, type RatingState } from './rating';
 import { isAllowedBaseUrl } from '../shared/baseUrl';
 import {
   DEFAULT_BROWSER_SETTINGS,
@@ -18,6 +19,8 @@ import {
 import type { KeyValueStore } from './kv';
 
 const KEY = 'nd.config';
+/** Trạng thái lời mời đánh giá — khoá riêng, xem BrowserConfig.rating(). */
+const RATING_KEY = 'nd.rating';
 
 interface Stored {
   ui: UiSettings;
@@ -233,5 +236,45 @@ export class BrowserConfig {
   async setLastModel(provider: string, model: string): Promise<void> {
     this.data = { ...this.data, lastModel: { provider, model } };
     await this.save();
+  }
+
+  // ── Lời mời đánh giá (Chrome Web Store) ──────────────────────────────────────
+  // Khoá riêng, KHÔNG nằm trong `nd.config`: đổi cấu hình (hoặc cấu hình hỏng) không được làm mất trạng thái
+  // "đã tắt lời mời", nếu không người dùng sẽ bị hỏi lại mãi.
+
+  private ratingCache: RatingState = { ...EMPTY_RATING };
+  private ratingLoaded = false;
+
+  async rating(): Promise<RatingState> {
+    if (!this.ratingLoaded) {
+      this.ratingCache = sanitizeRating(await this.kv.get(RATING_KEY));
+      this.ratingLoaded = true;
+    }
+    return { ...this.ratingCache };
+  }
+
+  private async saveRating(next: RatingState): Promise<void> {
+    this.ratingCache = next;
+    this.ratingLoaded = true;
+    await this.kv.set(RATING_KEY, next);
+  }
+
+  /** Ghi nhận một tin người dùng gửi (chỉ tin thật). */
+  async countSend(): Promise<RatingState> {
+    const next = countRatingSend(await this.rating());
+    await this.saveRating(next);
+    return next;
+  }
+
+  async dismissRating(): Promise<RatingState> {
+    const next = denyRating(await this.rating());
+    await this.saveRating(next);
+    return next;
+  }
+
+  async markRatingOpened(): Promise<RatingState> {
+    const next = markRated(await this.rating());
+    await this.saveRating(next);
+    return next;
   }
 }

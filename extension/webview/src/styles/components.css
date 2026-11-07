@@ -2661,3 +2661,31 @@ button.chip-main:hover {
   background: color-mix(in srgb, var(--accent-text) 8%, transparent);
   color: var(--fg);
 }
+
+/* ── Dải mời đánh giá (bản trình duyệt) ── */
+.rate .rate-stars {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 0 4px 2px 30px;
+}
+.rate-star {
+  border: 0;
+  background: transparent;
+  padding: 0 1px;
+  font-size: 16px;
+  line-height: 1;
+  color: var(--line-strong, var(--fg-faint));
+  cursor: pointer;
+  transition: color 0.1s, transform 0.1s;
+}
+.rate-star:hover,
+.rate-star.is-on {
+  color: var(--nd-working, #f5b301);
+  transform: scale(1.08);
+}
+.rate-hint {
+  margin-left: 8px;
+  color: var(--fg-faint);
+  font-size: var(--nd-fs-xs);
+}

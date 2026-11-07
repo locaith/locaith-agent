@@ -35,6 +35,7 @@ import type {
   WebviewMessage,
 } from '../shared/protocol';
 import { PERMISSION_MODES, THINKING_LEVELS } from '../shared/protocol';
+import { RATING_URL, shouldAskRating, type RatingState } from './rating';
 import { backupFileName, makeBackup } from '../shared/sessionBackup';
 import type { BaseSessionStore } from '../shared/sessionStore';
 import { newId, reduceView } from '../shared/transcript';
@@ -366,7 +367,13 @@ export class BrowserController {
 
   async sendInit(screen?: ViewState['screen']): Promise<void> {
     await this.autoPickProvider();
-    const [providers, lists, tabs, siteAccess] = await Promise.all([this.providerSummaries(), this.listings(), this.currentTabs(), this.d.api.hasSiteAccess()]);
+    const [providers, lists, tabs, siteAccess, rating] = await Promise.all([
+      this.providerSummaries(),
+      this.listings(),
+      this.currentTabs(),
+      this.d.api.hasSiteAccess(),
+      this.d.config.rating(),
+    ]);
     this.view = {
       ...this.view,
       providers,
@@ -378,6 +385,8 @@ export class BrowserController {
       context: this.contextInfo(),
       screen: screen ?? 'chat',
       browser: this.browserState(tabs, siteAccess),
+      // Lời mời đánh giá: đã đủ điều kiện từ lần dùng trước thì hiện ngay khi mở lại khung chat.
+      rating: shouldAskRating(rating) ? { sends: rating.sends } : undefined,
     };
     this.post({ type: 'init', state: this.view });
     void this.refreshProvidersInBackground();
@@ -737,6 +746,16 @@ export class BrowserController {
         if (/^https?:\/\//i.test(u)) await this.d.api.openExternal(u);
         return;
       }
+      case 'rating_rate':
+        // Mở trang đánh giá Chrome Web Store rồi thôi hỏi (đã làm đúng việc người dùng muốn).
+        await this.d.config.markRatingOpened();
+        await this.syncRating();
+        await this.d.api.openExternal(RATING_URL[this.lang]).catch(() => undefined);
+        return;
+      case 'rating_dismiss':
+        await this.d.config.dismissRating();
+        await this.syncRating();
+        return;
       case 'slash':
         return void (await this.handleSlash(m.command, m.args));
       case 'retry':
@@ -801,10 +820,23 @@ export class BrowserController {
     if (this.busy) return this.busyToast(); // kiểm tra lại: `await` ở trên có thể để tin khác chen vào
     this.starting = true;
     try {
+      // Đếm lượt dùng THẬT (không đếm lần mở khung chat, không đếm lệnh gạch chéo) để mời đánh giá đúng lúc.
+      const rating = await this.d.config.countSend();
+      await this.syncRating(rating);
       await this.sendUnlocked(text, rawText, attachments);
     } finally {
       this.starting = false;
     }
+  }
+
+  /** Hiện/ẩn dải mời đánh giá theo trạng thái đã lưu (chỉ bản trình duyệt). */
+  private async syncRating(state?: RatingState): Promise<void> {
+    const s = state ?? (await this.d.config.rating());
+    const show = shouldAskRating(s);
+    const next = show ? { sends: s.sends } : undefined;
+    if (JSON.stringify(this.view.rating ?? null) === JSON.stringify(next ?? null)) return;
+    this.view = { ...this.view, ...(next ? { rating: next } : { rating: undefined }) };
+    this.patch({ rating: next });
   }
 
   /** Nhận cuộc đang xem (đã nạp sẵn) làm cuộc hiện tại — không chặn, không mất gì của cuộc kia (đã lưu). */

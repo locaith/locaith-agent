@@ -217,6 +217,14 @@ const vi = {
   'options.title': 'Làm tiếp việc nào?',
   'options.hide': 'Ẩn các lựa chọn',
 
+  // ── mời đánh giá (bản trình duyệt) ──
+  'rating.title': 'Bạn thấy Locaith thế nào?',
+  'rating.sub': 'Bạn đã dùng {n} lần — một đánh giá ngắn giúp người khác tìm thấy tiện ích.',
+  'rating.cta': 'Đánh giá ngay',
+  'rating.dismiss': 'Không hiện lại',
+  'rating.stars': 'Chọn số sao',
+  'rating.star': '{n} sao',
+  'rating.hint': 'Mở trang Chrome Web Store để viết đánh giá.',
   // ── bảng tác vụ ──
   'todo.title': 'Tác vụ',
   'todo.remaining': 'Việc còn lại',
@@ -1011,6 +1019,13 @@ const en: Record<I18nKey, string> = {
   'ctx.compact': 'Compact conversation',
   'ctx.compactHint': 'Summarize older messages to free up context',
 
+  'rating.title': 'How is Locaith working for you?',
+  'rating.sub': 'You have used it {n} times — a short review helps others find it.',
+  'rating.cta': 'Rate it',
+  'rating.dismiss': "Don't show again",
+  'rating.stars': 'Choose a rating',
+  'rating.star': '{n} stars',
+  'rating.hint': 'Opens the Chrome Web Store page to write a review.',
   'todo.title': 'Tasks',
   'options.title': 'What next?',
   'options.hide': 'Hide these options',

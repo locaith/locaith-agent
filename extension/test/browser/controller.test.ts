@@ -1065,3 +1065,42 @@ describe('BrowserController — Thùng rác, sao lưu và khôi phục lịch s�
     expect(await r.store.listTrash()).toEqual([]);
   });
 });
+
+describe('lời mời đánh giá Chrome Web Store', () => {
+  it('chỉ hiện sau 3 tin người dùng gửi, đếm được, và tắt thì không hiện lại', async () => {
+    const r = await make([() => textTurn('ok'), () => textTurn('ok'), () => textTurn('ok'), () => textTurn('ok')]);
+    expect(r.view().rating).toBeUndefined();
+    await r.ctl.send('một', []);
+    await settle(r);
+    await r.ctl.send('hai', []);
+    await settle(r);
+    expect(r.view().rating).toBeUndefined(); // 2 tin: chưa đủ
+    await r.ctl.send('ba', []);
+    await settle(r);
+    expect(r.view().rating).toEqual({ sends: 3 });
+
+    await r.ctl.onMessage({ type: 'rating_dismiss' });
+    expect(r.view().rating).toBeUndefined();
+    expect((await r.config.rating()).deniedAt).toBeGreaterThan(0);
+
+    // Gửi thêm cũng không hiện lại (đã tắt hẳn).
+    await r.ctl.send('bốn', []);
+    await settle(r);
+    expect(r.view().rating).toBeUndefined();
+  });
+
+  it('bấm đánh giá: mở đúng trang Chrome Web Store và không hỏi lại', async () => {
+    const r = await make([() => textTurn('ok'), () => textTurn('ok'), () => textTurn('ok')]);
+    for (const m of ['một', 'hai', 'ba']) {
+      await r.ctl.send(m, []);
+      await settle(r);
+    }
+    expect(r.view().rating).toEqual({ sends: 3 });
+    const opened = r.api.calls.filter((c) => c.method === 'openExternal');
+    await r.ctl.onMessage({ type: 'rating_rate' });
+    expect((await r.config.rating()).ratedAt).toBeGreaterThan(0);
+    expect(r.view().rating).toBeUndefined();
+    expect(r.api.calls.filter((c) => c.method === 'openExternal').length).toBe(opened.length + 1);
+    expect(String((r.api.calls.filter((c) => c.method === 'openExternal').at(-1) as { arg?: string }).arg)).toContain('chromewebstore.google.com');
+  });
+});

@@ -148,5 +148,7 @@ export class FakeBrowserApi implements BrowserApi {
     this.listeners.add(cb);
     return () => this.listeners.delete(cb);
   }
-  async openExternal(): Promise<void> {}
+  async openExternal(url: string): Promise<void> {
+    this.calls.push({ tabId: -1, method: 'openExternal', arg: url });
+  }
 }
