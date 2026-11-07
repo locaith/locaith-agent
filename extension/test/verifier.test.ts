@@ -360,6 +360,37 @@ describe('verifier — tích hợp', () => {
     expect(last.text).toContain('a.txt vẫn sai nội dung');
   });
 
+  it('tin xếp hàng mở lượt kế tiếp của cùng lần chạy → đếm vòng kiểm tra được đặt lại', async () => {
+    let takes = 0;
+    const r = rig(
+      [
+        () => toolTurn([{ name: 'write_file', input: { path: 'a.txt', content: 'x' } }]),
+        () => textTurn('xong việc 1'),
+        () => toolTurn([{ name: 'submit_verdict', input: { verdict: 'fail', missing: ['m1'] } }]),
+        () => textTurn('.'),
+        () => textTurn('đã sửa việc 1'), // ranh giới: tin xếp hàng "việc 2" được nhận → queuedTurn
+        () => textTurn('xong việc 2'),
+        () => toolTurn([{ name: 'submit_verdict', input: { verdict: 'fail', missing: ['m2'] } }]),
+        () => textTurn('.'),
+        () => textTurn('đã sửa việc 2'),
+        () => toolTurn([{ name: 'submit_verdict', input: { verdict: 'pass' } }]),
+        () => textTurn('.'),
+      ],
+      {},
+      {
+        takeQueued: () => {
+          takes++;
+          // lần 1: sau vòng công cụ (steer) · lần 2: sau "xong việc 1" · lần 3: sau "đã sửa việc 1" → giao "việc 2"
+          return takes === 3 ? [{ id: 'q1', text: 'việc 2', display: [], content: [{ type: 'text', text: 'việc 2' }], ts: Date.now() }] : [];
+        },
+      },
+    );
+    await r.h.run('việc 1');
+    expect(verifyStates(r.h.events).map((v) => `${v.state}/${v.round}`)).toEqual(['running/1', 'fail/1', 'running/1', 'fail/1', 'running/2', 'pass/2']);
+    // tin xếp hàng cũng nằm trong "yêu cầu của người dùng" mà agent kiểm tra nhận được
+    expect(JSON.stringify(r.h.provider.requests[6].messages)).toContain('[2] việc 2');
+  });
+
   it('off: không bao giờ chạy; auto: hỏi-đáp thuần không kích hoạt; suy luận thấp không kích hoạt', async () => {
     const off = rig([() => toolTurn([{ name: 'write_file', input: { path: 'a.txt', content: 'x' } }]), () => textTurn('xong')], { mode: 'off' });
     expect((await off.h.run('ghi')).stopReason).toBe('end_turn');
