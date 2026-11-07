@@ -11,7 +11,8 @@ Nguyên tắc chung (áp cho mọi dòng):
   Ô IN/OUT là MỘT hộp (nhãn nằm trong hộp, ô OUT đậm hơn một chút thay đường kẻ ngăn). Nút **Thu gọn** ở cuối thân là chữ nhỏ xám căn trái (không khung, không đường kẻ; vùng bấm vẫn ≥ 40 px trên điện thoại); nhiều Thu gọn liền nhau ở cuối các khối lồng nhau thì chỉ hiện cái ngoài cùng (`:has(+ .collapse-foot) .collapse-foot { display: none }`).
   Đường dẫn dài xuống dòng ở ranh giới thư mục (chèn `<wbr>` / ký tự rộng-không sau mỗi `/` hoặc `\`), không bẻ giữa từ. Bộ dò tự động: `webview/dev/shoot.mjs` thất bại nếu có phần tử nào trong `.timeline` có viền trái MỘT BÊN.
 * Chấm: `ok` xanh lá · `fail` đỏ · `live` xám nhấp nháy nhẹ (opacity 0,45 → 1, 1,6 s; tắt khi `prefers-reduced-motion`) · `muted` xám · `warn` cam.
-* Tương phản cao: chữ phụ dùng màu chữ chính, chấm có viền 1 px, shimmer tắt. Khung hẹp (≤ 320 px): ô IN/OUT xếp dọc, ẩn thời lượng.
+  Cột phải thẳng MỘT hàng: nút «mở tệp» ẩn (opacity 0) từng chiếm 28 px bên phải các hàng Đọc/Ghi/Sửa làm chevron lệch so với hàng Tìm/Lệnh → bỏ hẳn (đường dẫn ở dòng đã là liên kết bấm mở tệp). Chữ phụ bên phải (số dòng, kết quả, thời lượng) màu xám, KHÔNG đậm. Thẻ diff trong dòng công cụ không lặp tên tệp và «+a −b» (đã ở dòng ngay trên), chỉ còn «Mở diff trong editor» và nhãn «Tệp mới»; «Thu gọn» là chữ xám đọc được (không biểu tượng) và có vòng focus bàn phím rõ.
+* Tương phản cao: chữ phụ dùng màu chữ chính, chấm có viền 1 px, shimmer tắt; hộp IN/OUT, khung xem trước và thẻ diff giữ viền `--vscode-contrastBorder` (forced-colors: `CanvasText`) vì viền thường đã mờ đi, ô OUT chỉ ngăn bằng một đường kẻ trên. Khung hẹp (≤ 320 px): ô IN/OUT xếp dọc, ẩn thời lượng.
 * Mọi chữ hai ngôn ngữ (vi/en). Chuỗi ở bảng cuối.
 
 ---
