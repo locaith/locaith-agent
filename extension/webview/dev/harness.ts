@@ -13,6 +13,7 @@ import {
   PROVIDERS,
   baseState,
   ccTimelineState,
+  cutContinueState, // (lane:output-timeouts)
   errorState,
   locaithState,
   longConversation,
@@ -834,6 +835,13 @@ function initialView(): ViewState {
       break;
     case 'error':
       v = errorState();
+      break;
+    // (lane:output-timeouts) trả lời bị cắt + nút «Chạy tiếp phần 2» · buộc dừng vì model treo + nút «Chạy tiếp»
+    case 'cut-continue':
+      v = cutContinueState();
+      break;
+    case 'cut-forced':
+      v = cutContinueState({ forced: true });
       break;
     case 'settings':
       v = settingsState(true);

@@ -44,6 +44,8 @@ export interface SuggestionOption {
   prompt: string;
   /** Một dòng giải thích thêm (tuỳ chọn). */
   detail?: string;
+  /** (lane:output-timeouts) 'continue' = nút «Chạy tiếp (phần N)» do harness phát khi lượt bị cắt/buộc dừng — giao diện vẽ gọn một dòng. Bản cũ bỏ qua: vẫn là nút thường. */
+  kind?: 'continue';
 }
 
 export interface DiffLine {
@@ -271,8 +273,12 @@ export type TItem = UserItem | AssistantItem | NoticeItem;
 export type UiEvent =
   | { t: 'user'; id: string; text: string; attachments: AttachmentInfo[]; ts: number; steer?: boolean }
   | { t: 'assistant_start'; id: string; provider: string; model: string; ts: number }
-  /** Nối vào khối văn bản cuối của lượt trả lời `id` (hoặc mở khối mới nếu khối cuối không phải văn bản). */
-  | { t: 'text'; id: string; delta: string }
+  /**
+   * Nối vào khối văn bản cuối của lượt trả lời `id` (hoặc mở khối mới nếu khối cuối không phải văn bản).
+   * (lane:output-timeouts) `trimTail`: bỏ bấy nhiêu ký tự ở CUỐI khối văn bản cuối TRƯỚC khi nối `delta` — dùng khi harness lùi câu trả lời
+   * bị cắt về ranh giới câu. Trường tuỳ chọn: bản cũ/Remote cũ bỏ qua và chỉ nối `delta`.
+   */
+  | { t: 'text'; id: string; delta: string; trimTail?: number }
   /** (lane:cc-timeline-ui) `ts` tuỳ chọn: lúc delta này được phát (engine đóng dấu) → reducer tính thời lượng suy nghĩ. */
   | { t: 'thinking'; id: string; delta: string; ts?: number }
   /** Tạo mới hoặc cập nhật dòng trạng thái: cùng pillId và dòng đó còn active → thay chữ; ngược lại mở dòng mới, các dòng active cũ chuyển xám. */

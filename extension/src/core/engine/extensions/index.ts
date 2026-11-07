@@ -12,11 +12,13 @@ import type { RunExtension } from '../seams';
 import { completionGateExtension } from './gate';
 // ── import của từng tính năng (mỗi lane một dòng, bỏ dấu // khi dùng) ──
 // import { loopGuardsExtension } from './loopGuards'; // (lane:loop-guards)
+import { forcedStopExtension } from './forcedStop'; // (lane:output-timeouts)
 
 /** Thứ tự = thứ tự gọi móc; `finalize`: extension đầu tiên không 'accept' thắng. */
 export function coreRunExtensions(): RunExtension[] {
   return [
     completionGateExtension(),
     // loopGuardsExtension(), // (lane:loop-guards)
+    forcedStopExtension(), // (lane:output-timeouts) — chỉ dùng `end` + ghi nhận ở finalize, luôn 'accept'
   ];
 }

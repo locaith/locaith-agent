@@ -846,6 +846,7 @@ const vi = {
   'cc.action.page': 'Trang',
   // ── (lane:ctx-compaction) ──
   // ── (lane:output-timeouts) ──
+  'options.continue': 'Chưa xong',
   // ── (lane:loop-guards) ──
   // ── (lane:blind-verifier) ──
   // ── (lane:checkpoints-rewind) ──
@@ -1688,6 +1689,7 @@ const en: Record<I18nKey, string> = {
   'cc.action.page': 'Page',
   // ── (lane:ctx-compaction) ──
   // ── (lane:output-timeouts) ──
+  'options.continue': 'Not finished',
   // ── (lane:loop-guards) ──
   // ── (lane:blind-verifier) ──
   // ── (lane:checkpoints-rewind) ──

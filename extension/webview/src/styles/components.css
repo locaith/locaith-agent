@@ -2456,6 +2456,34 @@ button.chip-main:hover {
   opacity: 0.55;
 }
 
+/* (lane:output-timeouts) nút «Chạy tiếp (phần N)»: MỘT dòng gọn kiểu Claude Code — chấm + nhãn xám nhỏ + nút; không khung kín, không tô nền. */
+.options-continue {
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 10px;
+  border: 0;
+  background: transparent;
+}
+.options-continue .dot-warn {
+  background: var(--warn);
+}
+.options-continue-label {
+  color: var(--fg-faint);
+  font-size: var(--nd-fs-xs);
+}
+.option-continue {
+  padding: 3px 9px;
+  gap: 5px;
+  font-size: var(--nd-fs-xs);
+}
+@media (max-width: 360px) {
+  .options-continue-label {
+    display: none;
+  }
+}
+
 /* ── Nút «Thu gọn» ở CUỐI khối vừa mở (không phải cuộn lên đầu) ── */
 .collapse-foot {
   display: flex;

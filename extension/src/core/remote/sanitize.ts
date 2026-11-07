@@ -3,7 +3,7 @@
  * (kết quả công cụ, đối số, diff, suy luận). Thuần tuý, không import `vscode`.
  */
 
-import type { ABlock, AgentProgress, AttachmentInfo, CompactInfo, ContextInfo, DiffInfo, PermissionRequest, QueuedInfo, TItem, ToolBlock, UiEvent, ViewState } from '../../shared/protocol';
+import type { ABlock, AgentProgress, AttachmentInfo, CompactInfo, ContextInfo, DiffInfo, PermissionRequest, QueuedInfo, SuggestionOption, TItem, ToolBlock, UiEvent, ViewState } from '../../shared/protocol';
 import type { RemoteHostInfo, RemoteProvider, RemoteState } from './protocol';
 import { REMOTE_API_VERSION } from './protocol';
 
@@ -179,6 +179,25 @@ function sanitizeQueued(q: readonly QueuedInfo[] | undefined): QueuedInfo[] {
   return (q ?? []).map((m) => ({ ...m, attachments: m.attachments.map(sanitizeAttachment) }));
 }
 
+const MAX_OPTIONS = 6;
+const OPTION_LABEL_CAP = 60;
+const OPTION_PROMPT_CAP = 2000;
+const OPTION_DETAIL_CAP = 160;
+
+/** (lane:output-timeouts) Nút lựa chọn gửi ra Remote: tối đa 6 nút, chuỗi cắt gọn, chỉ giữ `kind` hợp lệ. */
+export function sanitizeOptions(list: readonly SuggestionOption[] | undefined): SuggestionOption[] {
+  return (list ?? [])
+    .filter((o) => o && typeof o.id === 'string' && typeof o.label === 'string' && typeof o.prompt === 'string')
+    .slice(0, MAX_OPTIONS)
+    .map((o) => ({
+      id: o.id.slice(0, 80),
+      label: cap(o.label, OPTION_LABEL_CAP),
+      prompt: cap(o.prompt, OPTION_PROMPT_CAP),
+      ...(o.detail ? { detail: cap(o.detail, OPTION_DETAIL_CAP) } : {}),
+      ...(o.kind === 'continue' ? { kind: 'continue' as const } : {}),
+    }));
+}
+
 export function remoteProviders(list: ViewState['providers'] | undefined, currentId: string): RemoteProvider[] {
   return (list ?? [])
     .filter((p) => p.hasKey || p.id === currentId)
@@ -211,6 +230,7 @@ export function toRemoteState(view: ViewState, host: RemoteHostInfo, opts: { can
     context: sanitizeContext(view.context),
     allowBypass: view.allowBypass,
     remoteCanBypass: opts.canBypass,
+    ...(view.options?.length ? { options: sanitizeOptions(view.options) } : {}),
   };
 }
 
@@ -232,6 +252,7 @@ export function sanitizePatch(p: Partial<ViewState>): Partial<Omit<RemoteState, 
   if (p.context !== undefined) out.context = sanitizeContext(p.context);
   if (p.allowBypass !== undefined) out.allowBypass = p.allowBypass;
   if (p.transcript !== undefined) Object.assign(out, sanitizeTranscript(p.transcript));
+  if (p.options !== undefined) out.options = sanitizeOptions(p.options); // (lane:output-timeouts) rỗng = thu hồi nút
   return Object.keys(out).length ? out : null;
 }
 
@@ -258,6 +279,11 @@ export function sanitizeEvent(ev: UiEvent): UiEvent {
       return { ...ev, request: sanitizePermission(ev.request) };
     case 'notice':
       return ev.compact ? { ...ev, compact: sanitizeCompact(ev.compact) } : ev;
+    case 'options':
+      return { ...ev, options: sanitizeOptions(ev.options) }; // (lane:output-timeouts)
+    case 'text':
+      // (lane:output-timeouts) `trimTail` phải là số nguyên không âm (bản cũ bỏ qua trường này).
+      return ev.trimTail !== undefined ? { ...ev, trimTail: wholeNumber(ev.trimTail) } : ev;
     case 'tool_end': {
       const { images, ...rest } = ev;
       return {

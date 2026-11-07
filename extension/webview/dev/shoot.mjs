@@ -207,6 +207,11 @@ const SHOTS = [
   { name: '13-perm-cmd-light-420', q: { scenario: 'perm-cmd', theme: 'light' }, w: 420, h: 760 },
   { name: '14-perm-plan-dark-420', q: { scenario: 'perm-plan', theme: 'dark' }, w: 420, h: 900 },
   { name: '15-error-dark-420', q: { scenario: 'error', theme: 'dark' }, w: 420, h: 640 },
+  // (lane:output-timeouts)
+  { name: 'cut-continue-dark-420', q: { scenario: 'cut-continue', theme: 'dark' }, w: 420, h: 900 },
+  { name: 'cut-continue-light-320', q: { scenario: 'cut-continue', theme: 'light' }, w: 320, h: 900 },
+  { name: 'cut-forced-dark-420', q: { scenario: 'cut-forced', theme: 'dark' }, w: 420, h: 900 },
+  { name: 'cut-continue-en-hc-420', q: { scenario: 'cut-continue', theme: 'hc', lang: 'en' }, w: 420, h: 900 },
   { name: '16-history-dark-420', q: { scenario: 'history', theme: 'dark' }, w: 420, h: 700 },
   { name: '17-settings-dark-420-full', q: { scenario: 'settings', theme: 'dark', expand: '1' }, w: 420, h: 900, full: true },
   { name: '18-settings-nokeys-light-420', q: { scenario: 'settings-nokeys', theme: 'light' }, w: 420, h: 900 },

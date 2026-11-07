@@ -456,6 +456,26 @@
           "default": 32000,
           "markdownDescription": "%cfg.maxOutputTokens%"
         },
+        "locaithAgent.agent.adaptiveOutputTokens": {
+          "type": "boolean",
+          "default": true,
+          "markdownDescription": "%cfg.adaptiveOutputTokens%"
+        },
+        "locaithAgent.agent.modelStallSeconds": {
+          "type": [
+            "string",
+            "number"
+          ],
+          "default": "auto",
+          "markdownDescription": "%cfg.modelStallSeconds%"
+        },
+        "locaithAgent.agent.modelCallMaxSeconds": {
+          "type": "integer",
+          "minimum": 30,
+          "maximum": 3600,
+          "default": 600,
+          "markdownDescription": "%cfg.modelCallMaxSeconds%"
+        },
         "locaithAgent.agent.parallelToolCalls": {
           "type": "boolean",
           "default": true,
