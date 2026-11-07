@@ -13,6 +13,8 @@ import { newId } from '../../shared/transcript';
 import { agentActivity, agentPhase, streamTokenEstimate } from './activity';
 import { createProgressReporter } from './progress';
 import { AgentEngine } from '../engine/engine';
+import { coreRunExtensions } from '../engine/extensions';
+import type { RunExtension } from '../engine/seams';
 import { ToolRegistry, isPlanSafe } from '../engine/toolRegistry';
 import { newSession, type EngineSettings, type SessionState, type ToolContext } from '../engine/types';
 import { FailoverProvider, type FailoverHooks } from '../orchestration/failover';
@@ -39,6 +41,8 @@ export interface AgentServices {
   /** Chỉ một agent có quyền ghi/chạy lệnh tại một thời điểm (hai agent cùng sửa một tệp sẽ hỏng dữ liệu). */
   writeLock: Semaphore;
   onSwitch?: FailoverHooks['onSwitch'];
+  /** (lane:hooks) Extension bổ sung cho engine của agent con (vd. PreToolUse/PostToolUse) — nếu không, hook bị vượt qua bằng công cụ `agent`. */
+  extensions?(): RunExtension[];
 }
 
 export interface RunAgentOptions {
@@ -292,6 +296,7 @@ export async function runSubAgent(svc: AgentServices, ctx: ToolContext, o: RunAg
       host: ctx.host,
       settings: { ...settings, maxTurns, contextWindow: first.contextWindow },
       emit,
+      extensions: [...coreRunExtensions(), ...(svc.extensions?.() ?? [])], // (lane:hooks)
     });
     const run = await engine.run({ session, content: [{ type: 'text', text: brief(o.def, o.prompt, settings.language, maxTurns) }], signal: ctx.signal });
     streaming = 0;

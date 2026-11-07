@@ -36,6 +36,10 @@ export interface ControllerHarnessOptions {
   files?: Record<string, string>;
   /** Cấp globalStorage (thư mục tạm) cho controller — bật Checkpoint & Quay lại (lane:checkpoints-rewind). */
   storage?: boolean;
+  /** Giá trị trả về của config.get(khoá) (mặc định: giá trị mặc định do nơi gọi truyền). */
+  configValues?: Record<string, unknown>;
+  /** Kho globalState có nhớ (mặc định: không nhớ gì). */
+  globalState?: Map<string, unknown>;
 }
 
 export interface ControllerHarness {
@@ -71,10 +75,17 @@ export function makeControllerHarness(opts: ControllerHarnessOptions): Controlle
   const settings = { ...DEFAULT_ENGINE_SETTINGS, language: 'vi' as const, maxTurns: 8, ...opts.settings };
 
   const deps = {
-    context: { ...(storageDir ? { globalStorageUri: { fsPath: storageDir } } : {}), globalState: { get: () => undefined, update: async () => undefined }, extension: { packageJSON: { version: '0.0.0-test' } }, subscriptions: [] },
+    context: {
+      ...(storageDir ? { globalStorageUri: { fsPath: storageDir } } : {}),
+      globalState: opts.globalState
+        ? { get: (k: string, d?: unknown) => (opts.globalState!.has(k) ? opts.globalState!.get(k) : d), update: async (k: string, v: unknown) => void opts.globalState!.set(k, v) }
+        : { get: () => undefined, update: async () => undefined },
+      extension: { packageJSON: { version: '0.0.0-test' } },
+      subscriptions: [],
+    },
     logger: { log: (level: string, msg: string) => void logs.push(`${level}: ${msg}`) },
     config: autoFake({
-      get: (_k: string, def: unknown) => def,
+      get: (k: string, def: unknown) => (opts.configValues && k in opts.configValues ? opts.configValues[k] : def),
       language: () => 'vi',
       engine: () => settings,
       defaultModelSetting: () => ({ provider: 'fake', model: 'fake-1' }),

@@ -356,6 +356,55 @@
           "scope": "machine",
           "markdownDescription": "%cfg.permissionMode%"
         },
+        "locaithAgent.hooks": {
+          "type": "object",
+          "default": {},
+          "scope": "machine",
+          "markdownDescription": "%cfg.hooks%",
+          "additionalProperties": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "matcher": { "type": "string" },
+                "hooks": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "type": { "type": "string", "enum": ["command"] },
+                      "command": { "type": "string" },
+                      "timeout": { "type": "number", "minimum": 1, "maximum": 600 },
+                      "name": { "type": "string" },
+                      "env": { "type": "object", "additionalProperties": { "type": "string" } }
+                    },
+                    "required": ["command"]
+                  }
+                }
+              },
+              "required": ["hooks"]
+            }
+          }
+        },
+        "locaithAgent.hooksEnabled": {
+          "type": "boolean",
+          "default": true,
+          "scope": "machine",
+          "markdownDescription": "%cfg.hooksEnabled%"
+        },
+        "locaithAgent.hooksReadClaudeSettings": {
+          "type": "boolean",
+          "default": false,
+          "scope": "machine",
+          "markdownDescription": "%cfg.hooksReadClaudeSettings%"
+        },
+        "locaithAgent.hooksPassEnv": {
+          "type": "array",
+          "items": { "type": "string" },
+          "default": [],
+          "scope": "machine",
+          "markdownDescription": "%cfg.hooksPassEnv%"
+        },
         "locaithAgent.agent.allowBypassPermissions": {
           "type": "boolean",
           "default": false,

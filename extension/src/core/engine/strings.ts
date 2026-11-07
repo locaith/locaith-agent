@@ -143,6 +143,19 @@ const vi = {
     'Workspace này đề xuất {n} luật «cho phép» trong .vscode/settings.json — chưa áp dụng. Gõ /permissions để xem danh sách và chấp nhận nếu bạn tin dự án.',
   rulesUntrusted: 'Workspace chưa được tin cậy: mọi luật «cho phép» bị bỏ qua; luật «hỏi» và «chặn» vẫn áp dụng.',
   // ── (lane:hooks) ──
+  hookPill: 'Hook {event} · {items}',
+  hookItemOk: '{name} ✓ {ms} ms',
+  hookItemFail: '{name} ✗ {ms} ms',
+  hookItemBlock: '{name} ✗ chặn {ms} ms',
+  hookItemTimeout: '{name} ✗ quá hạn',
+  hookWarn: 'Hook {event}: {text}',
+  hookNoReason: 'hook chặn mà không nêu lý do',
+  hookToolBlocked: 'Hook {event} đã chặn lệnh gọi {tool}: {reason}',
+  hookToolEdited: '[Hook {event}] đã chỉnh đối số của {tool} trước khi chạy.',
+  hookNote: '[Hook {event}] {text}',
+  hookStopCap: 'Hook Stop đã ép trợ lý làm tiếp {n} lần, đạt trần nên dừng ở đây.',
+  hookStopped: 'Hook {event} yêu cầu dừng{reason}.',
+  hookPromptBlocked: 'Hook UserPromptSubmit đã chặn tin nhắn này: {reason}',
   // ── (lane:commands-agents) ──
   // ── (lane:bg-tasks) ──
   // ── (lane:ide-context) ──
@@ -339,6 +352,19 @@ const en: typeof vi = {
     'This workspace proposes {n} “allow” rule(s) in .vscode/settings.json — not applied yet. Type /permissions to review the list and accept it if you trust the project.',
   rulesUntrusted: 'Workspace is not trusted: all “allow” rules are ignored; “ask” and “deny” rules still apply.',
   // ── (lane:hooks) ──
+  hookPill: 'Hook {event} · {items}',
+  hookItemOk: '{name} ✓ {ms} ms',
+  hookItemFail: '{name} ✗ {ms} ms',
+  hookItemBlock: '{name} ✗ blocked {ms} ms',
+  hookItemTimeout: '{name} ✗ timeout',
+  hookWarn: 'Hook {event}: {text}',
+  hookNoReason: 'hook blocked without giving a reason',
+  hookToolBlocked: 'Hook {event} blocked the {tool} call: {reason}',
+  hookToolEdited: '[Hook {event}] edited the arguments of {tool} before it ran.',
+  hookNote: '[Hook {event}] {text}',
+  hookStopCap: 'The Stop hook forced the assistant to continue {n} times, hit the cap, so stopping here.',
+  hookStopped: 'Hook {event} asked to stop{reason}.',
+  hookPromptBlocked: 'The UserPromptSubmit hook blocked this message: {reason}',
   // ── (lane:commands-agents) ──
   // ── (lane:bg-tasks) ──
   // ── (lane:ide-context) ──

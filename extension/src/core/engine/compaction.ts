@@ -361,7 +361,7 @@ const RESERVE = 3000;
  * `force` bỏ qua ngưỡng (lỗi context_length hoặc lệnh /compact); `mode` ghi lý do để giao diện hiện.
  */
 export async function compactIfNeeded(
-  o: SummarizeOptions & { contextWindow: number; force?: boolean; mode?: CompactInfo['mode']; onStart?: () => void },
+  o: SummarizeOptions & { contextWindow: number; force?: boolean; mode?: CompactInfo['mode']; onStart?: () => void | Promise<void> },
 ): Promise<CompactResult> {
   const { session } = o;
   const tuning = o.tuning ?? DEFAULT_COMPACT_TUNING;
@@ -401,7 +401,7 @@ export async function compactIfNeeded(
   const keepRecentMessages = o.force ? Math.min(keep, Math.max(2, Math.floor(session.messages.length / 2))) : keep;
   // Chưa có mốc cắt hợp lệ (lần chạy còn ngắn) → đừng bật dòng "Đang nén" rồi không làm gì.
   if (o.keepRecentUserTurns === undefined && cutIndexKeepingRecent(session.messages, keepRecentMessages) <= 1) return done(0);
-  o.onStart?.();
+  await o.onStart?.(); // (lane:hooks) onStart có thể bất đồng bộ (hook PreCompact)
   try {
     const r = await summarizeHistoryDetailed({ ...o, keepRecentMessages, tuning, contextWindow: o.contextWindow, pinnedDocChars: o.pinnedDocChars ?? docCharBudget(o.contextWindow) });
     if (r.removed > 0 || pruned > 0) session.lastContextTokens = 0;

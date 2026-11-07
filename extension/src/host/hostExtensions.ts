@@ -13,7 +13,7 @@ import type { VsCodeToolHost } from './vscodeHost';
 import type { ControllerDeps } from './chatController';
 // ── import của từng tính năng (mỗi lane một dòng, bỏ dấu // khi dùng) ──
 import { verifierExtension } from './extensions/verifier'; // (lane:blind-verifier)
-// import { hooksExtension } from './extensions/hooks'; // (lane:hooks)
+import { hooksExtension } from './extensions/hooks'; // (lane:hooks)
 // import { backgroundTasksExtension } from './extensions/backgroundTasks'; // (lane:bg-tasks)
 import { ideDiagnosticsExtension } from './extensions/ideDiagnostics'; // (lane:ide-context)
 // import { instructionsExtension } from './extensions/instructions'; // (lane:instructions-memory)
@@ -33,7 +33,7 @@ export function hostRunExtensions(ctx: HostExtensionContext): RunExtension[] {
   void ctx;
   return [
     permissionRulesExtension(ctx), // (lane:perm-rules)
-    // hooksExtension(ctx), // (lane:hooks)
+    hooksExtension(ctx), // (lane:hooks)
     ideDiagnosticsExtension(ctx), // (lane:ide-context)
     // instructionsExtension(ctx), // (lane:instructions-memory)
     // checkpointsExtension(ctx), // (lane:checkpoints-rewind)

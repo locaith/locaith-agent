@@ -46,6 +46,11 @@ const SECURE_KEYS = new Set([
   'remote.trustAccount',
   // (lane:blind-verifier) Model của agent kiểm tra quyết định mã nguồn được gửi tới hãng nào → chỉ từ cài đặt người dùng.
   'agent.verifyModel',
+  // (lane:hooks) Hook là lệnh shell chạy với quyền người dùng: danh sách hook, công tắc, đọc .claude và biến môi trường cho đi qua chỉ từ cài đặt NGƯỜI DÙNG.
+  'hooks',
+  'hooksEnabled',
+  'hooksReadClaudeSettings',
+  'hooksPassEnv',
 ]);
 
 const UI_KEYS: Record<keyof UiSettings, string> = {
