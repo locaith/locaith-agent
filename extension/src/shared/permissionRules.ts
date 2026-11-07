@@ -330,13 +330,28 @@ export function matchCommand(spec: string, command: string, strict: boolean): bo
   const segs = splitCommand(command);
   if (strict) return !!segs && segs.length > 0 && segs.every((s) => matchCommandSpec(spec, s));
   if (matchCommandSpec(spec, command)) return true;
-  if (segs && segs.some((s) => matchCommandSpec(spec, s))) return true;
-  // Không tách được: thử tách thô theo ký tự nối để luật deny vẫn bắt được `x; rm -rf /`.
+  if (segs) {
+    // Tách được: so từng đoạn, cả dạng nguyên văn lẫn dạng đã bỏ tiền tố `VAR=val` / `sudo` / `env`...
+    return segs.some((s) => matchCommandSpec(spec, s) || matchCommandSpec(spec, stripCommandPrefix(s)));
+  }
+  // Không tách được (`$(…)`, backtick, ngoặc nhóm, chuyển hướng...): coi spec là khớp nếu NÓ XUẤT HIỆN NHƯ MỘT LỆNH ở
+  // bất kỳ vị trí nào — tách thô theo mọi ký tự có thể mở/đóng một lệnh con, rồi so từng mảnh. Thà chặn thừa còn hơn lọt.
   return command
-    .split(/[;&|\n\r]+/)
+    .split(/[;&|\n\r(){}`$<>"']+/)
     .map((p) => p.trim())
     .filter(Boolean)
-    .some((p) => matchCommandSpec(spec, p));
+    .some((p) => matchCommandSpec(spec, p) || matchCommandSpec(spec, stripCommandPrefix(p)));
+}
+
+/** Từ bao ngoài không đổi lệnh thật được chạy (`sudo rm`, `time rm`, `env X=1 rm`...). */
+const COMMAND_WRAPPERS = new Set(['sudo', 'command', 'exec', 'time', 'nohup', 'nice', 'env', 'builtin', '!']);
+
+/** Bỏ tiền tố gán biến môi trường (`FOO=1 BAR=2 cmd`) và các từ bao ngoài để lộ lệnh thật. */
+export function stripCommandPrefix(segment: string): string {
+  const words = normSpec(segment).split(' ');
+  let i = 0;
+  while (i < words.length - 1 && (/^[A-Za-z_][A-Za-z0-9_]*=/.test(words[i]) || COMMAND_WRAPPERS.has(words[i]))) i++;
+  return words.slice(i).join(' ');
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
