@@ -341,7 +341,8 @@ export class CheckpointFeature {
       s.todos = todos;
       this.d.patch({ transcript: cut.keptTranscript, todos, options: undefined });
       // Chỉ bỏ bản ghi checkpoint khi cả mã cũng đã quay lại; «chỉ hội thoại» giữ lại để các lần quay lại SAU này vẫn khôi phục được tệp đã đổi.
-      if (h.what === 'both') await this.store!.dropFrom(sid, h.promptId);
+      // Nếu còn tệp bị bỏ qua (xung đột, lỗi ghi, blob mất) thì giữ bản ghi: bản gốc của tệp đó còn dùng để thử lại.
+      if (h.what === 'both' && skipped === 0) await this.store!.dropFrom(sid, h.promptId);
       this.d.draft(cut.item);
       await this.d.save();
     }
