@@ -294,7 +294,7 @@ export function SettingsView({ view, onSetting }: { view: ViewState; onSetting: 
       {view.account?.status === 'signedIn' && view.remote && <RemoteCard remote={view.remote} />}
       <section class="set-section">
         <h2 class="set-title">{t('set.providers')}</h2>
-        <p class="set-hint">{t('set.providers.hint')}</p>
+        <p class="set-hint">{t(isBrowser ? 'set.providers.hint.browser' : 'set.providers.hint')}</p>
         {/* Mô hình Locaith dùng tài khoản thay cho khoá API: có mục riêng ở trên, không có ô nhập khoá/URL. */}
         {view.providers
           .filter((p) => !p.account)
