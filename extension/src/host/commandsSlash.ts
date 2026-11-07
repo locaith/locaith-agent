@@ -251,7 +251,7 @@ export function registerCommandsSlash(reg: SlashRegistry, ctl: { commandsLaneAcc
     });
     const notes = [r.notes.embedded.length ? t.embedded(r.notes.embedded.length) : '', r.notes.refused.length ? t.refused(r.notes.refused.length) : ''].filter(Boolean);
     if (notes.length) (r.notes.refused.length ? ctx.warn : ctx.info)(notes.join(' · '));
-    await ctx.runPrompt(r.prompt);
+    await ctx.runPrompt(r.prompt, c.model ? { model: c.model } : undefined);
   };
 
   // ── Công cụ cho model ──

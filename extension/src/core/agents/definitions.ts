@@ -211,6 +211,7 @@ export class AgentRegistry {
     for (const a of this.builtin) this.map.set(a.name, a);
     let loaded = 0;
     const errors: string[] = [];
+    const fromDirs = new Set<string>(); // (lane:commands-agents) thư mục đứng trước (ưu tiên cao hơn) thắng thư mục sau cùng tên
     for (const d of dirs) {
       let entries;
       try {
@@ -228,6 +229,8 @@ export class AgentRegistry {
           const def = agentFromMarkdown(text, e.name.replace(/\.md$/i, ''), d.source, d.path);
           if (def) {
             def.file = file; // (lane:commands-agents)
+            if (fromDirs.has(def.name)) continue;
+            fromDirs.add(def.name);
             this.map.set(def.name, def);
             loaded++;
           }

@@ -25,7 +25,7 @@ export interface SlashContext {
   info(text: string): void;
   warn(text: string): void;
   /** Chạy MỘT lượt agent với nội dung này như thể người dùng gõ (không lưu dòng lệnh gạch chéo). */
-  runPrompt(text: string): Promise<void>;
+  runPrompt(text: string, opts?: { model?: string }): Promise<void>; // (lane:commands-agents) opts.model = đổi model CHỈ cho lượt này
   /** Trợ lý đang bận (đang chạy hoặc chuẩn bị chạy). */
   readonly busy: boolean;
 }

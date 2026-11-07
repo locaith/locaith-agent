@@ -41,6 +41,7 @@ import { extractDocument } from '../shared/docExtract';
 import { parseUploadedDocument } from '../shared/docWrap';
 import { backupFileName, makeBackup } from '../shared/sessionBackup';
 import { fold, isBypassSlash, MODE_ALIASES } from '../shared/slashMode';
+import { pickCommandModel } from './commandModel'; // (lane:commands-agents)
 import type {
   AttachmentInfo,
   HostMessage,
@@ -385,7 +386,7 @@ export class ChatController implements vscode.Disposable {
       lang: this.lang,
       info: (text) => this.emit({ t: 'notice', level: 'info', text }),
       warn: (text) => this.emit({ t: 'notice', level: 'warn', text }),
-      runPrompt: (text) => this.runAgentTurn(() => this.sendUnlocked(text, text, [])),
+      runPrompt: (text, opts) => this.runAgentTurn(() => this.sendWithModel(text, opts?.model)),
       get busy() {
         return self.busy;
       },
@@ -1424,6 +1425,25 @@ export class ChatController implements vscode.Disposable {
         this.agentBusy = false;
         if (this.queue.length > 0) this.restoreQueue();
       }
+    }
+  }
+
+  /** (lane:commands-agents) Chạy một lượt với model riêng của lệnh tuỳ chỉnh (`model:` trong frontmatter), rồi trả model phiên về như cũ. */
+  private async sendWithModel(text: string, want: string | undefined): Promise<void> {
+    const r = pickCommandModel(want, await this.d.providers.summaries());
+    if (r && !r.ok) {
+      const vi = this.lang === 'vi';
+      this.emit({ t: 'notice', level: 'warn', text: vi ? `Lệnh yêu cầu model "${want}" nhưng ${r.reason === 'none' ? 'không có model nào khớp' : 'có nhiều model khớp'} — chạy bằng model hiện tại.` : `The command asks for model "${want}" but ${r.reason === 'none' ? 'no model matches' : 'several models match'} — running on the current model.` });
+    }
+    if (!r || !r.ok) return this.sendUnlocked(text, text, []);
+    const prev = { provider: this.session.provider, model: this.session.model };
+    this.session.provider = r.pick.provider;
+    this.session.model = r.pick.model;
+    try {
+      await this.sendUnlocked(text, text, []);
+    } finally {
+      this.session.provider = prev.provider;
+      this.session.model = prev.model;
     }
   }
 

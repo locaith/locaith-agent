@@ -23,6 +23,7 @@
 
 import type { ToolHost } from '../engine/types';
 import { parseSkillMarkdown } from '../skills/registry';
+import { isSecretFile, resolveUserPathReal } from '../fsutil/paths'; // (lane:commands-agents) đi theo symlink/junction
 
 export type CommandSource = 'project' | 'user' | 'plugin';
 
@@ -247,7 +248,9 @@ export function substituteArguments(body: string, args: string): string {
 // Nhúng tệp `@đường/dẫn`
 // ─────────────────────────────────────────────────────────────────────────────
 
-const SECRET_FILE = /(^|\/)(\.env(\.[^/]*)?|\.npmrc|\.pypirc|\.netrc|id_(rsa|dsa|ecdsa|ed25519)[^/]*|[^/]*\.(pem|key|p12|pfx|keystore|jks)|token[^/]*\.md|credentials[^/]*)$/i;
+/** Thư mục chứa khoá/token (`.git/config` hay có URL kèm token). */
+const SECRET_DIR = /(^|\/)\.(git|ssh|aws|gnupg|kube)(\/|$)/i;
+const SECRET_FILE = /(^|\/)(\.env(\.[^/]*)?|\.git-credentials|\.docker\/config\.json|\.npmrc|\.pypirc|\.netrc|id_(rsa|dsa|ecdsa|ed25519)[^/]*|[^/]*\.(pem|key|p12|pfx|keystore|jks)|token[^/]*\.md|credentials[^/]*)$/i;
 
 /** Chuẩn hoá đường dẫn TƯƠNG ĐỐI trong workspace; null nếu thoát ra ngoài (`..`), tuyệt đối, `~`, hoặc chứa ký tự lạ. */
 export function safeRelative(ref: string): string | null {
@@ -293,11 +296,23 @@ async function embedFiles(text: string, refs: readonly string[], host: ToolHost,
       notes.skipped.push(ref);
       continue;
     }
-    if (SECRET_FILE.test(rel)) {
+    if (SECRET_FILE.test(rel) || SECRET_DIR.test(rel)) {
       notes.skipped.push(ref);
       continue;
     }
     const abs = joinPath(roots[0], rel);
+    // Symlink/junction trong workspace trỏ ra ngoài (hoặc tới tệp bí mật) → bỏ qua; chỉ nhúng khi đường dẫn THẬT vẫn nằm trong workspace.
+    try {
+      const real = await resolveUserPathReal(host, abs);
+      const realFwd = real.real.replace(/\\/g, '/');
+      if (real.zone !== 'workspace' || isSecretFile(real.real) || SECRET_FILE.test(realFwd)) {
+        notes.skipped.push(ref);
+        continue;
+      }
+    } catch {
+      notes.skipped.push(ref);
+      continue;
+    }
     let st;
     try {
       st = await host.stat(abs);

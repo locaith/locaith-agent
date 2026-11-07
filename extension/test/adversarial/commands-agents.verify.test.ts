@@ -21,7 +21,7 @@ describe('adversarial commands-agents', () => {
     fs.writeFileSync(path.join(usr, 'helper.md'), '---\nname: helper\ndescription: USER\n---\nuser body');
     const reg = new AgentRegistry();
     // cùng thứ tự mà extension.ts và commandsSlash.ts dùng: workspace trước, người dùng sau
-    await reg.loadDirs(new NodeToolHost([tmp]), [
+    await reg.loadDirs(new NodeToolHost({ roots: [tmp] }), [
       { path: ws, source: 'workspace' },
       { path: usr, source: 'user' },
     ]);
@@ -37,14 +37,14 @@ describe('adversarial commands-agents', () => {
     } catch {
       return; // không tạo được liên kết trên máy này
     }
-    const host = new NodeToolHost([w]);
+    const host = new NodeToolHost({ roots: [w] });
     const r = await expandCustomCommand(cmd('đọc @link/note.txt'), '', { host, trusted: true, signal });
     expect(r.prompt).not.toContain('OUTSIDE-SECRET-123');
   });
 
   it('@.git/config (có thể chứa URL kèm token) không được nhúng', async () => {
     const w = makeWorkspace({ '.git/config': '[remote "origin"]\n url = https://user:TOKEN123@github.com/a/b.git\n' });
-    const host = new NodeToolHost([w]);
+    const host = new NodeToolHost({ roots: [w] });
     const r = await expandCustomCommand(cmd('xem @.git/config'), '', { host, trusted: true, signal });
     expect(r.prompt).not.toContain('TOKEN123');
   });
