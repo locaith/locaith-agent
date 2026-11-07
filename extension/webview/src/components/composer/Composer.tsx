@@ -310,6 +310,7 @@ export function Composer({ view }: { view: ViewState }) {
     if (draft) {
       ta.value = draft;
       setHasText(draft.trim().length > 0);
+      setMentionSig(lineMentionSig(draft)); // (lane:ide-context)
       autoGrow();
     }
     // Dùng addEventListener trực tiếp: tên sự kiện composition của Preact dễ sai chữ hoa/thường.
