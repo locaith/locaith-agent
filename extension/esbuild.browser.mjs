@@ -43,6 +43,10 @@ const SANDBOX_CSP =
   `font-src data:; img-src data: blob:; connect-src 'none'; frame-src 'none'; worker-src 'none'; object-src 'none'; media-src 'none'; ` +
   `manifest-src 'none'; base-uri 'none'; form-action 'none'`;
 
+// Thông báo về dữ liệu + đồng ý trong thanh bên (src/browser/static/store-consent*.js, src/browser/consent.ts). Trang chính sách quyền riêng tư PHẢI tồn tại trước khi nộp cửa hàng.
+const PRIVACY_URL = process.env.STORE_PRIVACY_URL || 'https://www.locaith.ai/chinh-sach-quyen-rieng-tu-chrome/';
+const CONSENT_TAG = '<script src="store-consent.js"></script>\n';
+
 function manifest() {
   const m = {
     manifest_version: 3,
@@ -162,6 +166,20 @@ async function copyStatic() {
   const s = at('src/browser/static');
   await mkdir(outdir, { recursive: true });
   await cp(s, outdir, { recursive: true });
+  const panelHtml = path.join(outdir, 'sidepanel.html');
+  const html = await readFile(panelHtml, 'utf8');
+  if (!html.includes(CONSENT_TAG)) throw new Error('sidepanel.html (nguồn) thiếu thẻ nạp store-consent.js');
+  if (testBuild) {
+    // Bản --test (e2e): TỰ BỎ QUA cổng đồng ý — không có tệp, không có thẻ nạp, background.js không importScripts (xem __ND_TEST__) — để e2e không kẹt sau lớp phủ.
+    await rm(path.join(outdir, 'store-consent.js'), { force: true });
+    await rm(path.join(outdir, 'store-consent-sw.js'), { force: true });
+    await writeFile(panelHtml, html.replace(CONSENT_TAG, ''));
+  } else {
+    const ui = await readFile(path.join(outdir, 'store-consent.js'), 'utf8');
+    const slot = "'__PRIVACY_URL__'";
+    if (ui.split(slot).length !== 2) throw new Error('store-consent.js (nguồn) cần đúng một chỗ chèn URL chính sách: ' + slot);
+    await writeFile(path.join(outdir, 'store-consent.js'), ui.replace(slot, () => JSON.stringify(PRIVACY_URL)));
+  }
   // Font nhúng vào artifact (trang xem trước tự đọc và nhúng dạng data URI).
   await cp(at('media/fonts'), path.join(outdir, 'fonts'), { recursive: true });
   await writeFile(path.join(outdir, 'manifest.json'), JSON.stringify(manifest(), null, 2) + '\n');

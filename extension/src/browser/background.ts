@@ -2,13 +2,25 @@
  * Service worker (rất nhỏ): chỉ lo việc phải làm ngoài khung chat — mở khung khi bấm biểu tượng, menu chuột phải, và chuyển lệnh
  * từ menu vào khung chat qua chrome.storage.session. Engine KHÔNG chạy ở đây (service worker bị trình duyệt dừng sau ~30 giây rảnh);
  * nó chạy trong trang khung chat (panel.tsx), sống chừng nào khung còn mở.
+ *
+ * Cổng đồng ý về dữ liệu: store-consent-sw.js đặt `globalThis.__ndConsent`; menu chuột phải chỉ chuyển hành động vào khung chat sau khi người dùng đã đồng ý (xem consent.ts).
  */
 
-import { PENDING_KEY, type PendingAction } from './pending';
+import { consentGate } from './consent';
+import { handleMenuClick, MENU_ASK, MENU_EXPLAIN, MENU_SUMMARIZE, PENDING_KEY } from './menuClick';
 
-const MENU_ASK = 'nd-ask-selection';
-const MENU_EXPLAIN = 'nd-explain-selection';
-const MENU_SUMMARIZE = 'nd-summarize-page';
+declare const __ND_TEST__: boolean;
+declare function importScripts(...urls: string[]): void;
+
+// Bản --test (e2e) không có cổng đồng ý (esbuild.browser.mjs không chép tệp này); bản phát hành BẮT BUỘC có — thiếu thì menu không gửi gì (xem handleMenuClick).
+if (!__ND_TEST__) {
+  try {
+    importScripts('store-consent-sw.js');
+  } catch (e) {
+    console.error('[Locaith AI] không nạp được cổng đồng ý về dữ liệu', e);
+  }
+}
+
 chrome.runtime.onInstalled.addListener(() => {
   void chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true }).catch(() => undefined);
   chrome.contextMenus.removeAll(() => {
@@ -20,12 +32,12 @@ chrome.runtime.onInstalled.addListener(() => {
 });
 
 chrome.contextMenus.onClicked.addListener((info, tab) => {
-  const kind: PendingAction['kind'] | null = info.menuItemId === MENU_ASK ? 'ask' : info.menuItemId === MENU_EXPLAIN ? 'explain' : info.menuItemId === MENU_SUMMARIZE ? 'summarize' : null;
-  if (!kind || !tab) return;
-  const action: PendingAction = { kind, text: info.selectionText?.slice(0, 8000), url: tab.url, title: tab.title, tabId: tab.id, windowId: tab.windowId, ts: Date.now() };
-  // sidePanel.open phải được gọi ĐỒNG BỘ trong cử chỉ người dùng (menu chuột phải) — không await trước nó.
-  // (sidePanel.open có từ Chrome 116; bản cũ hơn không có hàm này → chỉ lưu hành động, người dùng tự mở khung.)
-  const opening = tab.windowId !== undefined && typeof chrome.sidePanel.open === 'function' ? chrome.sidePanel.open({ windowId: tab.windowId }) : Promise.resolve();
-  void chrome.storage.session.set({ [PENDING_KEY]: action });
-  void opening.catch(() => undefined);
+  void handleMenuClick(info, tab, {
+    gate: consentGate(),
+    testBuild: __ND_TEST__,
+    // sidePanel.open có từ Chrome 116; bản cũ hơn không có hàm này → chỉ lưu hành động, người dùng tự mở khung.
+    openPanel: (windowId) => (typeof chrome.sidePanel.open === 'function' ? chrome.sidePanel.open({ windowId }) : Promise.resolve()),
+    save: (action) => chrome.storage.session.set({ [PENDING_KEY]: action }),
+    now: () => Date.now(),
+  });
 });
