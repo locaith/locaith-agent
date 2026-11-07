@@ -146,13 +146,19 @@ export class HookService {
    */
   report(event: HookEvent, outcome: HookOutcome): void {
     const lang = this.d.lang();
-    if (this.sink && outcome.records.length) {
+    if (outcome.records.length) {
       const items = outcome.records.map((r) => {
         const key = r.status === 'ok' ? 'hookItemOk' : r.status === 'block' ? 'hookItemBlock' : r.status === 'timeout' ? 'hookItemTimeout' : 'hookItemFail';
         return t(lang, key, { name: r.name, ms: r.ms });
       });
-      const id = this.sink.assistantId();
-      this.sink.emit({ t: 'pill', id, pillId: `${id}:hook:${++this.pillSeq}`, text: t(lang, 'hookPill', { event, items: items.join(' · ') }), kind: 'working' });
+      const text = t(lang, 'hookPill', { event, items: items.join(' · ') });
+      if (this.sink) {
+        const id = this.sink.assistantId();
+        this.sink.emit({ t: 'pill', id, pillId: `${id}:hook:${++this.pillSeq}`, text, kind: 'working' });
+      } else {
+        // Ngoài vòng lặp (UserPromptSubmit/SessionStart trước khi gửi, SessionEnd…): vẫn hiện MỘT dòng gọn qua thông báo của host.
+        this.notifier?.('info', text);
+      }
     }
     const say = (level: 'info' | 'warn' | 'error', text: string) => this.notify(level, text);
     for (const w of outcome.warnings) say('warn', t(lang, 'hookWarn', { event, text: w }));
@@ -183,13 +189,18 @@ export class HookService {
       const src = this.d.hasHistory?.() ? 'resume' : 'startup';
       const o = await this.fire('SessionStart', { source: src }, { signal, matchNames: [src] });
       this.report('SessionStart', o);
+      if (o.stop) {
+        this.pendingContext = [];
+        return { blocked: true, reason: o.stopReason || t(lang, 'hookNoReason') };
+      }
       this.pendingContext.push(...o.additionalContext.map((c) => t(lang, 'hookNote', { event: 'SessionStart', text: c })));
     }
     const o = await this.fire('UserPromptSubmit', { prompt }, { signal });
     this.report('UserPromptSubmit', o);
-    if (o.blocked) {
+    // `continue:false` (o.stop) cũng dừng: tin nhắn không tới model.
+    if (o.blocked || o.stop) {
       this.pendingContext = [];
-      return { blocked: true, reason: o.reason ?? t(lang, 'hookNoReason') };
+      return { blocked: true, reason: o.blocked ? o.reason ?? t(lang, 'hookNoReason') : o.stopReason || t(lang, 'hookNoReason') };
     }
     this.pendingContext.push(...o.additionalContext.map((c) => t(lang, 'hookNote', { event: 'UserPromptSubmit', text: c })));
     return { blocked: false };

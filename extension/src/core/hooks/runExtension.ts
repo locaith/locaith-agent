@@ -17,13 +17,15 @@ import { STOP_HOOK_MAX_CONTINUES } from './types';
 
 const RESPONSE_CAP = 20_000;
 
-export function hooksRunExtension(getService: () => HookService | null | undefined): RunExtension {
+export function hooksRunExtension(getService: () => HookService | null | undefined, opts: { subAgent?: boolean } = {}): RunExtension {
+  const sub = opts.subAgent === true;
   return {
     id: 'hooks',
     begin(scope) {
       const svc = getService();
       if (!svc) return;
-      svc.bindRun({ emit: (ev) => scope.emit(ev), assistantId: () => scope.assistantId(), notice: (l, x) => scope.notice(l, x) });
+      // Agent con chạy xen kẽ với luồng chính trên CÙNG dịch vụ: không được giành/huỷ liên kết hiển thị của luồng chính.
+      if (!sub) svc.bindRun({ emit: (ev) => scope.emit(ev), assistantId: () => scope.assistantId(), notice: (l, x) => scope.notice(l, x) });
       const lang = scope.lang;
       let stopContinues = 0;
       /** Một hook đã yêu cầu dừng hẳn (`continue:false`): chặn mọi công cụ về sau và kết thúc ở finalize. */
@@ -31,6 +33,7 @@ export function hooksRunExtension(getService: () => HookService | null | undefin
 
       return {
         beforeModel() {
+          if (sub) return undefined;
           const ctx = svc.takePendingContext();
           return ctx.length ? ctx : undefined;
         },
@@ -73,6 +76,8 @@ export function hooksRunExtension(getService: () => HookService | null | undefin
         },
 
         async finalize(fin) {
+          // Agent con: chỉ PreToolUse/PostToolUse (Stop của luồng chính không áp cho agent con, như SubagentStop ở Claude Code).
+          if (sub) return stopRequested !== undefined ? { action: 'halt' } : { action: 'accept' };
           if (stopRequested !== undefined) return { action: 'halt' };
           // Người dùng bấm Dừng, hoặc đang ở lượt tổng kết cuối vì cạn vòng: không còn chỗ để ép làm tiếp.
           if (fin.aborted || fin.turn.wrapUp) return { action: 'accept' };
@@ -92,7 +97,7 @@ export function hooksRunExtension(getService: () => HookService | null | undefin
         },
 
         end() {
-          svc.bindRun(null);
+          if (!sub) svc.bindRun(null);
         },
       };
     },

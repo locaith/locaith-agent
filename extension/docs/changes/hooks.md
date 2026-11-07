@@ -21,7 +21,7 @@
   - `locaithAgent.hooksEnabled` — công tắc tổng, mặc định bật.
   - `locaithAgent.hooksReadClaudeSettings` — mặc định tắt; bật thì đọc thêm `hooks` trong `.claude/settings.json` và `.claude/settings.local.json` của dự án (cùng quy tắc tin cậy + xác nhận; hook đó nhận tên công cụ theo kiểu Claude Code: `Bash`, `Edit` + `file_path`…).
   - `locaithAgent.hooksPassEnv` — tên biến môi trường cho phép đi qua vào tiến trình hook.
-- **Giới hạn hiện tại.** Hook chỉ chạy trong extension VS Code (không chạy ở bản Chrome, CLI, hay trong agent con). Tin nhắn người dùng xếp hàng giữa chừng một lượt không kích hoạt `UserPromptSubmit`. `Notification` hiện báo khi có yêu cầu xin quyền (`notification_type: permission_prompt`).
+- **Giới hạn hiện tại.** Hook chỉ chạy trong extension VS Code (không chạy ở bản Chrome, CLI). `PreToolUse`/`PostToolUse` áp cả cho công cụ do agent con (`agent`, `workflow_run`) gọi; `Stop` chỉ áp cho luồng chính. `{"continue":false}` ở `UserPromptSubmit`/`SessionStart` dừng tin nhắn (không tới model). Tin nhắn người dùng xếp hàng giữa chừng một lượt không kích hoạt `UserPromptSubmit`. `Notification` hiện báo khi có yêu cầu xin quyền (`notification_type: permission_prompt`).
 
 ## English (short)
 
@@ -29,4 +29,4 @@
 - **Contract.** JSON on stdin; exit 0 = ok (optional JSON on stdout: `decision`, `reason`, `additionalContext`, `updatedInput`, `continue:false`); exit 2 = block (stderr goes to the model; `Stop` forces the assistant to continue, max 8 times per turn); any other code / timeout (60 s default) = non-blocking warning. Same-event hooks run in parallel, a block wins. `approve` never bypasses permission prompts or deny rules.
 - **Security.** Project hooks run only in a trusted workspace after you approve the exact commands (re-asked when they change). Hook processes get a minimal allow-listed environment — API keys are never passed (extra names via `locaithAgent.hooksPassEnv`). Setting `locaithAgent.hooksReadClaudeSettings` (off by default) also reads `.claude/settings*.json`, mapping Claude tool names (Bash→run_command, Edit→edit_file…).
 - **UI.** One compact line per hook run in the timeline (`Hook PreToolUse · name ✓ 120 ms`), also on Remote. `/hooks` lists active hooks with the last result; `/hooks open`, `/hooks open user`, `/hooks trust`.
-- **Not yet.** Hooks do not run in the Chrome extension, the CLI, or sub-agents; messages queued mid-turn do not fire `UserPromptSubmit`.
+- **Not yet.** Hooks do not run in the Chrome extension or the CLI; PreToolUse/PostToolUse also apply to sub-agent tool calls (Stop is main-thread only); `continue:false` on UserPromptSubmit/SessionStart stops the message; messages queued mid-turn do not fire `UserPromptSubmit`.

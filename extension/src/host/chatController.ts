@@ -5,6 +5,7 @@ import { hostRunExtensions } from './hostExtensions';
 import { SlashRegistry, type SlashContext } from './slashRegistry';
 import { hookServiceFor } from './hooks/hostHooks'; // (lane:hooks)
 import { registerHooksSlash } from './hooks/slash'; // (lane:hooks)
+import { hooksSubAgentExtension } from './extensions/hooks'; // (lane:hooks)
 import type { HookService } from '../core/hooks/service'; // (lane:hooks)
 import { loadProjectInstructions } from '../core/engine/instructions';
 import { resumeInstruction } from '../core/engine/resume';
@@ -275,6 +276,7 @@ export class ChatController implements vscode.Disposable {
         limiter: new Semaphore(d.config.agentsMaxConcurrent()),
         writeLock: new Semaphore(1),
         onSwitch: (i) => this.announceSwitch(i, false),
+        extensions: () => [hooksSubAgentExtension(() => this.hookService())], // (lane:hooks) hook PreToolUse/PostToolUse cũng áp cho agent con
       },
       market: { search: (q, n, skip) => d.market.search(q, n, skip) },
       chrome: d.chrome,
