@@ -198,7 +198,8 @@ export class StreamInterceptor {
 
   private onThinking(text: string): void {
     if (!text) return;
-    this.o.emit({ t: 'thinking', id: this.o.assistantId, delta: text });
+    // (lane:cc-timeline-ui) đóng dấu lúc phát để giao diện tính «Đã suy nghĩ N giây» (chung cho VS Code, Chrome, CLI).
+    this.o.emit({ t: 'thinking', id: this.o.assistantId, delta: text, ts: Date.now() });
     if (this.channel !== 'thinking') {
       this.endPhase();
       this.startPhase('thinking');
