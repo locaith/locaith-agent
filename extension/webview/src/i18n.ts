@@ -804,6 +804,7 @@ const vi = {
   // ── (lane:cc-timeline-ui) ──
   // ── (lane:ctx-compaction) ──
   // ── (lane:output-timeouts) ──
+  'options.continue': 'Chưa xong',
   // ── (lane:loop-guards) ──
   // ── (lane:blind-verifier) ──
   // ── (lane:checkpoints-rewind) ──
@@ -1604,6 +1605,7 @@ const en: Record<I18nKey, string> = {
   // ── (lane:cc-timeline-ui) ──
   // ── (lane:ctx-compaction) ──
   // ── (lane:output-timeouts) ──
+  'options.continue': 'Not finished',
   // ── (lane:loop-guards) ──
   // ── (lane:blind-verifier) ──
   // ── (lane:checkpoints-rewind) ──

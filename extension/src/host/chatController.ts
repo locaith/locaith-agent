@@ -1490,7 +1490,12 @@ export class ChatController implements vscode.Disposable {
   private async createEngine(): Promise<AgentEngine> {
     const s = this.session;
     const provider = this.d.providers.get(s.provider);
-    const settings = { ...this.d.config.engine(), contextWindow: this.d.providers.contextWindow(s.provider, s.model) };
+    const settings = {
+      ...this.d.config.engine(),
+      contextWindow: this.d.providers.contextWindow(s.provider, s.model),
+      // (lane:output-timeouts) trần đầu ra thật của model (danh mục) để trần thích ứng kẹp theo
+      modelMaxOutputTokens: this.d.providers.maxOutputTokens(s.provider, s.model),
+    };
     const fast = this.d.config.summarizerEnabled() ? await this.d.providers.fastTarget(s.provider) : null;
     const summarizer = fast
       ? new Summarizer({ provider: fast.provider, model: fast.model, language: settings.language, log: (l, m) => this.d.logger.log(l, m) })

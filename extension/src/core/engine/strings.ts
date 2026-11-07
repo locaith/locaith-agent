@@ -56,10 +56,36 @@ const vi = {
   steerItem: 'Việc mới',
   queuedImageTask: '(ảnh)',
   maxTurnsWrapUp:
-    'Đã hết số vòng lặp cho phép. KHÔNG gọi thêm công cụ. Hãy tóm tắt ngắn gọn: đã làm được gì, còn lại việc gì, và bước tiếp theo đề xuất.',
+    'Đã hết số vòng lặp cho phép. KHÔNG gọi thêm công cụ. Trả lời ĐÚNG BA PHẦN, mỗi phần một tiêu đề riêng: «Đã làm» (chỉ kể những gì có vết thật bên dưới — tệp đã sửa, lệnh đã chạy, việc đã đánh dấu xong), «Còn lại» (liệt kê từng việc chưa xong), «Chạy tiếp bằng cách nào» (bước đầu tiên khi được chạy tiếp). CẤM viết "đã hoàn thành toàn bộ" hay tương tự khi phần «Còn lại» không rỗng.\n{facts}',
   // ── (lane:cc-timeline-ui) ──
   // ── (lane:ctx-compaction) ──
   // ── (lane:output-timeouts) ──
+  wrapUpFacts: 'Vết thật của lượt này (do harness ghi, không phải do bạn kể): {files}; {execs}; việc chưa xong trong danh sách: {pending}.',
+  factsFiles: 'đã sửa {n} tệp ({list})',
+  factsNoFiles: 'chưa sửa tệp nào',
+  factsExecs: 'đã chạy {n} lệnh',
+  factsNoExecs: 'chưa chạy lệnh nào',
+  factsNoPending: 'không có',
+  partMarker: '[tiếp phần {n}]',
+  partMarkerOf: '[tiếp phần {n}/{m}]',
+  continuePartLabel: 'Chạy tiếp phần {n}',
+  continuePartPrompt: 'Viết tiếp phần {n} từ đúng chỗ vừa dừng: không lặp lại phần trước, không mở đầu lại, không tóm tắt lại.',
+  maxTokensButton: 'Câu trả lời dài hơn trần đầu ra nên đã cắt ở ranh giới câu. Bấm «Chạy tiếp phần {n}» để viết tiếp.',
+  continueWorkLabel: 'Chạy tiếp',
+  continueWorkPrompt: 'Tiếp tục đúng việc đang dở: làm nốt các việc còn lại theo danh sách, không làm lại phần đã xong, rồi báo kết quả kèm bằng chứng.',
+  stallRetry: 'Model không gửi gì trong {sec} giây — đã ngắt lần gọi này và thử lại một lần (không phải bạn bấm Dừng).',
+  stallGiveUp: 'Model vẫn không phản hồi sau {sec} giây ở lần thử lại. Đã giữ phần đã viết và dừng lượt — đây là lỗi phía máy chủ/model, không phải lỗi của bạn.',
+  stopReasonMaxTurns: 'Đã dừng vì hết số vòng cho phép ({n}).',
+  stopReasonStall: 'Đã dừng vì model không phản hồi.',
+  stopReasonError: 'Đã dừng vì lỗi từ nhà cung cấp.',
+  stopDone: 'Đã làm: {text}.',
+  stopDoneNone: 'Đã làm: chưa có thay đổi nào được ghi lại (chưa sửa tệp, chưa chạy lệnh).',
+  stopDoneTodos: 'xong {done}/{total} việc',
+  stopLeft: 'Còn lại: {list}.',
+  stopLeftNone: 'Còn lại: không còn việc nào trong danh sách.',
+  stopHow: 'Chạy tiếp: bấm «Chạy tiếp» bên dưới hoặc nhắn "tiếp tục" — trợ lý làm nốt từ đúng chỗ dừng.',
+  stopHowNone: 'Chạy tiếp: không cần — hãy kiểm tra kết quả; cần thêm gì thì nhắn tiếp.',
+  stopContradiction: 'Lưu ý: trợ lý nói đã hoàn thành toàn bộ nhưng danh sách còn {n} việc chưa xong — hãy tin danh sách.',
   // ── (lane:loop-guards) ──
   // ── (lane:blind-verifier) ──
   // ── (lane:checkpoints-rewind) ──
@@ -124,10 +150,36 @@ const en: typeof vi = {
   steerItem: 'New task',
   queuedImageTask: '(image)',
   maxTurnsWrapUp:
-    'The loop budget is exhausted. Do NOT call more tools. Briefly summarize: what was done, what remains, and the suggested next step.',
+    'The loop budget is exhausted. Do NOT call more tools. Answer in EXACTLY THREE PARTS, each under its own heading: "Done" (only what the real trace below shows — files changed, commands run, tasks marked complete), "Remaining" (every unfinished task), "How to continue" (the first step when resumed). You MUST NOT write "everything is done" or similar while "Remaining" is not empty.\n{facts}',
   // ── (lane:cc-timeline-ui) ──
   // ── (lane:ctx-compaction) ──
   // ── (lane:output-timeouts) ──
+  wrapUpFacts: 'Real trace of this run (recorded by the harness, not by you): {files}; {execs}; unfinished tasks in the list: {pending}.',
+  factsFiles: 'changed {n} file(s) ({list})',
+  factsNoFiles: 'no files changed',
+  factsExecs: 'ran {n} command(s)',
+  factsNoExecs: 'no commands run',
+  factsNoPending: 'none',
+  partMarker: '[continued in part {n}]',
+  partMarkerOf: '[continued in part {n}/{m}]',
+  continuePartLabel: 'Continue with part {n}',
+  continuePartPrompt: 'Continue with part {n} from exactly where you stopped: do not repeat earlier parts, do not restart the introduction, do not recap.',
+  maxTokensButton: 'The reply is longer than the output limit, so it was cut at a sentence boundary. Press "Continue with part {n}" to keep writing.',
+  continueWorkLabel: 'Continue',
+  continueWorkPrompt: 'Continue the unfinished work: complete the remaining tasks in the list, do not redo what is already done, then report the result with evidence.',
+  stallRetry: 'The model sent nothing for {sec} s — this call was cancelled and is being retried once (you did not press Stop).',
+  stallGiveUp: 'The model still did not respond after {sec} s on the retry. Kept what was written and ended the turn — this is a server/model problem, not something you did.',
+  stopReasonMaxTurns: 'Stopped: the loop budget ({n} turns) is exhausted.',
+  stopReasonStall: 'Stopped: the model did not respond.',
+  stopReasonError: 'Stopped: provider error.',
+  stopDone: 'Done: {text}.',
+  stopDoneNone: 'Done: no recorded changes yet (no files changed, no commands run).',
+  stopDoneTodos: '{done}/{total} tasks completed',
+  stopLeft: 'Remaining: {list}.',
+  stopLeftNone: 'Remaining: nothing left in the task list.',
+  stopHow: 'How to continue: press "Continue" below or reply "continue" — the assistant resumes exactly where it stopped.',
+  stopHowNone: 'How to continue: not needed — check the result; send another message if you need more.',
+  stopContradiction: 'Note: the assistant claimed everything is done, but {n} task(s) in the list are still unfinished — trust the list.',
   // ── (lane:loop-guards) ──
   // ── (lane:blind-verifier) ──
   // ── (lane:checkpoints-rewind) ──

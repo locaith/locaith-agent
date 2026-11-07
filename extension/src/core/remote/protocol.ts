@@ -9,7 +9,7 @@
  * webview trong VS Code dùng, nên áp bằng cùng một reducer (shared/transcript.ts). Mất kết nối thì xin lại từ `seq` đã nhận; quá cũ thì nhận snapshot mới.
  */
 
-import type { AttachmentInfo, PermissionMode, QueuedInfo, SessionSummary, ThinkingLevel, TItem, TodoItem, UiEvent, WebviewMessage } from '../../shared/protocol';
+import type { AttachmentInfo, PermissionMode, QueuedInfo, SessionSummary, SuggestionOption, ThinkingLevel, TItem, TodoItem, UiEvent, WebviewMessage } from '../../shared/protocol';
 import { PERMISSION_MODES, THINKING_LEVELS } from '../../shared/protocol';
 
 export const REMOTE_API_VERSION = 1;
@@ -62,6 +62,8 @@ export interface RemoteState {
   allowBypass: boolean;
   /** Trang từ xa có được phép tự chuyển sang chế độ bypass không (mặc định không). */
   remoteCanBypass: boolean;
+  /** (lane:output-timeouts) Nút lựa chọn đang chờ («Chạy tiếp phần N», cách hiểu…) — tuỳ chọn, trang cũ bỏ qua; luôn đi kèm sự kiện `options`. */
+  options?: SuggestionOption[];
 }
 
 export type RemoteStreamMsg =

@@ -103,6 +103,12 @@ export class ProviderService {
     return this.registry.catalog.peek(id)?.models ?? [];
   }
 
+  /** (lane:output-timeouts) Trần đầu ra thật của model theo danh mục (nếu biết) — trần thích ứng của engine kẹp theo đây. */
+  maxOutputTokens(providerId: string, model: string): number | undefined {
+    const n = this.models(providerId).find((m) => m.id === model)?.maxOutputTokens;
+    return typeof n === 'number' && Number.isFinite(n) && n > 0 ? n : undefined;
+  }
+
   contextWindow(providerId: string, model: string): number {
     const info = this.models(providerId).find((m) => m.id === model);
     // Model chưa rõ cửa sổ (DeepSeek không trả context_length, tên cũ không có trong danh sách dự phòng): thử bảng theo tên rồi mới về 128K.

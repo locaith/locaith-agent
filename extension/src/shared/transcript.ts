@@ -63,6 +63,16 @@ function appendStreamText(a: AssistantItem, type: 'text' | 'thinking', delta: st
   return { ...a, blocks };
 }
 
+/** (lane:output-timeouts) Bỏ `n` ký tự cuối của khối văn bản cuối (harness lùi câu trả lời bị cắt về ranh giới câu). Không có khối văn bản cuối → giữ nguyên. */
+function trimTailText(a: AssistantItem, n: number | undefined): AssistantItem {
+  if (!n || n <= 0) return a;
+  const last = a.blocks[a.blocks.length - 1];
+  if (!last || last.type !== 'text') return a;
+  const blocks = a.blocks.slice();
+  blocks[blocks.length - 1] = { ...last, text: last.text.slice(0, Math.max(0, last.text.length - Math.floor(n))) };
+  return { ...a, blocks };
+}
+
 function patchTool(blocks: ABlock[], callId: string, patch: (t: ToolBlock) => ToolBlock): ABlock[] | null {
   const idx = findLastIndex(blocks, (b) => b.type === 'tool' && b.id === callId);
   if (idx < 0) return null;
@@ -93,7 +103,7 @@ export function applyEvent(items: readonly TItem[], ev: UiEvent): TItem[] {
       ];
 
     case 'text':
-      return updateAssistant(items, ev.id, (a) => appendStreamText(a, 'text', ev.delta, true));
+      return updateAssistant(items, ev.id, (a) => appendStreamText(trimTailText(a, ev.trimTail), 'text', ev.delta, true));
 
     case 'thinking':
       return updateAssistant(items, ev.id, (a) => appendStreamText(a, 'thinking', ev.delta, false));

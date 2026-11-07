@@ -109,6 +109,10 @@ export class ConfigService {
       autoCompact: c.get<boolean>('agent.autoCompact', d.autoCompact),
       compactAt: Math.min(95, Math.max(50, c.get<number>('agent.compactAtPercent', 80))) / 100,
       instructionFiles: cleanNameList(this.get<unknown>('agent.instructionFiles', d.instructionFiles), d.instructionFiles),
+      // (lane:output-timeouts) trần đầu ra thích ứng + watchdog im lặng theo bậc
+      adaptiveOutputTokens: c.get<boolean>('agent.adaptiveOutputTokens', true) !== false,
+      modelStallSeconds: stallSetting(c.get<unknown>('agent.modelStallSeconds', 'auto')),
+      modelCallMaxSeconds: clamp(Number(c.get<number>('agent.modelCallMaxSeconds', 600)), 30, 3600),
     };
   }
 
@@ -312,6 +316,14 @@ export class ConfigService {
 
 function clamp(n: number, lo: number, hi: number): number {
   return Number.isFinite(n) ? Math.min(hi, Math.max(lo, n)) : lo;
+}
+
+/** (lane:output-timeouts) `agent.modelStallSeconds`: 'auto' | 0 (tắt) | số giây (5–600). Chuỗi số cũng nhận; thứ khác → 'auto'. */
+export function stallSetting(raw: unknown): 'auto' | number {
+  const n = typeof raw === 'number' ? raw : typeof raw === 'string' && raw.trim() !== '' && raw.trim() !== 'auto' ? Number(raw) : NaN;
+  if (!Number.isFinite(n)) return 'auto';
+  if (n <= 0) return 0;
+  return Math.min(600, Math.max(5, Math.round(n)));
 }
 
 /** Danh sách chuỗi ngắn, không rỗng, tối đa 20 mục; sai kiểu thì dùng mặc định. */

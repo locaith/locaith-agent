@@ -35,6 +35,11 @@ import { formatMemoryBlock } from './memory';
 import { ToolDispatcher } from './dispatcher';
 import { StreamInterceptor, type PillBudget } from './interceptor';
 import { t, type Lang } from './strings';
+// (lane:output-timeouts) trần đầu ra thích ứng · cắt đúng ranh giới + nối tiếp · watchdog im lặng · tổng kết ba phần khi bị buộc dừng
+import { forcedStopSummary, stopFacts, wrapUpPrompt } from './forcedStop';
+import { pickOutputBudget } from './outputBudget';
+import { StallError, resolveStallPolicy, watchStream } from './stallWatchdog';
+import { continuationMarker, continuePartOption, continueWorkOption, trimAssistantTail, trimToBoundary } from './truncation';
 import { Summarizer } from './summarizer';
 import { splitThinkTags } from './thinkTags';
 import type { ToolRegistry } from './toolRegistry';
@@ -222,6 +227,16 @@ export class AgentEngine {
     let compactedForOverflow = false;
     let result: RunResult['stopReason'] = 'end_turn';
     let lastWasToolResults = false;
+    // (lane:output-timeouts) trạng thái cho trần đầu ra thích ứng + watchdog: chữ người dùng gõ, đã thấy công cụ ghi nội dung dài,
+    // lần gọi trước bị cắt vì trần, đã thử lại sau khi model treo, chữ đã hiện trong lần gọi đang chạy.
+    const userInputText = input.content
+      .filter((b): b is Extract<ContentBlock, { type: 'text' }> => b.type === 'text')
+      .map((b) => b.text)
+      .join('\n');
+    let longWriteSeen = false;
+    let lastCallHitMax = false;
+    let stallRetried = false;
+    let partialText = '';
 
     const notice = (level: 'info' | 'warn' | 'error', text: string) => emit({ t: 'notice', id, level, text });
 
@@ -301,7 +316,8 @@ export class AgentEngine {
         if (turns >= settings.maxTurns && !wrapUp) {
           wrapUp = true;
           notice('warn', t(lang, 'maxTurns', { n: settings.maxTurns }));
-          session.messages.push(userText(t(lang, 'maxTurnsWrapUp'), { synthetic: true }));
+          // (lane:output-timeouts · B08) lời nhắc tổng kết đòi ĐÚNG BA PHẦN và đính kèm vết thật (tệp đã ghi, lệnh đã chạy, việc dở) để model không bịa "đã xong".
+          session.messages.push(userText(wrapUpPrompt(lang, stopFacts({ reason: 'max_turns', turns, trace, session })), { synthetic: true }));
         } else if (wrapUp && turns >= settings.maxTurns + 1) {
           result = 'max_turns';
           break;
@@ -340,9 +356,14 @@ export class AgentEngine {
           providerId: session.provider,
         });
 
+        partialText = '';
         const interceptor = new StreamInterceptor({
           assistantId: id,
-          emit,
+          // (lane:output-timeouts) ghi lại chữ đã hiện trong lần gọi này — để giữ lại khi model treo giữa chừng.
+          emit: (ev) => {
+            if (ev.t === 'text' && ev.id === id) partialText += ev.delta;
+            emit(ev);
+          },
           summarizer: this.d.summarizer,
           thinkTags: !!this.d.thinkTags,
           toolInfo: (name) => {
@@ -389,20 +410,45 @@ export class AgentEngine {
         // (0.6.31) Dòng ngân sách vòng: model không thể biết còn bao nhiêu lượt nếu harness không nói.
         // Gắn vào ĐUÔI tin nhắn cuối của payload (không sửa lịch sử đã lưu) → tiền tố nguyên vẹn cho prompt-cache.
         const payload = withBudgetNote(session.messages, turnBudgetNote(turns, settings.maxTurns, lang));
+        // (lane:output-timeouts) Trần đầu ra theo loại việc (kẹp theo cài đặt và trần thật của model) + watchdog im lặng theo bậc.
+        // Lần gọi có AbortController RIÊNG: watchdog huỷ đúng lần stream này; người dùng bấm Dừng vẫn đi qua `signal` ngoài (phân biệt được).
+        const outputBudget = pickOutputBudget({
+          userText: userInputText,
+          maxSetting: settings.maxOutputTokens,
+          modelCap: settings.modelMaxOutputTokens,
+          longWriteSeen,
+          continuation: lastCallHitMax,
+          adaptive: settings.adaptiveOutputTokens !== false,
+        });
+        const call = new AbortController();
+        const onOuterAbort = () => call.abort();
+        if (signal.aborted) call.abort();
+        else signal.addEventListener('abort', onOuterAbort, { once: true });
+        const stallPolicy = resolveStallPolicy(settings, session);
+        const watchdog: { stall: StallError | null } = { stall: null };
         try {
-          for await (const raw of this.d.provider.stream({
+          const source = this.d.provider.stream({
             model: session.model,
             system,
             messages: payload,
             tools: specs,
             toolChoice: wrapUp ? 'none' : undefined,
-            maxOutputTokens: settings.maxOutputTokens,
+            maxOutputTokens: outputBudget.tokens,
             thinking: { level: session.thinkingLevel === 'swarm' ? 'max' : session.thinkingLevel, summaries: true },
-            signal,
+            signal: call.signal,
             parallelToolCalls: settings.parallelToolCalls,
             historyEdited: session.historyEdited,
             sessionKey: session.id,
-          })) {
+          });
+          const watched = stallPolicy
+            ? watchStream(source, stallPolicy, {
+                onTimeout: (e) => {
+                  watchdog.stall = e;
+                  call.abort();
+                },
+              })
+            : source;
+          for await (const raw of watched) {
             const ev: ProviderEvent =
               raw.type === 'tool_start' || raw.type === 'tool_args_delta' || raw.type === 'tool_end'
                 ? { ...raw, id: uniqueId(raw.id) }
@@ -422,6 +468,22 @@ export class AgentEngine {
           }
         } catch (err) {
           await interceptor.finish();
+          // (lane:output-timeouts) Watchdog ngắt (KHÔNG phải người dùng bấm Dừng): thử lại đúng một lần với cùng lịch sử; lần hai thì chốt
+          // lượt bằng phần đã có + nút «Chạy tiếp» + thông báo nói rõ nguyên nhân.
+          if (watchdog.stall && !signal.aborted) {
+            const sec = Math.round(watchdog.stall.limitMs / 1000);
+            if (!stallRetried) {
+              stallRetried = true;
+              notice('warn', t(lang, 'stallRetry', { sec }));
+              if (partialText) emit({ t: 'text', id, delta: '', trimTail: partialText.length });
+              turns--; // lần thử lại không tính vào ngân sách vòng
+              trace.turns = turns;
+              continue;
+            }
+            this.finishAfterStall({ session, id, lang, turns, trace, partialText, sec, emit, notice });
+            result = 'end_turn';
+            break;
+          }
           const outcome = await this.handleProviderError(err, { session, signal, id, lang, providerLabel, compactedForOverflow, notice });
           if (outcome === 'retry') {
             compactedForOverflow = true;
@@ -430,10 +492,12 @@ export class AgentEngine {
           result = outcome;
           break;
         } finally {
+          signal.removeEventListener('abort', onOuterAbort);
           // Lỗi / dừng khi đang xếp hàng: dải đếm ngược phải biến mất.
           if (queued) this.d.onQueue?.(null);
         }
         await interceptor.finish();
+        stallRetried = false;
 
         if (!done) {
           notice('error', t(lang, 'providerError', { provider: providerLabel, detail: 'luồng kết thúc đột ngột' }));
@@ -451,6 +515,9 @@ export class AgentEngine {
 
         const calls = toolUsesOf(message);
         const stop: StopReason = done.stopReason;
+        // (lane:output-timeouts) dữ liệu cho trần đầu ra của lần gọi kế: vừa bị cắt vì trần? đã gọi công cụ ghi nội dung dài?
+        lastCallHitMax = stop === 'max_tokens';
+        if (calls.some((c) => this.d.registry.get(c.name)?.streamsContent)) longWriteSeen = true;
 
         if (stop === 'refusal') {
           notice('warn', t(lang, 'refusal'));
@@ -500,12 +567,21 @@ export class AgentEngine {
           }
         }
         if (stop === 'max_tokens' && !wrapUp) {
+          // (lane:output-timeouts) Cắt về ranh giới câu/mục (đóng khối mã dở), hiện «[tiếp phần N]», rồi tự nối tiếp tối đa 2 lần;
+          // hết lượt tự nối thì HIỆN NÚT «Chạy tiếp phần N» thay vì dừng im lặng. Lịch sử lưu bản đã cắt (không có dòng đánh dấu).
+          const cut = trimAssistantTail(message);
+          const nextPart = continuations + 2;
+          emit({ t: 'text', id, delta: `${cut?.appended ?? ''}\n\n${continuationMarker(lang, nextPart)}\n\n`, ...(cut?.removed ? { trimTail: cut.removed } : {}) });
           if (continuations < 2) {
             continuations++;
             notice('info', t(lang, 'maxTokensContinue'));
-            session.messages.push(userText(t(lang, 'continuePrompt'), { synthetic: true }));
+            session.messages.push(userText(t(lang, 'continuePartPrompt', { n: nextPart }), { synthetic: true }));
             continue;
           }
+          const option = continuePartOption(lang, nextPart);
+          session.options = [option];
+          emit({ t: 'options', id, options: [option] });
+          notice('info', t(lang, 'maxTokensButton', { n: nextPart }));
           break;
         }
         if (stop === 'pause_turn') continue;
@@ -534,6 +610,33 @@ export class AgentEngine {
       emit({ t: 'assistant_end', id, stopReason: result });
     }
     return { stopReason: result, turns, assistantId: id };
+  }
+
+  /**
+   * (lane:output-timeouts) Model treo lần thứ hai liên tiếp: giữ phần chữ đã sinh (cắt về ranh giới câu, đóng khối mã dở) làm tin assistant,
+   * bỏ lệnh gọi công cụ dở dang (không có `done` nên không có tool_use nào được lưu), rồi thông báo ba phần + nút «Chạy tiếp».
+   */
+  private finishAfterStall(i: {
+    session: SessionState;
+    id: string;
+    lang: Lang;
+    turns: number;
+    trace: RunTrace;
+    partialText: string;
+    sec: number;
+    emit(ev: UiEvent): void;
+    notice(level: 'info' | 'warn' | 'error', text: string): void;
+  }): void {
+    const kept = trimToBoundary(i.partialText);
+    if (kept.text.trim()) {
+      i.session.messages.push({ role: 'assistant', content: [{ type: 'text', text: kept.text }], provider: this.d.provider.id, model: i.session.model, ts: Date.now() });
+      if (kept.removed || kept.appended) i.emit({ t: 'text', id: i.id, delta: kept.appended, ...(kept.removed ? { trimTail: kept.removed } : {}) });
+    }
+    const facts = stopFacts({ reason: 'stall', turns: i.turns, trace: i.trace, session: i.session });
+    i.notice('warn', `${t(i.lang, 'stallGiveUp', { sec: i.sec })}\n${forcedStopSummary(i.lang, facts)}`);
+    const option = continueWorkOption(i.lang);
+    i.session.options = [option];
+    i.emit({ t: 'options', id: i.id, options: [option] });
   }
 
   // ── seams: gọi móc của extension (ngoại lệ không làm hỏng lần chạy) ─────────────────────────────────────────

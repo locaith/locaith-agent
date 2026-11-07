@@ -288,6 +288,15 @@ export interface EngineSettings {
   summarizeEveryChars: number;
   summarizeEveryMs: number;
   maxPillsPerReply: number;
+  // ── (lane:output-timeouts) ──
+  /** Trần đầu ra thật của model đang dùng (từ danh mục), nếu biết — trần thích ứng kẹp theo đây. */
+  modelMaxOutputTokens?: number;
+  /** Tự chọn trần đầu ra theo loại việc mỗi lượt (8k cho lượt thường, trần đầy đủ cho tài liệu dài / viết tiếp). Mặc định bật. */
+  adaptiveOutputTokens?: boolean;
+  /** Ngưỡng im lặng của luồng model: 'auto' (theo cỡ ngữ cảnh × mức suy luận, mặc định) · 0 = tắt · số giây cố định. */
+  modelStallSeconds?: 'auto' | number;
+  /** Trần tổng thời gian hoạt động của một lần gọi model (giây; mặc định 600). */
+  modelCallMaxSeconds?: number;
 }
 
 export const DEFAULT_ENGINE_SETTINGS: EngineSettings = {
