@@ -147,7 +147,8 @@ describe('thành phần: cấu trúc DOM đơn giản, tên lớp rõ (trang Rem
 
   it('tin người dùng có MessageActionSlot (data-slot) chứa nút sửa; ô nhập có RunClock; nhãn đang chạy đậm + logo Lo', () => {
     expect(sources.slot).toMatch(/data-slot="message-actions"/);
-    expect(sources.user).toMatch(/<MessageActionSlot>[\s\S]*class="user-edit"[\s\S]*<\/MessageActionSlot>/);
+    // (tích hợp sessions-ux) nút sửa đơn lẻ được thay bằng menu ⋯ (Sao chép · Sửa và gửi lại · Rẽ nhánh) đặt TRONG ô thao tác
+    expect(sources.user).toMatch(/<MessageActionSlot>[\s\S]*<MessageMenu[\s\S]*<\/MessageActionSlot>/);
     expect(sources.composer).toMatch(/<RunClock view=\{view\} \/>/);
     expect(sources.clock).toMatch(/runningSince\(view\)/);
     expect(sources.turn).toMatch(/<LoSpinner size=\{15\} \/>\s*<span class="cc-working-label">/);

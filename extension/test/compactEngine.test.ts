@@ -9,16 +9,18 @@ import { textTurn, toolTurn, type Step } from './helpers/fakeProvider';
 import { eventsOf, makeHarness } from './helpers/harness';
 import { settingsStub } from './helpers/vscode-stub';
 
-const FILE = 'const x = 1;\n'.repeat(500); // read_file đánh số dòng → ≈ 2400 token mỗi lần đọc
+// Nội dung KHÁC nhau theo từng tệp (chốt chặn vòng lặp của lane loop-guards coi nhiều lần đọc ra đúng cùng một kết quả là đang lặp vô ích).
+const fileBody = (i: number): string => `const x${i} = 1;\n`.repeat(500); // read_file đánh số dòng → ≈ 2400 token mỗi lần đọc
 
 /** `n` tệp khác nhau (engine gộp các lần đọc lặp lại cùng một tệp thành kết quả ngắn, nên phải khác tệp). */
-const files = (n: number): Record<string, string> => Object.fromEntries(Array.from({ length: n }, (_, i) => [`big${i}.ts`, FILE]));
+const files = (n: number): Record<string, string> => Object.fromEntries(Array.from({ length: n }, (_, i) => [`big${i}.ts`, fileBody(i)]));
 
 /** Kịch bản: `n` vòng read_file (mỗi vòng một tệp) rồi một câu trả lời. */
 function readingScript(n: number): Step[] {
   const steps: Step[] = [];
   for (let i = 0; i < n; i++) steps.push(() => toolTurn([{ id: `r${i}`, name: 'read_file', input: { path: `big${i}.ts` } }]));
-  steps.push(() => textTurn('Đã đọc xong.'));
+  // Câu trả lời cuối phải tự đứng được (lane loop-guards, B05): sau ≥ 6 lệnh công cụ, một câu < 120 ký tự bị nhắc viết lại → test dùng câu đủ dài.
+  steps.push(() => textTurn(`Đã đọc xong ${n} tệp big0.ts … big${n - 1}.ts: mỗi tệp chỉ khai báo một hằng số riêng, không phụ thuộc chéo nhau nên không có gì cần sửa; không còn việc nào đang chờ và không cần chạy thêm lệnh nào.`));
   return steps;
 }
 
