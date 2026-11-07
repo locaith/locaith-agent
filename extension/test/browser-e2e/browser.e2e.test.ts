@@ -11,7 +11,7 @@ import fs from 'node:fs';
 import http from 'node:http';
 import os from 'node:os';
 import path from 'node:path';
-import puppeteer, { type Browser, type Page } from 'puppeteer-core';
+import puppeteer, { type Browser, type HTTPRequest, type Page } from 'puppeteer-core';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { renderArtifactDocumentWithFonts } from '../../src/shared/artifactDoc';
 import { MockServer, type SseEvent } from '../helpers/mockServer';
@@ -190,6 +190,45 @@ describe.skipIf(BROWSERS.length === 0)('bản trình duyệt (tiện ích MV3) t
         await c.panel.screenshot({ path: path.join(SHOTS, `${name}-welcome.png`) });
       }
       expect(errors.filter((e) => !/favicon|Failed to load resource/i.test(e))).toEqual([]);
+    });
+
+    // Đánh giá MỘT CHẠM trên trình duyệt thật: chạm sao = POST ẩn danh tới máy chủ Locaith NGAY, không mở trang nào. Yêu cầu bị chặn ở CDP và trả lời giả
+    // (KHÔNG gửi gì ra mạng thật: đây là nhóm góp ý thật của đội) — chỉ để kiểm nội dung/đường đi của yêu cầu và trạng thái giao diện.
+    it('đánh giá một chạm: chạm sao gửi NGAY (POST ẩn danh tới máy chủ Locaith, không cookie), dải chuyển sang cảm ơn «đã gửi»', async () => {
+      const sent: { url: string; method: string; body: string; headers: Record<string, string> }[] = [];
+      await c.panel.setRequestInterception(true);
+      const onReq = (req: HTTPRequest) => {
+        if (/\/api\/feedback$/.test(req.url())) {
+          sent.push({ url: req.url(), method: req.method(), body: req.postData() ?? '', headers: req.headers() });
+          void req.respond({ status: 200, contentType: 'application/json', headers: { 'access-control-allow-origin': '*' }, body: '{"ok":true,"via":"group"}' });
+        } else void req.continue();
+      };
+      c.panel.on('request', onReq);
+      try {
+        const opened = await c.browser.pages().then((p) => p.length);
+        await c.panel.evaluate(async () => (window as any).__nd.controller.onMessage({ type: 'rating_submit', stars: 4 }));
+        await c.panel.waitForFunction(() => (window as any).__nd.controller.snapshot().view.rating?.sent === true, { timeout: 15_000 });
+        expect(sent).toHaveLength(1);
+        expect(sent[0].url).toBe('https://studio-api.locaith.com/api/feedback');
+        expect(sent[0].method).toBe('POST');
+        expect(sent[0].headers['content-type']).toContain('application/json');
+        expect(Object.keys(sent[0].headers).map((k) => k.toLowerCase())).not.toContain('cookie');
+        expect(Object.keys(sent[0].headers).map((k) => k.toLowerCase())).not.toContain('authorization');
+        const body = JSON.parse(sent[0].body);
+        expect(Object.keys(body).sort()).toEqual(['message', 'page', 'rating']);
+        expect(body.rating).toBe(4);
+        expect(body.message).toContain('4★');
+        expect(body.page).not.toMatch(/https?:|@/); // không địa chỉ trang đang xem, không email
+        const view = await c.panel.evaluate(() => (window as any).__nd.controller.snapshot().view.rating);
+        expect(view).toMatchObject({ picked: 4, sent: true });
+        expect(await c.panel.evaluate(() => document.querySelector('[data-testid=rating-thanks]')?.textContent ?? '')).toContain('4★');
+        expect(await c.browser.pages().then((p) => p.length)).toBe(opened); // KHÔNG mở thêm tab/trang đánh giá nào
+        await c.panel.evaluate(async () => (window as any).__nd.controller.onMessage({ type: 'rating_close' }));
+        await c.panel.waitForFunction(() => !document.querySelector('[data-testid=rating-thanks]'), { timeout: 5_000 });
+      } finally {
+        c.panel.off('request', onReq);
+        await c.panel.setRequestInterception(false);
+      }
     });
 
     it('đọc trang: văn bản nhìn thấy, bỏ chữ ẩn/trong suốt/ngoài màn hình, bọc thành dữ liệu không đáng tin; công cụ thao tác bị ẩn tới khi nạp kỹ năng', async () => {
