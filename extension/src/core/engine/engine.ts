@@ -237,6 +237,8 @@ export class AgentEngine {
     let lastCallHitMax = false;
     let stallRetried = false;
     let partialText = '';
+    /** Chữ của lần gọi bị treo thứ nhất (đã xoá khỏi giao diện để thử lại) — dùng lại nếu lần thử lại cũng treo mà không sinh gì. */
+    let erasedPartial = '';
 
     const notice = (level: 'info' | 'warn' | 'error', text: string) => emit({ t: 'notice', id, level, text });
 
@@ -475,12 +477,13 @@ export class AgentEngine {
             if (!stallRetried) {
               stallRetried = true;
               notice('warn', t(lang, 'stallRetry', { sec }));
+              erasedPartial = partialText;
               if (partialText) emit({ t: 'text', id, delta: '', trimTail: partialText.length });
               turns--; // lần thử lại không tính vào ngân sách vòng
               trace.turns = turns;
               continue;
             }
-            this.finishAfterStall({ session, id, lang, turns, trace, partialText, sec, emit, notice });
+            this.finishAfterStall({ session, id, lang, turns, trace, partialText, erasedPartial, sec, emit, notice });
             result = 'end_turn';
             break;
           }
@@ -623,14 +626,18 @@ export class AgentEngine {
     turns: number;
     trace: RunTrace;
     partialText: string;
+    erasedPartial: string;
     sec: number;
     emit(ev: UiEvent): void;
     notice(level: 'info' | 'warn' | 'error', text: string): void;
   }): void {
-    const kept = trimToBoundary(i.partialText);
+    // Lần thử lại không sinh gì → dùng lại chữ của lần đầu (đã xoá khỏi giao diện) và hiện lại nó.
+    const reuse = !i.partialText.trim() && !!i.erasedPartial.trim();
+    const kept = trimToBoundary(reuse ? i.erasedPartial : i.partialText);
     if (kept.text.trim()) {
       i.session.messages.push({ role: 'assistant', content: [{ type: 'text', text: kept.text }], provider: this.d.provider.id, model: i.session.model, ts: Date.now() });
-      if (kept.removed || kept.appended) i.emit({ t: 'text', id: i.id, delta: kept.appended, ...(kept.removed ? { trimTail: kept.removed } : {}) });
+      if (reuse) i.emit({ t: 'text', id: i.id, delta: kept.text });
+      else if (kept.removed || kept.appended) i.emit({ t: 'text', id: i.id, delta: kept.appended, ...(kept.removed ? { trimTail: kept.removed } : {}) });
     }
     const facts = stopFacts({ reason: 'stall', turns: i.turns, trace: i.trace, session: i.session });
     i.notice('warn', `${t(i.lang, 'stallGiveUp', { sec: i.sec })}\n${forcedStopSummary(i.lang, facts)}`);

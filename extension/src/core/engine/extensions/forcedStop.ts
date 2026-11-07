@@ -14,15 +14,19 @@ export function forcedStopExtension(): RunExtension {
     id: 'forced-stop',
     begin(scope) {
       let contradiction = false;
+      /** Đã đi qua lượt tổng kết vì hết vòng (engine trả 'end_turn' khi lượt tổng kết xong êm — nhưng với người dùng đó vẫn là bị buộc dừng). */
+      let wrapUpSeen = false;
       return {
         finalize(ctx) {
+          if (ctx.turn.wrapUp) wrapUpSeen = true;
           // Lượt tổng kết nói "xong toàn bộ" trong khi còn việc: không còn vòng để buộc sửa — ghi lại để thông báo cuối chỉ ra.
           if (ctx.turn.wrapUp && ctx.pendingTodos.length > 0 && claimsAllDone(ctx.text)) contradiction = true;
           return { action: 'accept' };
         },
         end({ stopReason, turns }) {
-          if (stopReason !== 'max_turns' && stopReason !== 'error') return;
-          const facts = stopFacts({ reason: stopReason === 'max_turns' ? 'max_turns' : 'error', turns, trace: scope.trace, session: scope.session });
+          const reason = stopReason === 'max_turns' || (wrapUpSeen && stopReason === 'end_turn') ? 'max_turns' : stopReason === 'error' ? 'error' : null;
+          if (!reason) return;
+          const facts = stopFacts({ reason, turns, trace: scope.trace, session: scope.session });
           facts.contradiction = contradiction;
           // Lỗi ngay ở lần gọi đầu, chưa làm gì và không có danh sách việc: nút «Thử lại» của thông báo lỗi là đủ, không thêm tổng kết rỗng.
           if (stopReason === 'error' && facts.toolCalls === 0 && facts.pendingTodos.length === 0) return;
