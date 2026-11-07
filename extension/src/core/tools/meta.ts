@@ -76,7 +76,7 @@ export const todoWriteTool: ToolDef<TodoInput> = {
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
-// offer_options — lựa chọn hướng đi dưới dạng NÚT, thay cho đoạn "bước tiếp theo"
+// offer_options — hỏi LÚC BẮT ĐẦU khi yêu cầu thật sự mơ hồ (không phải menu «làm gì tiếp»)
 // ─────────────────────────────────────────────────────────────────────────────
 
 interface OfferOptionsInput {
@@ -89,21 +89,23 @@ const MAX_OPTIONS = 4;
 export const offerOptionsTool: ToolDef<OfferOptionsInput> = {
   name: 'offer_options',
   description:
-    'Offer the user 2–4 concrete options as BUTTONS under the conversation, instead of writing a "next steps" or "you could also…" paragraph at the end of your reply. ' +
-    'Call it once, when the requested work is finished and there is a genuine choice about what to do next (for example: run it end-to-end, write tests, deploy, or fix the next bug you noticed). ' +
-    'Each option must be a request that stands on its own: `prompt` is what gets sent as the user\'s message when they click, so write it as a complete instruction that finishes that piece of work. ' +
-    'Do NOT repeat the options in your text and do NOT end your reply with a list of steps — the buttons are the list.',
+    'Clarify an ambiguous request BEFORE you start, with 2–4 concrete readings shown as buttons under the conversation. ' +
+    'Use it only when the request is genuinely ambiguous and the choice changes the deliverable (which file, which site, which set, which format) and you cannot resolve it from the workspace, the conversation or a sensible default. ' +
+    'Then STOP: ask nothing else, do no work in that turn — the run ends so the user can pick. ' +
+    'When the user clicks, `prompt` is sent as their message: write it as a complete instruction that finishes that version of the job end to end (not a plan, not a first step). ' +
+    'NEVER call this after you have finished the work to propose extras or "next steps" — a menu after the work is just a suggestion in a different shape. ' +
+    'Do not use it when you can decide yourself: pick the most likely reading, state the assumption in one line, and finish the whole job.',
   inputSchema: {
     type: 'object',
     properties: {
       options: {
         type: 'array',
-        description: '2–4 options, most useful first.',
+        description: '2–4 concrete readings of the request, most likely first.',
         items: {
           type: 'object',
           properties: {
             label: { type: 'string', description: 'Button text, ≤ 60 characters, in the user\'s language.' },
-            prompt: { type: 'string', description: 'The full instruction sent when the user clicks this option (finish the work, do not just plan it).' },
+            prompt: { type: 'string', description: 'The full instruction sent when the user clicks — it must finish that version of the job, not start it.' },
             detail: { type: 'string', description: 'Optional one-line hint shown under the label.' },
           },
           required: ['label', 'prompt'],
@@ -142,9 +144,9 @@ export const offerOptionsTool: ToolDef<OfferOptionsInput> = {
     ctx.emit({ t: 'options', id: ctx.assistantId, options });
     return {
       content:
-        `Đã hiện ${options.length} lựa chọn cho người dùng bấm. KHÔNG liệt kê lại chúng trong câu trả lời và không thêm mục "bước tiếp theo": ` +
-        'hãy kết thúc lượt bằng một câu ngắn gọn về kết quả đã xong.',
-      summary: `${options.length} lựa chọn`,
+        `Đã hiện ${options.length} cách hiểu cho người dùng chọn. DỪNG Ở ĐÂY: hỏi thêm một câu duy nhất (nêu ngắn gọn điểm còn mơ hồ), ` +
+        'không làm việc gì trong lượt này, không liệt kê lại các lựa chọn. Khi người dùng bấm, yêu cầu của họ sẽ tới và bạn làm TRỌN VẸN việc đó.',
+      summary: `${options.length} cách hiểu`,
       display: options.map((o) => `• ${o.label}`).join('\n'),
     };
   },

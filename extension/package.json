@@ -2,7 +2,7 @@
   "name": "locaith-agent",
   "displayName": "Locaith AI Agent",
   "description": "%ext.description%",
-  "version": "0.6.28",
+  "version": "0.6.29",
   "publisher": "LocaithAI",
   "license": "SEE LICENSE IN LICENSE.txt",
   "engines": {
@@ -445,8 +445,8 @@
         "locaithAgent.agent.maxTurns": {
           "type": "integer",
           "minimum": 1,
-          "maximum": 200,
-          "default": 60,
+          "maximum": 1000,
+          "default": 200,
           "markdownDescription": "%cfg.maxTurns%"
         },
         "locaithAgent.agent.maxOutputTokens": {

@@ -230,7 +230,8 @@ export function describeTool(
     detail,
     detailKind,
     file,
-    hidden: (name === 'todo_write' || name === 'load_skill') && (state === 'running' || state === 'done'),
+    // offer_options: các nút bấm CHÍNH LÀ giao diện của nó — thêm một dòng công cụ chỉ làm rối.
+    hidden: (name === 'todo_write' || name === 'load_skill' || name === 'offer_options') && (state === 'running' || state === 'done'),
   };
 }
 

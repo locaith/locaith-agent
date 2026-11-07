@@ -30,7 +30,7 @@
   "cfg.permissionMode": "Chế độ quyền mặc định cho cuộc trò chuyện mới.",
   "cfg.allowBypass": "Cho phép chọn chế độ **bỏ qua mọi xác nhận**. Trợ lý sẽ tự sửa tệp và chạy lệnh mà không hỏi — chỉ bật khi bạn hiểu rủi ro.",
   "cfg.thinkingLevel": "Mức suy luận mặc định. Mỗi nhà cung cấp tự quy đổi sang tham số của họ; model không có suy luận sẽ bỏ qua.",
-  "cfg.maxTurns": "Số vòng lặp tối đa (mỗi vòng = một lần gọi model + chạy công cụ) cho một yêu cầu.",
+  "cfg.maxTurns": "Số vòng lặp tối đa cho một yêu cầu (mỗi vòng = một lần gọi model + chạy công cụ). Mặc định 200 — gần như không trần, giống Claude Code; khi chạm trần, trợ lý vẫn có một lượt tổng kết thay vì dừng giữa việc. Chỉ hạ xuống khi muốn giới hạn chi phí.",
   "cfg.maxOutputTokens": "Số token tối đa model được sinh ra trong một lần gọi (đã gồm token suy luận).",
   "cfg.parallelToolCalls": "Cho phép model phát nhiều lệnh gọi công cụ cùng lúc (ví dụ tìm kiếm web song song).",
   "cfg.autoCompact": "Tự nén các tin nhắn cũ khi ngữ cảnh gần đầy.",

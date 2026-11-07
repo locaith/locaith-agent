@@ -286,7 +286,9 @@ export interface EngineSettings {
 }
 
 export const DEFAULT_ENGINE_SETTINGS: EngineSettings = {
-  maxTurns: 60,
+  // Gần như không trần (Claude Code không đặt giới hạn): 200 vòng là quá đủ cho một việc lớn, và khi chạm trần
+  // engine vẫn cho MỘT lượt tổng kết thay vì cắt ngang công việc.
+  maxTurns: 200,
   maxOutputTokens: 32000,
   parallelToolCalls: true,
   language: 'vi',

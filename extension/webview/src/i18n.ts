@@ -214,7 +214,7 @@ const vi = {
   'ctx.compactHint': 'Tóm tắt các tin nhắn cũ để giải phóng ngữ cảnh',
 
   // ── lựa chọn hướng đi (nút, thay cho đoạn "bước tiếp theo" trong chat) ──
-  'options.title': 'Làm tiếp việc nào?',
+  'options.title': 'Bạn muốn mình hiểu theo cách nào?',
   'options.hide': 'Ẩn các lựa chọn',
 
   // ── mời đánh giá (bản trình duyệt) ──
@@ -1029,7 +1029,7 @@ const en: Record<I18nKey, string> = {
   'rating.star': '{n} stars',
   'rating.hint': 'Opens the Chrome Web Store page to write a review.',
   'todo.title': 'Tasks',
-  'options.title': 'What next?',
+  'options.title': 'Which reading did you mean?',
   'options.hide': 'Hide these options',
   'todo.remaining': 'Remaining steps',
   'todo.runAll': 'Continue all',

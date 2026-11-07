@@ -401,6 +401,13 @@ export class AgentEngine {
           // Tin người dùng gửi lúc công cụ đang chạy đi CHUNG tin nhắn kết quả (mỗi tin assistant chỉ được theo sau bởi MỘT tin user: giữ xen kẽ vai trò ở mọi hãng); tool_result luôn đứng trước.
           const steered = signal.aborted ? [] : takeQueued(true);
           session.messages.push({ role: 'user', content: [...results, ...steered], ts: Date.now() });
+          // `offer_options` là câu hỏi LÀM RÕ ở đầu việc: dừng lượt ngay để người dùng chọn, không tự làm tiếp
+          // theo một cách hiểu mà họ chưa chọn. (Người dùng vừa gửi thêm tin thì coi như đã trả lời → chạy tiếp.
+          // Chỉ dừng khi lựa chọn THỰC SỰ được tạo — bị chặn vì đã sửa tệp thì vẫn phải làm nốt.)
+          if (steered.length === 0 && !!session.options?.length && calls.some((c) => c.name === 'offer_options' && !c.parseError)) {
+            result = 'end_turn';
+            break;
+          }
           lastWasToolResults = true;
           continuations = 0;
           continue;
@@ -638,6 +645,19 @@ export class AgentEngine {
       const sig = `${c.name}|${JSON.stringify(c.input)}`;
       const repeats = recentSigs.filter((s) => s === sig).length;
       const exempt = REPEAT_EXEMPT.has(c.name) || this.d.registry.get(c.name)?.repeatExempt === true;
+      // Hỏi lại sau khi ĐÃ làm là sai ý người dùng: nếu lượt này đã sửa/ghi tệp thì `offer_options` bị chặn và
+      // mô hình được yêu cầu hoàn tất + báo kết quả. (Cần duyệt giữa việc thì dùng cơ chế xin phép, không dùng nút.)
+      const lateAsk = c.name === 'offer_options' && trace.wrote && !c.parseError;
+      if (lateAsk) {
+        const content =
+          lang === 'en'
+            ? 'You already changed files in this run, so the work is not ambiguous any more: do not ask the user to pick a direction now. Finish the remaining work, verify it, and report the result with evidence.'
+            : 'Bạn đã sửa tệp trong lượt này rồi nên việc không còn mơ hồ nữa: đừng hỏi người dùng chọn hướng lúc này. Hãy làm nốt phần còn lại, kiểm chứng rồi báo kết quả kèm bằng chứng.';
+        this.d.emit({ t: 'tool_start', id, callId: c.id, name: c.name, args: c.input });
+        this.d.emit({ t: 'tool_end', id, callId: c.id, state: 'error', output: content, durationMs: 0 });
+        blocked.set(c.id, { type: 'tool_result', toolUseId: c.id, name: c.name, content, isError: true });
+        continue;
+      }
       if (!exempt && repeats >= 2 && !c.parseError) {
         // Lệnh bị chặn KHÔNG được nạp lại vào cửa sổ, nếu không việc chặn sẽ kéo dài mãi.
         const content =

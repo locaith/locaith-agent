@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.6.29 - 2026-11-07
+
+- **Ask before the work, never after it.** `offer_options` changed meaning: it is now the one clarification you get when the request is genuinely ambiguous — the assistant reasons first (is this enough to finish end to end?), and only when two plausible readings would produce different deliverables does it show 2–4 readings as buttons and STOP. Clicking one starts a run that finishes that whole version of the job.
+- **A finished job is reported as finished.** No "what next?" buttons, no menu of optional extras, no next-steps list: a menu after the work is just a suggestion in a different shape. The prompt says this explicitly, and the option row no longer appears on a completed turn.
+- **Deterministic guard:** if the model already wrote files in a run and then tries to ask which direction to take, the call is blocked with a message telling it to finish and verify instead — so "do everything, then ask" cannot come back.
+- The ask itself leaves no clutter in the timeline: the buttons are the interface, so the tool row is hidden.
+- **Loop budget raised to 200 turns by default** (was 60), and the setting now goes up to 1000. Claude Code has no practical cap; 200 runs any real job end to end, and on hitting the limit the assistant still gets one wrap-up turn instead of stopping mid-task. Lower it only if you want to cap cost.
+
 ## 0.6.28 - 2026-11-07
 
 - **The whole process now collapses into ONE line — and nothing is lost.** While a turn is running, every tool call, command, test run, thinking block, status line, task update and file edit in a stretch sits in a single row ("34 actions · 7 files changed · 2 failed"), with the live "reading src/a.ts" hint on the same line. Click it and the full, unaltered sequence opens; a "Collapse" row at the bottom closes it without scrolling back up. Text, artifacts and errors still split the run, so nothing is reordered.
