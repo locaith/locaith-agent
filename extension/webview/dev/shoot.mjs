@@ -210,6 +210,13 @@ const SHOTS = [
   { name: '09-research-done-hc-420', q: { scenario: 'research', theme: 'hc', speed: '0' }, w: 420, h: 900 },
   { name: '10-research-wide-dark-900', q: { scenario: 'research', theme: 'dark', speed: '0' }, w: 900, h: 900 },
   { name: '11-long-dark-420-full', q: { scenario: 'long', theme: 'dark', expand: '1' }, w: 420, h: 900, full: true },
+  // (lane:checkpoints-rewind)
+  { name: 'rewind-bar-dark-420', q: { scenario: 'rewind-bar', theme: 'dark' }, w: 420, h: 900 },
+  { name: 'rewind-menu-dark-420', q: { scenario: 'rewind-menu', theme: 'dark' }, w: 420, h: 900 },
+  { name: 'rewind-plan-dark-420', q: { scenario: 'rewind-plan', theme: 'dark' }, w: 420, h: 900 },
+  { name: 'rewind-plan-light-320', q: { scenario: 'rewind-plan', theme: 'light' }, w: 320, h: 900 },
+  { name: 'rewind-done-dark-420', q: { scenario: 'rewind-done', theme: 'dark' }, w: 420, h: 900 },
+  { name: 'rewind-recent-hc-420', q: { scenario: 'rewind-recent', theme: 'hc' }, w: 420, h: 900 },
   { name: '12-perm-edit-dark-420', q: { scenario: 'perm-edit', theme: 'dark' }, w: 420, h: 900 },
   { name: '13-perm-cmd-light-420', q: { scenario: 'perm-cmd', theme: 'light' }, w: 420, h: 760 },
   { name: '14-perm-plan-dark-420', q: { scenario: 'perm-plan', theme: 'dark' }, w: 420, h: 900 },

@@ -8,6 +8,7 @@ import { LocaithConsentCard } from './LocaithConsent';
 import { Welcome } from './Welcome';
 import { AssistantTurn, StandaloneNotice } from './timeline/AssistantTurn';
 import { DayDivider, Stamp } from './timeline/TimeMarks';
+import { ChangeBar, RewindCard, RewindTrigger } from './timeline/Rewind'; // (lane:checkpoints-rewind)
 import { UserMessage } from './timeline/UserMessage';
 
 const NEAR_BOTTOM_PX = 56;
@@ -61,6 +62,17 @@ export function ChatView({ view, hasAnyKey }: { view: ViewState; hasAnyKey: bool
     return -1;
   })();
 
+  // (lane:checkpoints-rewind) id tin mở lượt (không phải tin chen giữa) của từng mục — để gắn thanh thay đổi và thẻ «Quay lại» đúng lượt.
+  const turnOf: (string | null)[] = [];
+  {
+    let cur: string | null = null;
+    for (const it of view.transcript) {
+      if (it.kind === 'user' && !it.steer) cur = it.id;
+      turnOf.push(cur);
+    }
+  }
+  const rw = view.rewind ?? null;
+
   return (
     <div class="chat">
       <div class="timeline" ref={scrollRef} onScroll={onScroll} tabIndex={-1}>
@@ -78,28 +90,32 @@ export function ChatView({ view, hasAnyKey }: { view: ViewState; hasAnyKey: bool
                   {item.kind === 'user' && mark.time !== undefined && <Stamp ts={mark.time} />}
                 </>
               );
-              if (item.kind === 'user')
-                return (
-                  <Fragment key={item.id}>
-                    {before}
-                    <UserMessage item={item} canEdit={i === lastUserIdx && !view.running} busy={view.running} />
-                  </Fragment>
+              const next = view.transcript[i + 1];
+              const endsTurn = !next || (next.kind === 'user' && !next.steer);
+              const turnId = turnOf[i];
+              const main =
+                item.kind === 'user' ? (
+                  <UserMessage item={item} canEdit={i === lastUserIdx && !view.running} busy={view.running} />
+                ) : item.kind === 'assistant' ? (
+                  <AssistantTurn item={item} live={view.running && !item.done} isLast={isLast} />
+                ) : (
+                  <StandaloneNotice item={item} canRetry={isLast && !view.running} />
                 );
-              if (item.kind === 'assistant')
-                return (
-                  <Fragment key={item.id}>
-                    {before}
-                    <AssistantTurn item={item} live={view.running && !item.done} isLast={isLast} />
-                  </Fragment>
-                );
+              const userHead = item.kind === 'user' && !item.steer;
+              const turn = endsTurn && turnId ? view.checkpoints?.find((c) => c.promptId === turnId) : undefined;
               return (
                 <Fragment key={item.id}>
                   {before}
-                  <StandaloneNotice item={item} canRetry={isLast && !view.running} />
+                  {main}
+                  {userHead && <RewindTrigger promptId={item.id} view={view} />}
+                  {userHead && rw && !rw.recent && rw.scope !== 'turn' && rw.promptId === item.id && <RewindCard view={view} rewind={rw} />}
+                  {turn && <ChangeBar turn={turn} running={view.running && isLast} />}
+                  {endsTurn && rw && !rw.recent && rw.scope === 'turn' && rw.promptId === turnId && <RewindCard view={view} rewind={rw} />}
                 </Fragment>
               );
             })
           )}
+          {rw?.recent && <RewindCard view={view} rewind={rw} />}
           {/* Thông báo dữ liệu của mô hình Locaith: thẻ ở cuối cuộc trò chuyện, không phải hộp thoại. */}
           {view.locaith?.card && <LocaithConsentCard info={view.locaith} account={view.account} />}
         </div>

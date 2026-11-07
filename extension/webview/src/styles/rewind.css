@@ -1,0 +1,284 @@
+/* (lane:checkpoints-rewind) Quay lại điểm trước + thanh thay đổi — gọn kiểu Claude Code: một dòng, chấm trạng thái, nhãn xám nhạt,
+   mở ra thì thanh dọc mảnh bên trái. KHÔNG tô nền kín. */
+
+.rw-trigger {
+  display: flex;
+  justify-content: flex-end;
+  padding: 0 2px 2px;
+  opacity: 0;
+  transition: opacity 0.12s;
+}
+.turn-user:hover + .rw-trigger,
+.rw-trigger:hover,
+.rw-trigger:focus-within {
+  opacity: 1;
+}
+@media (hover: none) {
+  .rw-trigger {
+    opacity: 0.8;
+  }
+}
+
+.rw-link {
+  padding: 2px 4px;
+  border: 0;
+  background: transparent;
+  color: var(--fg-faint);
+  font-size: var(--nd-fs-xs);
+  cursor: pointer;
+  border-radius: 4px;
+  transition: color 0.12s;
+}
+.rw-link:hover:not(:disabled),
+.rw-link:focus-visible {
+  color: var(--accent-text);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.rw-link.is-strong {
+  color: var(--fg);
+  font-weight: 600;
+}
+.rw-link:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+/* chấm trạng thái */
+.cp-dot {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  flex: none;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--fg) 36%, transparent);
+}
+.cp-dot.is-ok {
+  background: var(--ok);
+}
+.cp-dot.is-err {
+  background: var(--danger);
+}
+.cp-dot.is-busy {
+  background: var(--nd-working, var(--accent-text));
+  animation: nd-pulse 1.4s ease-out infinite;
+}
+
+/* thanh thay đổi sau mỗi lượt */
+.cp-bar {
+  margin: 2px 0 6px 2px;
+  font-size: var(--nd-fs-xs);
+  color: var(--fg-faint);
+}
+.cp-line {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  flex-wrap: wrap;
+}
+.cp-label {
+  color: var(--fg-faint);
+}
+.cp-toggle {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  font: inherit;
+  cursor: pointer;
+}
+.cp-toggle:hover {
+  color: var(--fg);
+}
+.cp-bar.is-undone {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.cp-stat {
+  font-family: var(--nd-font-code);
+  white-space: nowrap;
+}
+.cp-add {
+  color: var(--diff-add);
+}
+.cp-del {
+  color: var(--diff-del);
+}
+.cp-list {
+  margin: 4px 0 0 3px;
+  padding-left: 12px;
+  border-left: 1px solid var(--line);
+}
+.cp-list ul,
+.rw-files,
+.rw-recent ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.cp-file {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2px 8px;
+  min-width: 0;
+  padding: 2px 0;
+}
+.cp-path {
+  flex: 1 1 9em;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--fg-dim, var(--fg));
+  font-family: var(--nd-font-code);
+  font-size: var(--nd-fs-xs);
+  text-align: left;
+  cursor: pointer;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.cp-path:hover:not(:disabled):not(.is-static) {
+  color: var(--accent-text);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.cp-path:disabled,
+.cp-path.is-static {
+  cursor: default;
+}
+.cp-tag {
+  flex: none;
+  color: var(--fg-faint);
+}
+.cp-tag.is-warn,
+.cp-file.is-conflict .cp-path {
+  color: var(--warn);
+}
+
+/* thẻ Quay lại */
+.rw-card {
+  margin: 4px 0 8px 2px;
+  padding: 2px 0 2px 12px;
+  border-left: 1px solid var(--line);
+  border-image: linear-gradient(to bottom, var(--accent-text), transparent) 1;
+  font-size: var(--nd-fs-sm);
+}
+.rw-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--fg);
+  font-weight: 600;
+}
+.rw-sub,
+.rw-note {
+  margin: 4px 0;
+  color: var(--fg-faint);
+  font-size: var(--nd-fs-xs);
+}
+.rw-warn {
+  margin: 6px 0;
+  color: var(--warn);
+  font-size: var(--nd-fs-xs);
+}
+.rw-error {
+  margin: 6px 0;
+  color: var(--danger);
+  font-size: var(--nd-fs-xs);
+}
+.rw-options {
+  display: flex;
+  flex-direction: column;
+  margin: 4px 0;
+}
+.rw-opt {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding: 5px 6px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.rw-opt:hover:not(:disabled),
+.rw-opt:focus-visible {
+  background: color-mix(in srgb, var(--accent-text) 8%, transparent);
+}
+.rw-opt:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+.rw-opt-name {
+  color: var(--fg);
+  font-weight: 600;
+}
+.rw-opt-hint {
+  color: var(--fg-faint);
+  font-size: var(--nd-fs-xs);
+}
+.rw-recent {
+  margin: 4px 0;
+}
+.rw-pick {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  width: 100%;
+  padding: 3px 6px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--fg-faint);
+  font: inherit;
+  font-size: var(--nd-fs-xs);
+  text-align: left;
+  cursor: pointer;
+}
+.rw-pick:hover,
+.rw-pick:focus-visible {
+  color: var(--fg);
+}
+.rw-pick.is-on {
+  color: var(--fg);
+  box-shadow: inset 2px 0 0 var(--accent-text);
+}
+.rw-pick-text {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.rw-pick-n {
+  flex: none;
+}
+.rw-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 6px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cp-dot.is-busy {
+    animation: none;
+  }
+}
+@media (forced-colors: active) {
+  .cp-dot {
+    background: CanvasText;
+  }
+  .rw-card {
+    border-image: none;
+    border-left: 1px solid CanvasText;
+  }
+}

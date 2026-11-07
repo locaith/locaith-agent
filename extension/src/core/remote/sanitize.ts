@@ -4,6 +4,7 @@
  */
 
 import type { ABlock, AgentProgress, AttachmentInfo, CompactInfo, ContextInfo, DiffInfo, PermissionRequest, QueuedInfo, SessionMeterView, SuggestionOption, TItem, TodoItem, ToolBlock, UiEvent, VerifyInfo, ViewState } from '../../shared/protocol';
+import type { CheckpointTurn, RewindView } from '../../shared/checkpoints'; // (lane:checkpoints-rewind)
 import type { RemoteHostInfo, RemoteProvider, RemoteState } from './protocol';
 import { REMOTE_API_VERSION } from './protocol';
 
@@ -289,6 +290,28 @@ export function remoteProviders(list: ViewState['providers'] | undefined, curren
     }));
 }
 
+/** (lane:checkpoints-rewind) Rút gọn danh sách checkpoint cho đường truyền: tối đa 30 lượt × 60 tệp, đường dẫn/chữ bị cắt. */
+export function sanitizeCheckpoints(list: ViewState['checkpoints']): CheckpointTurn[] | undefined {
+  if (!list) return undefined;
+  return list.slice(-30).map((t) => ({
+    promptId: String(t.promptId).slice(0, 200),
+    files: t.files.slice(0, 60).map((f) => ({ rel: String(f.rel).slice(0, 300), kind: f.kind, added: f.added | 0, removed: f.removed | 0, ...(f.skipped ? { skipped: f.skipped } : {}) })),
+    ...(t.undone ? { undone: true } : {}),
+  }));
+}
+
+/** (lane:checkpoints-rewind) Thẻ «Quay lại» cho Remote: danh sách tệp/tin gần đây bị cắt, chữ lỗi bị cắt. */
+export function sanitizeRewind(r: ViewState['rewind']): RewindView | null | undefined {
+  if (r === undefined) return undefined;
+  if (r === null) return null;
+  return {
+    ...r,
+    ...(r.files ? { files: r.files.slice(0, 100).map((f) => ({ ...f, rel: String(f.rel).slice(0, 300) })) } : {}),
+    ...(r.recent ? { recent: r.recent.slice(0, 8).map((x) => ({ ...x, text: String(x.text).slice(0, 80) })) } : {}),
+    ...(r.error ? { error: String(r.error).slice(0, 300) } : {}),
+  };
+}
+
 export function toRemoteState(view: ViewState, host: RemoteHostInfo, opts: { canBypass: boolean }): RemoteState {
   const { transcript, omitted } = sanitizeTranscript(view.transcript);
   return {
@@ -313,6 +336,8 @@ export function toRemoteState(view: ViewState, host: RemoteHostInfo, opts: { can
     allowBypass: view.allowBypass,
     remoteCanBypass: opts.canBypass,
     ...(view.options?.length ? { options: sanitizeOptions(view.options) } : {}),
+    ...(view.checkpoints ? { checkpoints: sanitizeCheckpoints(view.checkpoints) } : {}),
+    ...(view.rewind ? { rewind: sanitizeRewind(view.rewind) } : {}),
   };
 }
 
@@ -336,6 +361,8 @@ export function sanitizePatch(p: Partial<ViewState>): Partial<Omit<RemoteState, 
   if (p.allowBypass !== undefined) out.allowBypass = p.allowBypass;
   if (p.transcript !== undefined) Object.assign(out, sanitizeTranscript(p.transcript));
   if (p.options !== undefined) out.options = sanitizeOptions(p.options); // (lane:output-timeouts) rỗng = thu hồi nút
+  if (p.checkpoints !== undefined) out.checkpoints = sanitizeCheckpoints(p.checkpoints);
+  if (p.rewind !== undefined) out.rewind = sanitizeRewind(p.rewind);
   return Object.keys(out).length ? out : null;
 }
 

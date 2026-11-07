@@ -470,6 +470,11 @@
           "default": "medium",
           "markdownDescription": "%cfg.thinkingLevel%"
         },
+        "locaithAgent.checkpoints.enabled": {
+          "type": "boolean",
+          "default": true,
+          "markdownDescription": "%cfg.checkpointsEnabled%"
+        },
         "locaithAgent.agent.maxTurns": {
           "type": "integer",
           "minimum": 1,
