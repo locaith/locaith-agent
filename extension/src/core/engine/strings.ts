@@ -20,7 +20,7 @@ const vi = {
   authError: 'Khóa API của {provider} không hợp lệ hoặc đã hết hạn. Mở Cài đặt để nhập lại.',
   noKey: 'Chưa có API key cho {provider}. Mở Cài đặt để thêm khóa.',
   consentRequired: 'Cần đồng ý thông báo dữ liệu của Locaith trước khi dùng {provider}. Thẻ thông báo đã hiện ở cuối cuộc trò chuyện — đồng ý rồi bấm «Thử lại».',
-  accountInvalid: 'Phiên đăng nhập Locaith không còn hiệu lực — đang kiểm tra lại tài khoản. Nếu được yêu cầu, hãy đăng nhập lại rồi bấm «Thử lại».',
+  accountInvalid: 'Phiên đăng nhập Locaith hết hạn — Đăng nhập lại để tiếp tục (lệnh locaithAgent.account.signIn), rồi bấm «Thử lại».',
   rateLimit: 'Đã bị giới hạn tốc độ ({provider}). Hãy thử lại sau ít phút.',
   overloaded: 'Máy chủ {provider} đang quá tải. Hãy thử lại sau.',
   networkError: 'Không kết nối được tới {provider}: {detail}',
@@ -220,6 +220,11 @@ const vi = {
   sxDeletedMany: 'Đã chuyển {n} cuộc trò chuyện vào Thùng rác — khôi phục được trong 30 ngày.',
   // ── (lane:customer-bugs) ──
   // ── (lane:gateway-client) ──
+  gwQuota: 'Bạn đã dùng hết hạn mức mô hình Locaith của hôm nay. Hạn mức làm mới vào ngày mai — hoặc chọn một model khác để làm tiếp.',
+  gwRateLimited: 'Bạn đang gửi quá nhiều yêu cầu tới mô hình Locaith cùng lúc. Chờ một lát rồi bấm «Thử lại».',
+  gwOverloaded: 'Cổng Locaith đang quá tải hoặc bảo trì. Chờ vài phút rồi bấm «Thử lại».',
+  gwModelGone: 'Mô hình Locaith này không tồn tại hoặc đã ngừng cung cấp. Hãy chọn một model khác trong danh sách.',
+  gwOffline: 'Không kết nối được tới cổng Locaith — kiểm tra mạng (hoặc VPN/proxy) rồi bấm «Thử lại». Chi tiết: {detail}',
   // ── (lane:mcp-parity) ──
   // ── (lane:instructions-memory) ──
   // ── (lane:tools-parity) ──
@@ -241,7 +246,7 @@ const en: typeof vi = {
   authError: 'The {provider} API key is invalid or expired. Open Settings to re-enter it.',
   noKey: 'No API key for {provider}. Open Settings to add one.',
   consentRequired: 'You need to accept the Locaith data notice before using {provider}. The notice card is shown at the end of the conversation — accept, then press “Retry”.',
-  accountInvalid: 'Your Locaith session is no longer valid — re-checking your account. If asked, sign in again and press “Retry”.',
+  accountInvalid: 'Your Locaith session has expired — sign in again to continue (command locaithAgent.account.signIn), then press “Retry”.',
   rateLimit: 'Rate limited ({provider}). Please retry in a few minutes.',
   overloaded: '{provider} is overloaded. Please retry later.',
   networkError: 'Could not reach {provider}: {detail}',
@@ -435,6 +440,11 @@ const en: typeof vi = {
   sxDeletedMany: 'Moved {n} conversation(s) to the Trash — you can restore them for 30 days.',
   // ── (lane:customer-bugs) ──
   // ── (lane:gateway-client) ──
+  gwQuota: 'You have used today’s Locaith model quota. It resets tomorrow — or pick another model to keep going.',
+  gwRateLimited: 'You are sending too many requests to the Locaith model at once. Wait a moment, then press “Retry”.',
+  gwOverloaded: 'The Locaith gateway is overloaded or under maintenance. Wait a few minutes, then press “Retry”.',
+  gwModelGone: 'This Locaith model does not exist or has been retired. Pick another model from the list.',
+  gwOffline: 'Could not reach the Locaith gateway — check your network (or VPN/proxy), then press “Retry”. Details: {detail}',
   // ── (lane:mcp-parity) ──
   // ── (lane:instructions-memory) ──
   // ── (lane:tools-parity) ──

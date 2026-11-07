@@ -20,6 +20,7 @@ import { DEFAULT_ENGINE_SETTINGS, newSession, type PermissionDecision, type Sess
 import { NodeToolHost } from '../core/host/nodeHost';
 import { createProvider } from '../core/providers';
 import { ACCOUNT_PRESETS, BUILTIN_PRESETS } from '../core/providers/presets';
+import { gatewayDiagnosticHeaders } from '../core/providers/gatewayDiagnostics'; // (lane:gateway-client)
 import { LOCAITH_GATEWAY_URL, LOCAITH_MODEL_FLASH, LOCAITH_PROVIDER_ID, LocaithGatewayClient } from '../core/providers/locaithGateway';
 import type { ImageBlock } from '../core/types';
 import { SkillRegistry } from '../core/skills/registry';
@@ -149,6 +150,7 @@ function makeProvider(o: Options) {
     flavor: preset.flavor,
     baseUrl: o.baseUrl,
     getApiKey: async () => key,
+    requestHeaders: (c) => gatewayDiagnosticHeaders({ family: 'cli', version: VERSION, sessionKey: c.sessionKey }), // (lane:gateway-client)
   });
 }
 

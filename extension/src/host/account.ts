@@ -171,6 +171,19 @@ export class AccountService implements AccountGate, vscode.Disposable {
     return this.session.user?.id;
   }
 
+  // ── (lane:gateway-client) token thiết bị cho cổng Locaith: nhãn chẩn đoán + làm mới khi 401 ──
+  deviceId(): string | undefined {
+    return this.session.deviceId;
+  }
+
+  refreshToken(stale: string): Promise<string | undefined> {
+    return this.session.refreshToken(stale).catch(() => undefined);
+  }
+
+  expireToken(token: string): Promise<void> {
+    return this.session.expireToken(token).catch(() => undefined);
+  }
+
   private lastRecheck = 0;
 
   /** Cổng Locaith trả 401 cho token này: kiểm tra lại với máy chủ tài khoản ngay (không đợi chu kỳ 30 phút). Tối đa một lần mỗi 10 giây dù có nhiều lượt gọi lỗi cùng lúc (agent con). */

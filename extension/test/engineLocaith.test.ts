@@ -169,7 +169,7 @@ describe('engine — lời của cổng hiện nguyên văn; token tài khoản 
     expect(eventsOf(h.events, 'notice').at(-1)!.text).toMatch(/giới hạn tốc độ/);
   });
 
-  it('locaith_unauthorized: gọi onAccountInvalid ĐÚNG MỘT LẦN và báo "đang kiểm tra lại tài khoản" — không bảo người dùng nhập khoá API', async () => {
+  it('locaith_unauthorized: gọi onAccountInvalid ĐÚNG MỘT LẦN và báo "hết hạn — đăng nhập lại" — không bảo người dùng nhập khoá API', async () => {
     let rechecks = 0;
     const h = makeHarness(failWith(new ProviderError('Phiên đăng nhập Locaith không còn hiệu lực.', { kind: 'auth', providerId: 'locaith', status: 401, retryable: false, accountAuth: true })), {
       sessionProvider: 'locaith',
@@ -179,7 +179,7 @@ describe('engine — lời của cổng hiện nguyên văn; token tài khoản 
     expect(r.stopReason).toBe('error');
     expect(rechecks).toBe(1);
     const text = eventsOf(h.events, 'notice').at(-1)!.text;
-    expect(text).toMatch(/Phiên đăng nhập Locaith không còn hiệu lực — đang kiểm tra lại tài khoản/);
+    expect(text).toMatch(/Phiên đăng nhập Locaith hết hạn — Đăng nhập lại.*locaithAgent.account.signIn/);
     expect(text).not.toMatch(/khóa API|khoá API|Cài đặt để nhập lại/i);
     expect(h.provider.requests).toHaveLength(1);
   });
@@ -190,5 +190,44 @@ describe('engine — lời của cổng hiện nguyên văn; token tài khoản 
     await h.run('hi');
     expect(rechecks).toBe(0);
     expect(eventsOf(h.events, 'notice').at(-1)!.text).toMatch(/Khóa API/);
+  });
+});
+
+// ── (lane:gateway-client) nhóm thông điệp lỗi cổng: hiện qua handleProviderError thật ──
+describe('engine — lỗi cổng Locaith theo nhóm (hạn mức / giới hạn / quá tải / mất mạng)', () => {
+  const failWith = (e: ProviderError) => [
+    () => {
+      throw e;
+    },
+  ];
+  const noticeFor = async (err: ProviderError, language: 'vi' | 'en') => {
+    const h = makeHarness(failWith(err), { sessionProvider: 'locaith', settings: { language } });
+    await h.run('hi');
+    return eventsOf(h.events, 'notice').at(-1)!.text;
+  };
+
+  it('en: hạn mức ngày → câu tiếng Anh chuẩn (không lộ lời tiếng Việt của cổng); vi: giữ lời cổng', async () => {
+    const e = new ProviderError('Hết hạn mức hôm nay, mai quay lại.', { kind: 'rate_limit', providerId: 'locaith', retryable: false, verbatim: true, gatewayCode: 'locaith_quota' });
+    expect(await noticeFor(e, 'en')).toMatch(/quota/i);
+    expect(await noticeFor(e, 'vi')).toBe('Hết hạn mức hôm nay, mai quay lại.');
+  });
+
+  it('mất mạng tới cổng Locaith → hướng dẫn kiểm tra mạng + Thử lại (cả hai ngôn ngữ), kèm chi tiết', async () => {
+    const e = new ProviderError('Không kết nối được tới máy chủ (ENOTFOUND).', { kind: 'network', providerId: 'locaith', retryable: false });
+    expect(await noticeFor(e, 'vi')).toMatch(/kiểm tra mạng.*Thử lại.*ENOTFOUND/);
+    expect(await noticeFor(e, 'en')).toMatch(/network.*Retry.*ENOTFOUND/is);
+  });
+
+  it('nhà cung cấp khác mất mạng vẫn dùng câu cũ (không đổi hành vi)', async () => {
+    const h = makeHarness(failWith(new ProviderError('ENOTFOUND', { kind: 'network', providerId: 'openai', retryable: false })), { sessionProvider: 'openai' });
+    await h.run('hi');
+    expect(eventsOf(h.events, 'notice').at(-1)!.text).toMatch(/Không kết nối được tới/);
+    expect(eventsOf(h.events, 'notice').at(-1)!.text).not.toMatch(/cổng Locaith/);
+  });
+
+  it('401 tài khoản: câu «hết hạn — Đăng nhập lại» có tên lệnh, cả vi lẫn en', async () => {
+    const e = new ProviderError('x', { kind: 'auth', providerId: 'locaith', status: 401, retryable: false, accountAuth: true });
+    expect(await noticeFor(e, 'vi')).toMatch(/hết hạn — Đăng nhập lại.*locaithAgent\.account\.signIn/);
+    expect(await noticeFor(e, 'en')).toMatch(/expired — sign in again.*locaithAgent\.account\.signIn/);
   });
 });

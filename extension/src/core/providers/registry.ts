@@ -8,6 +8,7 @@ import type { LLMProvider, LogLevel, ModelInfo, ProviderError, ProviderFlavor, P
 import { AnthropicProvider } from './anthropic';
 import { ModelCatalog } from './catalog';
 import { GeminiProvider } from './gemini';
+import type { GatewayAuth } from './gatewayAuth';
 import { OpenAIChatProvider } from './openaiChat';
 import { OpenAIResponsesProvider } from './openaiResponses';
 import { ACCOUNT_PRESETS, BUILTIN_PRESETS, type ProviderPreset } from './presets';
@@ -55,6 +56,8 @@ export interface AccountProviderHooks {
   headers(ctx: { sessionKey?: string; ticket?: string }): Record<string, string>;
   /** Chốt chặn trước lời gọi trò chuyện: trả lỗi thì không gửi gì (chưa đồng ý thông báo dữ liệu…). */
   guard?(): ProviderError | undefined;
+  /** (lane:gateway-client) Người giữ token: xử lý 401 (làm mới một lần, gửi lại một lần, không dùng lại token hỏng). */
+  auth?: GatewayAuth;
 }
 
 export interface ProviderRegistryOptions {
@@ -229,7 +232,7 @@ export class ProviderRegistry {
       fetchImpl: this.opts.fetchImpl,
       log: this.opts.log,
       extraHeaders: this.opts.extraHeaders?.[s.id],
-      ...(hooks ? { requestHeaders: (c: { sessionKey?: string; ticket?: string }) => hooks.headers(c), guard: hooks.guard ? () => hooks.guard!() : undefined, credential: 'account' as const } : {}),
+      ...(hooks ? { requestHeaders: (c: { sessionKey?: string; ticket?: string }) => hooks.headers(c), guard: hooks.guard ? () => hooks.guard!() : undefined, credential: 'account' as const, ...(hooks.auth ? { auth: hooks.auth } : {}) } : {}),
       options: { requiresKey: s.requiresKey, ...(this.opts.defaultOptions ?? {}), ...(this.opts.providerOptions?.[s.id] ?? {}) },
     });
     this.slots.set(s.id, {
