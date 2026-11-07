@@ -189,7 +189,9 @@ describe('manifest và gói build sản phẩm (nguyên tắc ít quyền nhất
     expect(sb).toContain("connect-src 'none'");
     expect(sb).toContain("frame-src 'none'");
     expect(sb).toContain("form-action 'none'");
-    expect(sb).not.toMatch(/https:\/\/(?!cdn\.jsdelivr\.net|cdnjs\.cloudflare\.com|unpkg\.com)/); // chỉ ba CDN trong danh sách cho phép
+    expect(sb).not.toMatch(/https?:/); // bản cửa hàng không tải mã từ internet: không còn CDN nào (bản VS Code vẫn cho ba CDN)
+    expect(sb).toContain("script-src 'self' 'unsafe-inline' 'unsafe-eval';");
+    expect(sb).toContain('font-src data:;');
     expect(manifest.sandbox.pages).toEqual(['artifact-sandbox.html']);
     expect(manifest.web_accessible_resources).toBeUndefined();
     expect(manifest.externally_connectable).toBeUndefined();

@@ -11,13 +11,25 @@ import type { ArtifactRecord, ToolDef } from '../engine/types';
 export const ARTIFACT_MAX_CHARS = 400_000;
 export const ARTIFACT_TYPES = ['html', 'svg', 'markdown'] as const;
 export type ArtifactType = (typeof ARTIFACT_TYPES)[number];
-export const CDN_ALLOWLIST = ['cdn.jsdelivr.net', 'cdnjs.cloudflare.com', 'unpkg.com'];
+/**
+ * Bản trình duyệt (Chrome Web Store) KHÔNG được tải mã từ internet — chính sách «mã lưu trữ từ xa». esbuild.browser.mjs đặt cờ này = true, khi đó danh sách rỗng:
+ * CSP không còn tên miền nào, kiểm tra artifact coi mọi tài nguyên ngoài là không hợp lệ và lời hướng dẫn cho model bảo viết nội tuyến.
+ * Bản VS Code (và vitest) không định nghĩa cờ → giữ nguyên ba CDN.
+ */
+declare const __ND_NO_REMOTE_CODE__: boolean | undefined;
+// Một biểu thức duy nhất (không qua biến trung gian) để esbuild gập hằng số và bỏ hẳn ba tên miền khỏi gói trình duyệt.
+export const CDN_ALLOWLIST: readonly string[] = typeof __ND_NO_REMOTE_CODE__ !== 'undefined' && __ND_NO_REMOTE_CODE__ === true ? [] : ['cdn.jsdelivr.net', 'cdnjs.cloudflare.com', 'unpkg.com'];
+
+/** Câu quy tắc về script/style ngoài cho model (đặc tả loại `html`). */
+const EXTERNAL_RULE = CDN_ALLOWLIST.length
+  ? `Script/style ngoài chỉ từ ${CDN_ALLOWLIST.join(', ')}.`
+  : 'KHÔNG tải script/style từ internet: viết nội tuyến, mọi thư viện phải nằm ngay trong trang.';
 
 const SPEC = `# Các loại artifact hiện có
 
 | Loại | Phù hợp | Giới hạn |
 |---|---|---|
-| \`html\` | Bảng/biểu đồ tương tác, thanh điểm, bộ lọc, trang giới thiệu, công cụ tính nhỏ. HTML + CSS + JS thuần trong MỘT tệp. | Chạy trong iframe cô lập: không fetch/XHR/WebSocket, không localStorage/cookie, không ảnh từ internet. Script/style ngoài chỉ từ ${CDN_ALLOWLIST.join(', ')}. Tối đa ~${Math.round(ARTIFACT_MAX_CHARS / 1000)}K ký tự. |
+| \`html\` | Bảng/biểu đồ tương tác, thanh điểm, bộ lọc, trang giới thiệu, công cụ tính nhỏ. HTML + CSS + JS thuần trong MỘT tệp. | Chạy trong iframe cô lập: không fetch/XHR/WebSocket, không localStorage/cookie, không ảnh từ internet. ${EXTERNAL_RULE} Tối đa ~${Math.round(ARTIFACT_MAX_CHARS / 1000)}K ký tự. |
 | \`svg\` | Sơ đồ, biểu tượng, infographic tĩnh. | Chỉ vector; không script, không <foreignObject>; không ảnh/phông ngoài. |
 | \`markdown\` | Báo cáo, tài liệu, hướng dẫn có tiêu đề/bảng/danh sách/khối mã. | Không tương tác; HTML thô bị lọc. |
 
@@ -89,7 +101,7 @@ function validateContent(type: string, content: string): string | null {
   }
   if (type === 'html') {
     const blocked = findBlockedResources(content);
-    if (blocked.length) return `Không tải được tài nguyên từ: ${blocked.join(', ')}. Chỉ được dùng ${CDN_ALLOWLIST.join(', ')} hoặc viết nội tuyến.`;
+    if (blocked.length) return `Không tải được tài nguyên từ: ${blocked.join(', ')}. ${CDN_ALLOWLIST.length ? `Chỉ được dùng ${CDN_ALLOWLIST.join(', ')} hoặc viết nội tuyến.` : 'Không được tải tài nguyên từ internet: hãy viết nội tuyến (JS thuần/SVG/CSS ngay trong trang).'}`;
   }
   if (type === 'svg' && !/<svg[\s>]/i.test(content)) return 'Nội dung SVG phải có thẻ <svg>.';
   // SVG chỉ là vector tĩnh. <foreignObject> cho phép nhét HTML thô (kể cả <link rel=prerender>, một đường rò dữ liệu mà CSP không chặn được) vào bên trong nó.

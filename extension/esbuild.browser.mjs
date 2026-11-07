@@ -7,6 +7,7 @@ import * as esbuild from 'esbuild';
 import { cp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
+import { artifactsSkillForBrowser } from './scripts/browser-skill-transform.mjs';
 
 const root = path.dirname(fileURLToPath(import.meta.url));
 const at = (...p) => path.join(root, ...p);
@@ -14,7 +15,9 @@ const args = process.argv.slice(2);
 const production = args.includes('--production');
 const watch = args.includes('--watch');
 const testBuild = args.includes('--test');
-const outdir = at(testBuild ? 'dist-browser-test' : 'dist-browser');
+// --out=<thư mục> : dựng ra chỗ khác (test dùng để không đè dist-browser/ của người khác).
+const outArg = args.find((a) => a.startsWith('--out='))?.slice('--out='.length);
+const outdir = outArg ? path.resolve(outArg) : at(testBuild ? 'dist-browser-test' : 'dist-browser');
 
 const pkg = JSON.parse(await readFile(at('package.json'), 'utf8'));
 
@@ -32,11 +35,12 @@ const PROVIDER_HOSTS = [
   'https://www.bing.com/*',
 ];
 
-// Artifact HTML chạy trong trang "sandbox" (origin riêng, không có API extension). CSP này tương đương CSP của bản VS Code.
-const CDN = 'https://cdn.jsdelivr.net https://cdnjs.cloudflare.com https://unpkg.com';
+// Artifact HTML chạy trong trang "sandbox" (origin riêng, không có API extension).
+// KHÔNG có tên miền CDN nào: Chrome Web Store coi script/style tải từ internet là «mã lưu trữ từ xa» (bản VS Code vẫn cho ba CDN — chỉ khác ở đây).
+// Cờ __ND_NO_REMOTE_CODE__ (xem common.define) làm danh sách CDN của lõi rỗng, nên kiểm tra artifact và CSP của khung xem trước cũng khớp.
 const SANDBOX_CSP =
-  `sandbox allow-scripts allow-modals; script-src 'self' 'unsafe-inline' 'unsafe-eval' ${CDN}; style-src 'self' 'unsafe-inline' ${CDN}; ` +
-  `font-src data: ${CDN}; img-src data: blob:; connect-src 'none'; frame-src 'none'; worker-src 'none'; object-src 'none'; media-src 'none'; ` +
+  `sandbox allow-scripts allow-modals; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; ` +
+  `font-src data:; img-src data: blob:; connect-src 'none'; frame-src 'none'; worker-src 'none'; object-src 'none'; media-src 'none'; ` +
   `manifest-src 'none'; base-uri 'none'; form-action 'none'`;
 
 function manifest() {
@@ -131,8 +135,17 @@ const common = {
   assetNames: 'assets/[name]-[hash]',
   jsx: 'automatic',
   jsxImportSource: 'preact',
-  define: { 'process.env.NODE_ENV': production ? '"production"' : '"development"', __ND_TEST__: testBuild ? 'true' : 'false' },
+  define: { 'process.env.NODE_ENV': production ? '"production"' : '"development"', __ND_TEST__: testBuild ? 'true' : 'false', __ND_NO_REMOTE_CODE__: 'true' },
   // MV3 cấm unsafe-eval: Ajv (biên dịch bằng new Function) và node:crypto đồng bộ được thay bằng bản thuần.
+  plugins: [
+    {
+      // Bản trình duyệt: kỹ năng artifacts không được hứa cho tải script/style từ CDN (xem scripts/browser-skill-transform.mjs).
+      name: 'browser-artifacts-skill',
+      setup(b) {
+        b.onLoad({ filter: /[\\/]skills[\\/]artifacts[\\/]SKILL\.md$/ }, async (a) => ({ contents: artifactsSkillForBrowser(await readFile(a.path, 'utf8')), loader: 'text' }));
+      },
+    },
+  ],
   alias: { ajv: at('src/browser/shims/ajv.ts'), 'node:crypto': at('src/browser/shims/crypto.ts') },
 };
 
