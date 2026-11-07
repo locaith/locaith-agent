@@ -40,7 +40,8 @@ export async function decidePermission(
   }
 
   const need = (await def.permission?.(input, ctx)) ?? null;
-  if (!need) return rule?.action === 'allow' ? { action: 'allow', rule } : { action: 'allow' };
+  // Không cần xin phép thì luật allow không "quyết định" gì → không ghi «cho phép bởi luật» lên dòng công cụ.
+  if (!need) return { action: 'allow' };
 
   // Luật ask buộc hỏi dù chế độ nào — trừ duyệt kế hoạch (vốn luôn hỏi).
   if (rule?.action === 'ask' && need.kind !== 'plan') return { action: 'ask', need, rule };
