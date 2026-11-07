@@ -41,7 +41,15 @@ function sanitizeTodos(v: unknown): TodoItem[] {
   if (!Array.isArray(v)) return [];
   return v.slice(0, 200).flatMap((t) =>
     isObj(t) && typeof t.title === 'string'
-      ? [{ id: text(t.id, 80) || `t${Math.random().toString(36).slice(2, 8)}`, title: t.title.slice(0, 500), status: t.status === 'completed' || t.status === 'in_progress' ? t.status : 'pending' } as TodoItem]
+      ? [
+          {
+            id: text(t.id, 80) || `t${Math.random().toString(36).slice(2, 8)}`,
+            title: t.title.slice(0, 500),
+            status: t.status === 'completed' || t.status === 'in_progress' || t.status === 'blocked' ? t.status : 'pending',
+            // (lane:loop-guards) lý do bị chặn — tuỳ chọn
+            ...(t.status === 'blocked' && typeof t.note === 'string' && t.note ? { note: t.note.slice(0, 300) } : {}),
+          } as TodoItem,
+        ]
       : [],
   );
 }

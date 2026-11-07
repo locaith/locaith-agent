@@ -16,13 +16,16 @@
  */
 
 import type { ChatMessage, StopReason } from '../types';
+import { finalAnswerProblem } from './guards/finalAnswer';
 import { t, type Lang } from './strings';
 
-export type GateReason = 'todos' | 'verify';
+/** (lane:loop-guards) 'final' = câu trả lời cuối trỏ vào chỗ khác / quá ngắn sau lượt dài — nhắc một lần, tính chung ngân sách. */
+export type GateReason = 'todos' | 'verify' | 'final';
 
 export interface GateTodo {
   title: string;
   status: string;
+  note?: string;
 }
 
 export interface GateInput {
@@ -44,6 +47,8 @@ export interface GateInput {
   aborted: boolean;
   /** Tối đa số lần can thiệp trong một lượt chạy (mặc định `GATE_MAX_NUDGES` = 3; lần cuối là lần chốt, không chèn nhắc). */
   maxNudges?: number;
+  /** (lane:loop-guards) Số lệnh công cụ đã chạy trong lượt — để xét "câu trả lời quá ngắn sau lượt dài". Mặc định 0. */
+  toolCalls?: number;
 }
 
 /** Số lần cổng được can thiệp trong một lượt chạy. Lần 1..MAX-1 chèn tin nhắc; lần MAX dừng và báo người dùng. */
@@ -66,6 +71,20 @@ export function todoListOf(todos: readonly GateTodo[], lang: Lang): string {
 }
 
 /**
+ * (lane:loop-guards) Trạng thái THẬT của danh sách, gọn: `[~] Đang làm; [ ] Chưa làm; [!] Bị chặn (lý do)`. Lời nhắc đầu kèm bảng này
+ * để model thấy chính xác cái nó phải sửa, thay vì chỉ nghe "còn N việc".
+ */
+export function todoStatusListOf(todos: readonly GateTodo[], lang: Lang): string {
+  const box = (s: string): string => (s === 'completed' ? '[x]' : s === 'in_progress' ? '[~]' : s === 'blocked' ? '[!]' : '[ ]');
+  const items = todos
+    .slice(0, 5)
+    .map((x) => `${box(x.status)} ${x.title.replace(/\s+/g, ' ').trim().slice(0, 60)}${x.status === 'blocked' && x.note ? ` (${x.note.slice(0, 60)})` : ''}`)
+    .filter(Boolean);
+  const more = todos.length - items.length;
+  return items.join('; ') + (more > 0 ? (lang === 'en' ? ` (+${more} more)` : ` (+${more} việc nữa)`) : '');
+}
+
+/**
  * Quyết định có chặn việc kết thúc lượt hay không. `null` = cho kết thúc.
  * Thứ tự: việc còn dở (lần đầu) → kiểm chứng (lần đầu) → việc còn dở nhắc LẠI. Mỗi lý do được nói ra ít nhất một lần trước khi
  * lặp, và tổng cộng không quá `maxNudges` lần.
@@ -80,13 +99,22 @@ export function completionGate(i: GateInput, lang: Lang): GateDecision | null {
   if (i.nudges >= max) return null;
 
   const pending = i.pendingTodos.filter((x) => x.status !== 'completed');
-  const todos = (): GateDecision => ({ reason: 'todos', message: t(lang, 'gateTodos', { n: pending.length, list: todoListOf(pending, lang) }) });
-  if (pending.length > 0 && !i.reasons.includes('todos')) return todos();
+  // (lane:loop-guards) Lần đầu: kèm trạng thái THẬT từng việc. Lần sau: yêu cầu làm KHÁC (todo_write / giải thích / hỏi một câu) — không lặp câu cũ.
+  const todosFirst = (): GateDecision => ({
+    reason: 'todos',
+    message: t(lang, 'gateTodos', { n: pending.length, list: todoStatusListOf(pending, lang) }),
+  });
+  const todosAgain = (): GateDecision => ({ reason: 'todos', message: t(lang, 'gateTodosAgain', { list: todoStatusListOf(pending, lang) }) });
+  if (pending.length > 0 && !i.reasons.includes('todos')) return todosFirst();
   if (i.wroteFiles && i.execCalls === 0 && !i.reasons.includes('verify')) {
     return { reason: 'verify', message: t(lang, 'gateVerify') };
   }
+  // (lane:loop-guards) Câu trả lời cuối phải tự đứng được: nhắc đúng một lần, và không bao giờ là lần can thiệp CHỐT (không đáng để dừng vì văn phong).
+  if (!i.reasons.includes('final') && i.nudges < max - 1 && finalAnswerProblem(i.text, i.toolCalls ?? 0)) {
+    return { reason: 'final', message: t(lang, 'gateFinalAnswer') };
+  }
   // Đã nói đủ mọi lý do mà việc dở vẫn còn: nhắc lại (engine gắn nhãn "lần N"; tới trần thì thôi nhắc và báo người dùng).
-  if (pending.length > 0) return todos();
+  if (pending.length > 0) return todosAgain();
   return null;
 }
 

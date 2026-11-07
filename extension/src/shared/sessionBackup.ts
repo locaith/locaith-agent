@@ -170,7 +170,21 @@ function sanitizeArtifacts(v: unknown): Record<string, ArtifactRecord> {
 
 function sanitizeTodos(v: unknown): TodoItem[] {
   if (!Array.isArray(v)) return [];
-  return v.slice(0, 200).flatMap((t) => (isObj(t) && typeof t.title === 'string' ? [{ id: small(t.id, 80) || String(Math.random()), title: small(t.title, 500), status: t.status === 'completed' || t.status === 'in_progress' ? t.status : 'pending' } as TodoItem] : []));
+  // (lane:loop-guards) chấp nhận thêm 'blocked' + note.
+  return v
+    .slice(0, 200)
+    .flatMap((t) =>
+      isObj(t) && typeof t.title === 'string'
+        ? [
+            {
+              id: small(t.id, 80) || String(Math.random()),
+              title: small(t.title, 500),
+              status: t.status === 'completed' || t.status === 'in_progress' || t.status === 'blocked' ? t.status : 'pending',
+              ...(t.status === 'blocked' && typeof t.note === 'string' && t.note ? { note: small(t.note, 300) } : {}),
+            } as TodoItem,
+          ]
+        : [],
+    );
 }
 
 /**

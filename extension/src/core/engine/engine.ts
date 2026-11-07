@@ -29,6 +29,7 @@ import { sha1 } from '../tools/textUtil';
 import { compactIfNeeded, compactedNotice, stripThinking } from './compaction';
 import { turnBudgetNote, withBudgetNote } from './completion';
 import { coreRunExtensions } from './extensions';
+import { repairToolArgs } from './guards/jsonRepair'; // (lane:loop-guards)
 import { beginExtensions, newTrace, type ActiveExtension, type FinalizeContext, type FinalizeDecision, type RunExtension, type RunScope, type RunTrace, type TraceCall, type TurnInfo } from './seams';
 import { buildSystemPrompt } from './context';
 import { formatMemoryBlock } from './memory';
@@ -213,6 +214,7 @@ export class AgentEngine {
 
     const budget: PillBudget = { seq: 0, count: 0 };
     const recentSigs: string[] = [];
+    const jsonFails = { streak: 0 }; // (lane:loop-guards) số lượt liên tiếp có đối số JSON hỏng không sửa được
     let turns = 0;
     let continuations = 0;
     /** Những gì lượt chạy này đã THỰC SỰ làm — căn cứ để biết "xong" có bằng chứng hay không (cổng hoàn thành, kiểm tra độc lập…). */
@@ -470,6 +472,8 @@ export class AgentEngine {
             const last = calls[calls.length - 1];
             if (!last.parseError) last.parseError = 'đầu ra bị cắt do chạm giới hạn độ dài';
           }
+          // (lane:loop-guards) JSON đối số hỏng: sửa nhẹ khi không mơ hồ (không bao giờ trên nội dung cụt), còn hỏng thì hướng dẫn rõ và đếm lần.
+          repairToolArgs(calls, stop, jsonFails, lang);
           const results = await this.runTools(calls, session, id, signal, available, recentSigs, lang, trace, active, turns);
           // Tin người dùng gửi lúc công cụ đang chạy đi CHUNG tin nhắn kết quả (mỗi tin assistant chỉ được theo sau bởi MỘT tin user: giữ xen kẽ vai trò ở mọi hãng); tool_result luôn đứng trước.
           const steered = signal.aborted ? [] : takeQueued(true);

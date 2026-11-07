@@ -16,6 +16,8 @@ import soanThaoNd30 from '../../../skills/soan-thao-van-ban-nd30/SKILL.md';
 import ghiNhoMemory from '../../../skills/ghi-nho-memory/SKILL.md';
 // Sổ tay làm video của Locaith: dùng được với MỌI model (không gắn `providers`), và được nhắc mặc định cho họ Locaith (prompts/locaith.addendum.md).
 import quyTrinhVideo from '../../../skills/quy-trinh-video-locaith/SKILL.md';
+// (lane:loop-guards) Kỷ luật khi chạy dài: KHÔNG tự nạp mỗi lượt — model nạp khi cần, các chốt chặn bằng máy đã nằm trong engine.
+import kyLuatAgent from '../../../skills/ky-luat-agent/SKILL.md';
 import { skillFromMarkdown, type SkillDef } from './registry';
 
 const RAW: [string, string][] = [
@@ -30,6 +32,7 @@ const RAW: [string, string][] = [
   ['soan-thao-van-ban-nd30', soanThaoNd30],
   ['ghi-nho-memory', ghiNhoMemory],
   ['quy-trinh-video-locaith', quyTrinhVideo],
+  ['ky-luat-agent', kyLuatAgent], // (lane:loop-guards)
 ];
 
 export function builtinSkills(): SkillDef[] {

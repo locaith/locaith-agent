@@ -3,7 +3,7 @@
  * (kết quả công cụ, đối số, diff, suy luận). Thuần tuý, không import `vscode`.
  */
 
-import type { ABlock, AgentProgress, AttachmentInfo, CompactInfo, DiffInfo, PermissionRequest, QueuedInfo, TItem, ToolBlock, UiEvent, ViewState } from '../../shared/protocol';
+import type { ABlock, AgentProgress, AttachmentInfo, CompactInfo, DiffInfo, PermissionRequest, QueuedInfo, TItem, TodoItem, ToolBlock, UiEvent, ViewState } from '../../shared/protocol';
 import type { RemoteHostInfo, RemoteProvider, RemoteState } from './protocol';
 import { REMOTE_API_VERSION } from './protocol';
 
@@ -155,6 +155,18 @@ export function sanitizeTranscript(items: readonly TItem[]): { transcript: TItem
   return { transcript: items.slice(omitted).map(sanitizeItem), omitted };
 }
 
+/**
+ * (lane:loop-guards) Danh sách việc gửi ra Remote: trạng thái 'blocked' là MỚI — trang locaith.ai (có thể là bản cũ đã lưu đệm) chỉ biết
+ * pending / in_progress / completed, nên hạ cấp về 'pending' và đưa lý do vào tiêu đề để người dùng vẫn thấy; `note` được cắt.
+ */
+export function sanitizeTodos(todos: readonly TodoItem[] | undefined): TodoItem[] {
+  return (todos ?? []).slice(0, 200).map((x) => {
+    if (x.status !== 'blocked') return { id: x.id, title: cap(x.title, 500), status: x.status };
+    const note = typeof x.note === 'string' && x.note ? cap(x.note, 200) : '';
+    return { id: x.id, title: cap(`${x.title}${note ? ` — ${note}` : ''}`, 500), status: 'pending' };
+  });
+}
+
 function sanitizeQueued(q: readonly QueuedInfo[] | undefined): QueuedInfo[] {
   return (q ?? []).map((m) => ({ ...m, attachments: m.attachments.map(sanitizeAttachment) }));
 }
@@ -178,7 +190,7 @@ export function toRemoteState(view: ViewState, host: RemoteHostInfo, opts: { can
     title: view.title,
     transcript,
     omitted,
-    todos: view.todos,
+    todos: sanitizeTodos(view.todos),
     running: view.running,
     queued: sanitizeQueued(view.queued),
     provider: view.provider,
@@ -199,7 +211,7 @@ export function sanitizePatch(p: Partial<ViewState>): Partial<Omit<RemoteState, 
   const out: Partial<Omit<RemoteState, 'v' | 'host'>> = {};
   if (p.sessionId !== undefined) out.sessionId = p.sessionId;
   if (p.title !== undefined) out.title = p.title;
-  if (p.todos !== undefined) out.todos = p.todos;
+  if (p.todos !== undefined) out.todos = sanitizeTodos(p.todos);
   if (p.running !== undefined) out.running = p.running;
   if (p.queued !== undefined) out.queued = sanitizeQueued(p.queued);
   if (p.provider !== undefined) out.provider = p.provider;
@@ -229,6 +241,11 @@ export function sanitizeEvent(ev: UiEvent): UiEvent {
       return { ...ev, request: sanitizePermission(ev.request) };
     case 'notice':
       return ev.compact ? { ...ev, compact: sanitizeCompact(ev.compact) } : ev;
+    // (lane:loop-guards) trạng thái 'blocked' hạ cấp cho máy khách cũ
+    case 'tasks':
+      return { ...ev, todos: sanitizeTodos(ev.todos) };
+    case 'todos':
+      return { ...ev, todos: sanitizeTodos(ev.todos) };
     case 'tool_end': {
       const { images, ...rest } = ev;
       return {

@@ -12,7 +12,7 @@ import type { ToolDef } from '../engine/types';
 // ─────────────────────────────────────────────────────────────────────────────
 
 interface TodoInput {
-  todos: { id?: string; title: string; status: TodoStatus }[];
+  todos: { id?: string; title: string; status: TodoStatus; note?: string }[];
 }
 
 export const todoWriteTool: ToolDef<TodoInput> = {
@@ -21,6 +21,7 @@ export const todoWriteTool: ToolDef<TodoInput> = {
     'Create and maintain the task list for the current request. Use it FIRST for any request that needs 3+ steps (research, multi-file changes, building a deliverable) ' +
     'to anchor the goal, then update it as you go. Send the COMPLETE list every time (it replaces the previous one). ' +
     'Keep exactly one task in_progress; mark tasks completed as soon as they are done. Titles are shown to the user: keep them short and write them in the user\'s language. ' +
+    'A task you genuinely cannot finish (missing permission, data or a user decision) gets status "blocked" with a one-line note — never leave it pending forever. ' +
     'Skip it for simple questions or one-step actions.',
   inputSchema: {
     type: 'object',
@@ -33,7 +34,8 @@ export const todoWriteTool: ToolDef<TodoInput> = {
           properties: {
             id: { type: 'string', description: 'Stable short id (t1, t2…). Reuse ids across updates.' },
             title: { type: 'string', description: 'Short task title for the user.' },
-            status: { type: 'string', enum: ['pending', 'in_progress', 'completed'] },
+            status: { type: 'string', enum: ['pending', 'in_progress', 'completed', 'blocked'] },
+            note: { type: 'string', description: 'Only for status "blocked": one short line saying what is missing.' },
           },
           required: ['title', 'status'],
         },
@@ -47,7 +49,13 @@ export const todoWriteTool: ToolDef<TodoInput> = {
     const prev = ctx.session.todos;
     const seen = new Set<string>();
     const next: TodoItem[] = input.todos
-      .map((t, i) => ({ id: (t.id ?? '').trim() || `t${i + 1}`, title: t.title.trim(), status: t.status }))
+      .map((t, i): TodoItem => ({
+        id: (t.id ?? '').trim() || `t${i + 1}`,
+        title: t.title.trim(),
+        status: t.status,
+        // (lane:loop-guards) lý do chỉ có nghĩa khi bị chặn
+        ...(t.status === 'blocked' && typeof t.note === 'string' && t.note.trim() ? { note: t.note.trim().slice(0, 300) } : {}),
+      }))
       .filter((t) => t.title.length > 0)
       .map((t) => {
         let id = t.id;
@@ -64,13 +72,16 @@ export const todoWriteTool: ToolDef<TodoInput> = {
     ctx.emit({ t: 'tasks', id: ctx.assistantId, todos: next, added });
 
     const done = next.filter((n) => n.status === 'completed').length;
+    const blocked = next.filter((n) => n.status === 'blocked').length;
     const current = next.find((n) => n.status === 'in_progress');
     return {
       content:
-        `Đã cập nhật danh sách tác vụ: ${done}/${next.length} hoàn thành.` +
-        (current ? ` Đang làm: "${current.title}".` : next.length > done ? ' Chưa có tác vụ nào ở trạng thái in_progress.' : ' Tất cả đã xong.'),
+        `Đã cập nhật danh sách tác vụ: ${done}/${next.length} hoàn thành${blocked ? `, ${blocked} bị chặn` : ''}.` +
+        (current ? ` Đang làm: "${current.title}".` : next.length > done + blocked ? ' Chưa có tác vụ nào ở trạng thái in_progress.' : ' Tất cả đã xong.'),
       summary: `${done}/${next.length}`,
-      display: next.map((n) => `${n.status === 'completed' ? '[x]' : n.status === 'in_progress' ? '[~]' : '[ ]'} ${n.title}`).join('\n'),
+      display: next
+        .map((n) => `${n.status === 'completed' ? '[x]' : n.status === 'in_progress' ? '[~]' : n.status === 'blocked' ? '[!]' : '[ ]'} ${n.title}${n.status === 'blocked' && n.note ? ` — ${n.note}` : ''}`)
+        .join('\n'),
     };
   },
 };

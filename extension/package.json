@@ -449,6 +449,26 @@
           "default": 200,
           "markdownDescription": "%cfg.maxTurns%"
         },
+        "locaithAgent.agent.budgetGuard": {
+          "type": "boolean",
+          "default": true,
+          "markdownDescription": "%cfg.budgetGuard%"
+        },
+        "locaithAgent.agent.shellCheck": {
+          "type": "string",
+          "enum": [
+            "off",
+            "hint",
+            "rewrite"
+          ],
+          "default": "rewrite",
+          "markdownDescription": "%cfg.shellCheck%"
+        },
+        "locaithAgent.agent.loopBreaker": {
+          "type": "boolean",
+          "default": true,
+          "markdownDescription": "%cfg.loopBreaker%"
+        },
         "locaithAgent.agent.maxOutputTokens": {
           "type": "integer",
           "minimum": 1024,
