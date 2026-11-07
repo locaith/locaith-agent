@@ -284,6 +284,16 @@ const SHOTS = [
     },
   },
   {
+    name: '23-bg-tasks-dark-420', // (lane:bg-tasks)
+    q: { scenario: 'bg-tasks', theme: 'dark' },
+    w: 420,
+    h: 820,
+    act: async (p) => {
+      await p.click('.bgt-chip');
+      await wait(250);
+    },
+  },
+  {
     name: '22-ctx-popover-dark-420',
     q: { scenario: 'high-context', theme: 'dark' },
     w: 420,

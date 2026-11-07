@@ -7,6 +7,7 @@ import type { ABlock, AgentProgress, AttachmentInfo, CompactInfo, ContextInfo, D
 import type { CheckpointTurn, RewindView } from '../../shared/checkpoints'; // (lane:checkpoints-rewind)
 import type { RemoteHostInfo, RemoteProvider, RemoteState } from './protocol';
 import { REMOTE_API_VERSION } from './protocol';
+import { capBgTasks } from '../../shared/bgTasks'; // (lane:bg-tasks)
 
 /** Số mục transcript gửi trong snapshot (mục cũ hơn bị cắt, kèm `omitted`). */
 export const MAX_ITEMS = 150;
@@ -343,6 +344,7 @@ export function toRemoteState(view: ViewState, host: RemoteHostInfo, opts: { can
     ...(view.options?.length ? { options: sanitizeOptions(view.options) } : {}),
     ...(view.checkpoints ? { checkpoints: sanitizeCheckpoints(view.checkpoints) } : {}),
     ...(view.rewind ? { rewind: sanitizeRewind(view.rewind) } : {}),
+    ...(view.bgTasks?.length ? { bgTasks: capBgTasks(view.bgTasks) } : {}), // (lane:bg-tasks)
   };
 }
 
@@ -368,6 +370,7 @@ export function sanitizePatch(p: Partial<ViewState>): Partial<Omit<RemoteState, 
   if (p.options !== undefined) out.options = sanitizeOptions(p.options); // (lane:output-timeouts) rỗng = thu hồi nút
   if (p.checkpoints !== undefined) out.checkpoints = sanitizeCheckpoints(p.checkpoints);
   if (p.rewind !== undefined) out.rewind = sanitizeRewind(p.rewind);
+  if ('bgTasks' in p) out.bgTasks = capBgTasks(p.bgTasks); // (lane:bg-tasks) vắng/undefined = hết tác vụ → []
   return Object.keys(out).length ? out : null;
 }
 

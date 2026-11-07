@@ -12,6 +12,8 @@ import { hookServiceFor } from './hooks/hostHooks'; // (lane:hooks)
 import { registerHooksSlash } from './hooks/slash'; // (lane:hooks)
 import { hooksSubAgentExtension } from './extensions/hooks'; // (lane:hooks)
 import type { HookService } from '../core/hooks/service'; // (lane:hooks)
+import { handleBgTaskMessage, registerTasksSlash, type BgTasksBridge } from './tasksSlash'; // (lane:bg-tasks)
+import { getTaskManager } from '../core/tasks/backgroundTasks'; // (lane:bg-tasks)
 import { loadProjectInstructions } from '../core/engine/instructions';
 import { resumeInstruction } from '../core/engine/resume';
 import { MEMORY_DIR, MEMORY_INDEX, type MemoryScope, type MemorySnapshot } from '../core/engine/memory';
@@ -319,7 +321,7 @@ export class ChatController implements vscode.Disposable {
     registerHooksSlash(this.slash, this); // (lane:hooks)  /hooks
     this.hookService().setNotifier((level, text) => this.emit({ t: 'notice', level, text })); // (lane:hooks)
     registerCommandsSlash(this.slash, this); // (lane:commands-agents)  lệnh tuỳ chỉnh + /review /simplify /status /doctor /agents /output-style /mcp
-    // registerTasksSlash(this.slash, this); // (lane:bg-tasks)  /tasks
+    registerTasksSlash(this.slash, this); // (lane:bg-tasks)  /tasks
     registerIdeSlash(this.slash, { diagnostics: (q) => this.host.diagnostics(q) }); // (lane:ide-context)  /problems
     registerSessionsSlash(this.slash, this); // (lane:sessions-ux)  /fork /cost /context
     // registerMcpSlash(this.slash, this); // (lane:mcp-parity)  /mcp__<server>__<prompt>
@@ -489,6 +491,11 @@ export class ChatController implements vscode.Disposable {
     };
   }
 
+  /** (lane:bg-tasks) Cầu nối cho tasksSlash.ts: host + vá ViewState từ ngoài controller. */
+  bgTasksBridge(): BgTasksBridge {
+    return { host: this.host, sessionId: () => this.session.id, patch: (p) => this.patch(p), lang: () => this.lang, disposed: () => this.disposed, addMirror: (m) => this.addMirror(m) };
+  }
+
   /** Ảnh chụp trạng thái — chỉ dùng cho kiểm thử tích hợp. */
   snapshot(): { view: ViewState; session: SessionState } {
     return { view: this.view, session: this.session };
@@ -561,6 +568,7 @@ export class ChatController implements vscode.Disposable {
       this.notifyLocal('warn', this.lang === 'vi' ? 'Một thiết bị từ xa vừa thử đổi sang chế độ «Bỏ qua mọi xác nhận» — bị chặn (cài đặt locaithAgent.remote.allowBypass đang tắt).' : 'A remote device just tried to switch to “Bypass all prompts” — blocked (locaithAgent.remote.allowBypass is off).');
       return Promise.reject(new Error('bypass_not_allowed'));
     }
+    if (m.type === 'bg_task' && m.action !== 'stop') return Promise.reject(new Error('bad_action')); // (lane:bg-tasks) từ xa chỉ được Dừng
     if (via && (m.type === 'send' || m.type === 'permission_response' || m.type === 'stop' || m.type === 'set_mode' || m.type === 'new_session' || m.type === 'load_session')) {
       const what: Record<string, [string, string]> = {
         send: ['gửi tin nhắn', 'sent a message'],
@@ -1322,6 +1330,8 @@ export class ChatController implements vscode.Disposable {
       case 'pin_session':
       case 'delete_sessions':
         return handleSessionsUxMessage(this.sessionsUxPort(), m);
+      case 'bg_task': // (lane:bg-tasks) Dừng / Sao chép / Xem đầy đủ một tác vụ nền
+        return handleBgTaskMessage(this, m);
     }
   }
 
@@ -1824,6 +1834,7 @@ export class ChatController implements vscode.Disposable {
 
   /** Xoá = chuyển vào Thùng rác (khôi phục được trong 30 ngày), không mất nội dung nào, kể cả tệp bối cảnh đã tải lên. */
   private async deleteSession(id: string): Promise<void> {
+    if (id !== this.session.id || !this.busy) void getTaskManager(this.host).disposeSession(id); // (lane:bg-tasks) xoá cuộc trò chuyện = dừng tác vụ nền của nó
     const trashedMsg = this.lang === 'vi' ? 'Đã chuyển vào Thùng rác — khôi phục được trong 30 ngày.' : 'Moved to the Trash — you can restore it for 30 days.';
     if (id === this.session.id) {
       if (this.busy) return this.toast('info', this.lang === 'vi' ? 'Hãy dừng tác vụ đang chạy trước.' : 'Stop the running task first.');
@@ -2565,6 +2576,7 @@ export class ChatController implements vscode.Disposable {
     this.chromeUnsub?.();
     this.locaithSub?.dispose();
     this.stop();
+    void getTaskManager(this.host).disposeAll(); // (lane:bg-tasks) đóng khung chat / tắt extension = không để tiến trình nền mồ côi
     if (this.flushTimer) clearTimeout(this.flushTimer);
     void this.saveNow();
   }

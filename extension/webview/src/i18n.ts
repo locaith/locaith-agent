@@ -951,6 +951,17 @@ const vi = {
   // ── (lane:hooks) ──
   // ── (lane:commands-agents) ──
   // ── (lane:bg-tasks) ──
+  'bgt.chip.running': '{n} tác vụ nền',
+  'bgt.chip.done': '{n} tác vụ nền (đã xong)',
+  'bgt.running': 'đang chạy',
+  'bgt.exited': 'xong',
+  'bgt.killed': 'đã dừng',
+  'bgt.failed': 'lỗi',
+  'bgt.failedCode': 'lỗi, mã {code}',
+  'bgt.ready': 'sẵn sàng',
+  'bgt.stop': 'Dừng',
+  'bgt.copy': 'Sao chép đầu ra',
+  'bgt.open': 'Xem đầy đủ',
   // ── (lane:ide-context) ──
   'composer.editor.on': 'Đang gửi kèm tệp và vùng chọn của editor. Bấm để tắt.',
   'composer.editor.off': 'Không gửi kèm tệp đang mở: {file}',
@@ -1930,6 +1941,17 @@ const en: Record<I18nKey, string> = {
   // ── (lane:hooks) ──
   // ── (lane:commands-agents) ──
   // ── (lane:bg-tasks) ──
+  'bgt.chip.running': 'Background tasks: {n} running',
+  'bgt.chip.done': 'Background tasks: {n} finished',
+  'bgt.running': 'running',
+  'bgt.exited': 'done',
+  'bgt.killed': 'stopped',
+  'bgt.failed': 'failed',
+  'bgt.failedCode': 'failed, exit {code}',
+  'bgt.ready': 'ready',
+  'bgt.stop': 'Stop',
+  'bgt.copy': 'Copy output',
+  'bgt.open': 'View full output',
   // ── (lane:ide-context) ──
   'composer.editor.on': 'The editor’s file and selection are being sent. Click to turn off.',
   'composer.editor.off': 'Open file not sent: {file}',

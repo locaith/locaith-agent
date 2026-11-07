@@ -14,6 +14,7 @@
 @import './extras.css';
 @import './media.css';
 @import './rewind.css'; /* (lane:checkpoints-rewind) */
+@import './bgtasks.css'; /* (lane:bg-tasks) */
 @import './responsive.css';
 @import './verify.css'; /* (lane:blind-verifier) */
 @import './timeline-cc.css'; /* (lane:cc-timeline-ui) dòng thời gian gọn — nạp cuối để thắng kiểu cũ */

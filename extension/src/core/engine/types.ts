@@ -137,6 +137,21 @@ export interface RunCommandResult {
   truncated: boolean;
 }
 
+// (lane:bg-tasks) tiến trình nền — host nào không cài `startProcess` thì không có tác vụ nền.
+export interface StartProcessOptions {
+  command: string;
+  cwd: string;
+  onData(chunk: string): void;
+  /** Gọi đúng một lần khi tiến trình (shell) thoát hoặc không khởi chạy được (`error`). */
+  onExit(info: { exitCode: number | null; signal?: string | null; error?: string }): void;
+}
+
+export interface ProcessHandle {
+  readonly pid: number | undefined;
+  /** Dừng CẢ CÂY tiến trình theo PID (không bao giờ theo tên). Xong khi lệnh giết đã chạy. */
+  kill(): Promise<void>;
+}
+
 export interface PermissionDecision {
   decision: 'allow' | 'allow_session' | 'deny';
   feedback?: string;
@@ -175,6 +190,8 @@ export interface ToolHost {
     signal: AbortSignal;
   }): Promise<GrepResult>;
   runCommand(opts: RunCommandOptions): Promise<RunCommandResult>;
+  /** (lane:bg-tasks) Khởi một tiến trình chạy NỀN (không chờ). Tuỳ chọn: bản trình duyệt không có. */
+  startProcess?(opts: StartProcessOptions): ProcessHandle;
 
   fetch(url: string, init?: RequestInit): Promise<Response>;
   /**

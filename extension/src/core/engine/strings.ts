@@ -158,6 +158,12 @@ const vi = {
   hookPromptBlocked: 'Hook UserPromptSubmit đã chặn tin nhắn này: {reason}',
   // ── (lane:commands-agents) ──
   // ── (lane:bg-tasks) ──
+  bgTaskEnded: '[Tác vụ nền {id} ({command}) đã kết thúc: {status} sau {dur}.{tail}]',
+  bgTaskTail: ' {n} dòng cuối:\n{lines}',
+  bgTaskExit: 'exit {code}',
+  bgTaskKilledByUser: 'người dùng đã dừng',
+  bgTaskKilled: 'bị dừng',
+  bgTaskFailedStart: 'không khởi chạy được ({error})',
   // ── (lane:ide-context) ──
   diagUnavailable: 'Không khả dụng: môi trường này không có IDE nên không đọc được chẩn đoán (lỗi/cảnh báo của language server).',
   diagOutside: 'Chỉ đọc được chẩn đoán của tệp trong workspace: {path}',
@@ -367,6 +373,12 @@ const en: typeof vi = {
   hookPromptBlocked: 'The UserPromptSubmit hook blocked this message: {reason}',
   // ── (lane:commands-agents) ──
   // ── (lane:bg-tasks) ──
+  bgTaskEnded: '[Background task {id} ({command}) ended: {status} after {dur}.{tail}]',
+  bgTaskTail: ' Last {n} lines:\n{lines}',
+  bgTaskExit: 'exit {code}',
+  bgTaskKilledByUser: 'stopped by the user',
+  bgTaskKilled: 'killed',
+  bgTaskFailedStart: 'failed to start ({error})',
   // ── (lane:ide-context) ──
   diagUnavailable: 'Not available: this environment has no IDE, so diagnostics (language-server errors/warnings) cannot be read.',
   diagOutside: 'Diagnostics can only be read for files inside the workspace: {path}',

@@ -9,6 +9,7 @@ import { getDiagnosticsTool } from './diagnostics'; // (lane:ide-context)
 import { editFileTool, globTool, grepTool, listDirTool, readFileTool, writeFileTool } from './fs';
 import { createSkillTools, exitPlanModeTool, offerOptionsTool, rememberTool, scratchpadTool, todoWriteTool, type MarketSearch } from './meta';
 import { createTerminalTool } from './terminal';
+import { backgroundTools } from './backgroundTools'; // (lane:bg-tasks)
 import { fetchUrlTool, webSearchTool } from './web/web';
 
 export interface ToolRegistryOptions {
@@ -44,6 +45,7 @@ export function createToolRegistry(opts: ToolRegistryOptions): ToolRegistry {
     .register(createTerminalTool(opts.host))
     .register(scratchpadTool)
     .register(exitPlanModeTool);
+  if (opts.host.startProcess) for (const t of backgroundTools) r.register(t); // (lane:bg-tasks) command_output / command_stop / command_list
   // Agent con: `agent` luôn có; `workflow_run` ẩn cho tới khi kỹ năng `multi-agent` được nạp.
   if (opts.agents) for (const t of createAgentTools({ ...opts.agents, registry: () => r })) r.register(t);
   if (opts.chrome) r.register(createChromeTool(opts.chrome) as never);
