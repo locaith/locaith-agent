@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.6.28 - 2026-11-07
+
+- **The whole process now collapses into ONE line — and nothing is lost.** While a turn is running, every tool call, command, test run, thinking block, status line, task update and file edit in a stretch sits in a single row ("34 actions · 7 files changed · 2 failed"), with the live "reading src/a.ts" hint on the same line. Click it and the full, unaltered sequence opens; a "Collapse" row at the bottom closes it without scrolling back up. Text, artifacts and errors still split the run, so nothing is reordered.
+- **Numbers are colour-coded.** Actions stay neutral, "N files changed" is green, failures are red — and a run with any failure gets a red left edge and a red icon, so a bad run is visible at a glance instead of hiding in grey.
+- **No more trailing ellipses on live labels.** "Working…" and "Thinking · 3 parts…" became "Working" and "Thinking · 3 parts": the spinner already says it is live, the dots only added noise.
+
 ## 0.6.27 - 2026-11-07
 
 - **Memory is now always in context — for every model, not just Locaith.** The persistent memory index (`.locaith/memory/MEMORY.md` for the project, `~/.locaith/memory/MEMORY.md` for you) is re-read from disk on every turn and injected as a `<memory>` block, so it survives any number of compactions and does not depend on the model deciding to call a tool. A new `remember` tool writes one dated line (`user` / `feedback` / `project` / `reference`), refuses secrets, skips duplicates, and works across providers; the `ghi-nho-memory` skill is no longer limited to Locaith models.

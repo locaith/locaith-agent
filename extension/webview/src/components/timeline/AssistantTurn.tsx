@@ -1,3 +1,4 @@
+import type { VNode } from 'preact';
 import { useEffect, useMemo, useRef, useState } from 'preact/hooks';
 import type { AssistantItem, NoticeItem } from '../../../../src/shared/protocol';
 import { useApp } from '../../ctx';
@@ -6,7 +7,8 @@ import { Markdown } from '../../markdown/Markdown';
 import { estimateTokens } from '../../../../src/core/engine/tokens';
 import type { ABlock } from '../../../../src/shared/protocol';
 import { useCountUp, useElapsed } from '../../hooks';
-import { buildSegments, needsWorkingIndicator, splitWork, turnPlainText, type NoticeBlockT, type Segment, type WorkStats } from '../../timeline';
+import { activityStats, buildSegments, groupActivityRuns, latestRunningTool, needsWorkingIndicator, splitWork, turnPlainText, type NoticeBlockT, type Segment, type WorkStats } from '../../timeline';
+import { latestLabel } from './latestLabel';
 import { LoSpinner } from '../Brand';
 import { cx, copyText, memo } from '../../util';
 import { post } from '../../vscode';
@@ -130,26 +132,27 @@ function TurnFooter({ item, isLast }: { item: AssistantItem; isLast: boolean }) 
 function WorkSummary({ stats, open, onToggle }: { stats: WorkStats; open: boolean; onToggle: () => void }) {
   const { t, lang } = useApp();
   const head = stats.durationMs ? t('work.head', { d: formatDuration(stats.durationMs, lang) }) : t('work.headPlain');
-  const parts: string[] = [];
-  if (stats.calls > 0) parts.push(t('work.calls', { n: formatInt(stats.calls, lang) }));
-  else if (stats.steps > 0) parts.push(t('work.steps', { n: formatInt(stats.steps, lang) }));
-  if (stats.edits > 0) parts.push(t('work.edits', { n: formatInt(stats.edits, lang) }));
+  // Màu theo loại số liệu để đọc nhanh: thao tác = trung tính, tệp đã sửa = xanh ngọc, lỗi = đỏ.
+  const parts: { text: string; tone: string }[] = [];
+  if (stats.calls > 0) parts.push({ text: t('work.calls', { n: formatInt(stats.calls, lang) }), tone: 'is-calls' });
+  else if (stats.steps > 0) parts.push({ text: t('work.steps', { n: formatInt(stats.steps, lang) }), tone: 'is-calls' });
+  if (stats.edits > 0) parts.push({ text: t('work.edits', { n: formatInt(stats.edits, lang) }), tone: 'is-edits' });
   return (
     <div class="act work-sum" role="list">
-      <div class={cx('act-row', 'work-row', open && 'is-open')} role="listitem">
+      <div class={cx('act-row', 'work-row', open && 'is-open', stats.failed > 0 && 'has-fail')} role="listitem">
         <button type="button" class="tool-head" aria-expanded={open} title={open ? t('work.collapse') : t('work.expand')} onClick={onToggle}>
-          <span class="act-icon tone-ok">
+          <span class={cx('act-icon', stats.failed > 0 ? 'tone-danger' : 'tone-ok')}>
             <Icon name="list-checks" size={15} />
           </span>
           <span class="tool-text">
             <span class="work-line">
               <span class="tool-label work-head">{head}</span>
               {parts.map((p) => (
-                <span key={p} class="work-part">
-                  {p}
+                <span key={p.text} class={cx('work-part', p.tone)}>
+                  {p.text}
                 </span>
               ))}
-              {stats.failed > 0 && <span class="work-part tone-danger">{t('par.failed', { n: formatInt(stats.failed, lang) })}</span>}
+              {stats.failed > 0 && <span class="work-part is-fail">{t('par.failed', { n: formatInt(stats.failed, lang) })}</span>}
             </span>
           </span>
           <span class="tool-meta">
@@ -157,6 +160,51 @@ function WorkSummary({ stats, open, onToggle }: { stats: WorkStats; open: boolea
           </span>
         </button>
       </div>
+    </div>
+  );
+}
+
+/**
+ * (0.6.28) MỘT dòng cho cả quá trình đang chạy — như Claude Code: mọi thứ (gọi công cụ, bash, test, suy nghĩ,
+ * dòng trạng thái, tác vụ, sửa tệp) nằm trong một dòng; bấm ra xem đầy đủ, y như lúc chưa gộp.
+ * Không bỏ thứ gì: phần thân chính là các đoạn hoạt động gốc, giữ nguyên thứ tự và cách nhóm bên trong.
+ */
+function ActivityRun({ segs, live, render }: { segs: Segment[]; live: boolean; render: (s: Segment, streaming: boolean, activityLive: boolean) => VNode }) {
+  const { t, lang } = useApp();
+  const [open, setOpen] = useState(false);
+  const rows = useMemo(() => segs.flatMap((s) => (s.kind === 'activity' ? s.rows : [])), [segs]);
+  const stats = useMemo(() => activityStats(rows), [rows]);
+  const latest = live ? latestRunningTool(rows) : null;
+  const now = latest ? latestLabel(lang, latest) : '';
+  // Cùng cách đọc màu như dòng «Đã làm việc»: thao tác trung tính · tệp xanh ngọc · lỗi đỏ.
+  const head = stats.calls > 0 ? t('par.calls', { n: formatInt(stats.calls, lang) }) : t('act.steps', { n: formatInt(stats.steps, lang) });
+
+  return (
+    <div class={cx('act-row', 'tool-group', 'run-group', stats.failed > 0 && 'has-fail')} role="listitem" data-testid="activity-run">
+      <button type="button" class="tool-head" aria-expanded={open} title={open ? t('run.collapse') : t('run.expand')} onClick={() => setOpen((v) => !v)}>
+        <span class={cx('act-icon', stats.failed > 0 ? 'tone-danger' : live ? 'tone-accent' : 'tone-ok')}>{live ? <LoSpinner size={15} /> : <Icon name="list-checks" size={15} />}</span>
+        <span class="tool-text">
+          <span class="work-line">
+            <span class="tool-label">{head}</span>
+            {stats.edits > 0 && <span class="work-part is-edits">{t('work.edits', { n: formatInt(stats.edits, lang) })}</span>}
+            {stats.failed > 0 && <span class="work-part is-fail">{t('par.failed', { n: formatInt(stats.failed, lang) })}</span>}
+          </span>
+          {now && (
+            <span class="run-now" title={now}>
+              {now}
+            </span>
+          )}
+        </span>
+        <span class="tool-meta">
+          <Icon name={open ? 'chevron-down' : 'chevron-right'} size={14} class="tool-chevron" />
+        </span>
+      </button>
+      {open && (
+        <div class="tool-group-body run-body" role="list">
+          {segs.map((s, i) => render(s, false, live && i === segs.length - 1))}
+          <CollapseFoot onCollapse={() => setOpen(false)} label={t('run.collapse')} />
+        </div>
+      )}
     </div>
   );
 }
@@ -182,6 +230,8 @@ function AssistantTurnView({ item, live, isLast }: { item: AssistantItem; live: 
   }, [segments, item.done, live, item.blocks, item.ts, item.endedAt]);
   const lastIdx = segments.length - 1;
   const vscode = platform === 'vscode';
+
+  const runs = useMemo(() => groupActivityRuns(segments), [segments]);
 
   const render = (seg: Segment, streaming: boolean, activityLive: boolean) => {
     switch (seg.kind) {
@@ -229,7 +279,14 @@ function AssistantTurnView({ item, live, isLast }: { item: AssistantItem; live: 
           {split.tail.map((seg) => render(seg, false, false))}
         </>
       ) : (
-        segments.map((seg, i) => render(seg, live && i === lastIdx, live && i === lastIdx))
+        // Lượt đang chạy (hoặc lượt ngắn): gom MỌI đoạn hoạt động liền nhau thành MỘT dòng.
+        runs.map((run, ri) =>
+          run.kind === 'run' ? (
+            <ActivityRun key={run.key} segs={run.items} live={live} render={render} />
+          ) : (
+            render(run.seg, live && ri === runs.length - 1 && run.seg.kind === 'text', live && ri === runs.length - 1)
+          ),
+        )
       )}
       {live && needsWorkingIndicator(item.blocks) && <WorkingIndicator empty={item.blocks.length === 0} blocks={item.blocks} />}
       {item.done && <TurnFooter item={item} isLast={isLast} />}

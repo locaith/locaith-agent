@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.6.28 - 2026-11-07
+
+- **The whole process now collapses into ONE line — and nothing is lost.** While a turn is running, every tool call, command, test run, thinking block, status line, task update and file edit in a stretch sits in a single row ("34 actions · 7 files changed · 2 failed"), with the live "reading src/a.ts" hint on the same line. Click it and the full, unaltered sequence opens; a "Collapse" row at the bottom closes it without scrolling back up. Text, artifacts and errors still split the run, so nothing is reordered.
+- **Numbers are colour-coded.** Actions stay neutral, "N files changed" is green, failures are red — and a run with any failure gets a red left edge and a red icon, so a bad run is visible at a glance instead of hiding in grey.
+- **No more trailing ellipses on live labels.** "Working…" and "Thinking · 3 parts…" became "Working" and "Thinking · 3 parts": the spinner already says it is live, the dots only added noise.
+
 ## 0.6.27 - 2026-11-07
 
 - **Chrome: a rating prompt that asks once, at the right moment.** After 3 real messages the chat shows a compact strip — five stars plus a "Rate it" button that opens the Chrome Web Store listing, and an X that turns it off for good. Nothing is gated behind a review, panel opens and slash commands are not counted, and the state lives under its own storage key so changing settings never makes it ask again.

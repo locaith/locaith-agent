@@ -77,7 +77,7 @@ function ThinkingRowView({ block, live }: { block: ThinkingBlockT; live: boolean
       <button type="button" class="tool-head" aria-expanded={open} onClick={() => setOpen((v) => !v)}>
         <span class="act-icon">{live ? <LoSpinner size={15} /> : <Icon name="lightbulb" size={15} />}</span>
         <span class="tool-text">
-          <span class="tool-label">{t('act.thinking')}{live ? '…' : ''}</span>
+          <span class="tool-label">{t('act.thinking')}</span>
           {tokens > 0 && (
             <span class="think-count" title={t('act.thinkTokens.hint')}>
               {t('act.thinkTokens', { n: num })}
@@ -140,7 +140,6 @@ function ThinkingGroupView({ blocks, live }: { blocks: ThinkingBlockT[]; live: b
         <span class="tool-text">
           <span class="tool-label">
             {blocks.length > 1 ? t('act.thinkingGroup', { n: blocks.length }) : t('act.thinking')}
-            {live ? '…' : ''}
           </span>
           {tokens > 0 && (
             <span class="think-count" title={t('act.thinkTokens.hint')}>

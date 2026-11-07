@@ -2689,3 +2689,40 @@ button.chip-main:hover {
   color: var(--fg-faint);
   font-size: var(--nd-fs-xs);
 }
+
+/* ── (0.6.28) Dòng gộp CẢ quá trình của một lượt đang chạy ── */
+.run-group .tool-text {
+  min-width: 0;
+}
+.run-now {
+  display: block;
+  color: var(--fg-faint);
+  font-size: var(--nd-fs-xs);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.run-body {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+/* ── (0.6.28) Số liệu trên dòng gộp: mỗi loại một màu để đọc nhanh ── */
+.work-part.is-calls {
+  color: var(--fg-faint);
+}
+.work-part.is-edits {
+  color: var(--ok-text);
+  font-weight: 600;
+}
+.work-part.is-fail {
+  color: var(--danger);
+  font-weight: 600;
+}
+/* Có lệnh lỗi: viền trái của dòng gộp đổi đỏ, thấy ngay khi lướt qua */
+.work-row.has-fail,
+.run-group.has-fail {
+  box-shadow: inset 2px 0 0 var(--danger);
+  border-radius: 6px;
+}

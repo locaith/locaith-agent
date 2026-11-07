@@ -173,7 +173,8 @@ describe('manifest và gói build sản phẩm (nguyên tắc ít quyền nhất
       expect(manifest.permissions, dangerous).not.toContain(dangerous);
     }
     expect(manifest.optional_host_permissions).toEqual(['<all_urls>']);
-    expect(manifest.optional_permissions).toEqual(['tabs', 'identity']);
+    // `tabs` đã bị gỡ: mã không bao giờ xin/dùng, và Chrome Web Store bắt khai lý do cho quyền khai báo mà không dùng.
+    expect(manifest.optional_permissions).toEqual(['identity']);
     expect(manifest.host_permissions).not.toContain('<all_urls>');
     for (const h of manifest.host_permissions) expect(h, h).toMatch(/^https:\/\/[a-z0-9.-]+\/\*$/);
     expect(manifest.host_permissions).toEqual(expect.arrayContaining(['https://api.anthropic.com/*', 'https://api.openai.com/*', 'https://generativelanguage.googleapis.com/*', 'https://api.deepseek.com/*', 'https://api.x.ai/*']));
