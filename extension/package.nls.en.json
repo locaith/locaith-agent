@@ -30,6 +30,7 @@
   "cfg.permissionMode": "Default permission mode for new conversations.",
   "cfg.allowBypass": "Allow the **bypass all confirmations** mode. The assistant will edit files and run commands without asking — enable only if you understand the risk.",
   "cfg.thinkingLevel": "Default reasoning level. Each provider maps it to its own parameters; non-reasoning models ignore it.",
+  "cfg.checkpointsEnabled": "Snapshot each file before the assistant first edits it in a turn, so **Rewind to this point**, `/rewind` and the “N files changed” bar can restore it. Stored in the extension data folder (last 30 turns per conversation, 14 days; files over 2 MB or binary are skipped). Files changed by shell commands are not tracked.",
   "cfg.maxTurns": "Maximum loop iterations for one request (each = one model call + tool execution). Default 200 — effectively no cap, like Claude Code; on reaching the limit the assistant still gets one wrap-up turn instead of stopping mid-task. Lower it only to cap cost.",
   "cfg.maxOutputTokens": "Maximum tokens the model may generate in one call (including reasoning tokens).",
   "cfg.parallelToolCalls": "Let the model issue several tool calls at once (e.g. parallel web searches).",

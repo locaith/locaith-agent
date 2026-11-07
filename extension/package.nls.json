@@ -30,6 +30,7 @@
   "cfg.permissionMode": "Chế độ quyền mặc định cho cuộc trò chuyện mới.",
   "cfg.allowBypass": "Cho phép chọn chế độ **bỏ qua mọi xác nhận**. Trợ lý sẽ tự sửa tệp và chạy lệnh mà không hỏi — chỉ bật khi bạn hiểu rủi ro.",
   "cfg.thinkingLevel": "Mức suy luận mặc định. Mỗi nhà cung cấp tự quy đổi sang tham số của họ; model không có suy luận sẽ bỏ qua.",
+  "cfg.checkpointsEnabled": "Chụp bản gốc của tệp trước khi trợ lý sửa lần đầu trong mỗi lượt, để **Quay lại điểm này**, `/rewind` và thanh «N tệp đã đổi» khôi phục được. Lưu trong thư mục dữ liệu của extension (tối đa 30 lượt gần nhất mỗi cuộc trò chuyện, 14 ngày; bỏ qua tệp quá 2 MB hoặc nhị phân). Tệp do lệnh shell sửa không được theo dõi.",
   "cfg.maxTurns": "Số vòng lặp tối đa cho một yêu cầu (mỗi vòng = một lần gọi model + chạy công cụ). Mặc định 200 — gần như không trần, giống Claude Code; khi chạm trần, trợ lý vẫn có một lượt tổng kết thay vì dừng giữa việc. Chỉ hạ xuống khi muốn giới hạn chi phí.",
   "cfg.maxOutputTokens": "Số token tối đa model được sinh ra trong một lần gọi (đã gồm token suy luận).",
   "cfg.parallelToolCalls": "Cho phép model phát nhiều lệnh gọi công cụ cùng lúc (ví dụ tìm kiếm web song song).",

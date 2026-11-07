@@ -11,6 +11,7 @@
 
 import type { AttachmentInfo, PermissionMode, QueuedInfo, SessionSummary, ThinkingLevel, TItem, TodoItem, UiEvent, WebviewMessage } from '../../shared/protocol';
 import { PERMISSION_MODES, THINKING_LEVELS } from '../../shared/protocol';
+import type { CheckpointTurn, RewindView } from '../../shared/checkpoints'; // (lane:checkpoints-rewind)
 
 export const REMOTE_API_VERSION = 1;
 /** Cổng thử lần lượt (cửa sổ VS Code thứ hai tự lấy cổng kế tiếp). Trang web dò đúng dải này. */
@@ -62,6 +63,10 @@ export interface RemoteState {
   allowBypass: boolean;
   /** Trang từ xa có được phép tự chuyển sang chế độ bypass không (mặc định không). */
   remoteCanBypass: boolean;
+  /** (lane:checkpoints-rewind) Tệp trợ lý đã sửa theo từng lượt — thanh «N tệp đã đổi». Vắng = host cũ / tính năng tắt. */
+  checkpoints?: CheckpointTurn[];
+  /** (lane:checkpoints-rewind) Thẻ «Quay lại» đang mở (null = đóng). */
+  rewind?: RewindView | null;
 }
 
 export type RemoteStreamMsg =
@@ -77,7 +82,7 @@ export type RemoteStreamMsg =
 /** Các lệnh trang từ xa được phép gửi — tập con của WebviewMessage. Mọi thứ khác (xoá lịch sử, khoá API, MCP, mở tệp…) chỉ làm được trong VS Code. */
 export type RemoteCommand = Extract<
   WebviewMessage,
-  { type: 'send' | 'stop' | 'retry' | 'compact' | 'new_session' | 'load_session' | 'rename_session' | 'queue_remove' | 'set_model' | 'set_mode' | 'set_thinking' | 'set_swarm' | 'permission_response' | 'get_image' }
+  { type: 'send' | 'stop' | 'retry' | 'compact' | 'new_session' | 'load_session' | 'rename_session' | 'queue_remove' | 'set_model' | 'set_mode' | 'set_thinking' | 'set_swarm' | 'permission_response' | 'get_image' | 'rewind_open' | 'rewind_plan' | 'rewind_apply' | 'rewind_cancel' | 'rewind_redo' }
 >;
 
 export const MAX_TEXT_CHARS = 50_000;
@@ -156,6 +161,30 @@ export function parseCommand(raw: unknown, opts: { canBypass: boolean }): ParseR
       const feedback = typeof o.feedback === 'string' && o.feedback.trim() ? o.feedback.slice(0, 2000) : undefined;
       return { ok: true, cmd: { type: 'permission_response', id: o.id, decision: o.decision, ...(feedback ? { feedback } : {}) } };
     }
+    // (lane:checkpoints-rewind) Quay lại điểm trước. Ghi tệp từ xa được host chặn bằng xác nhận tại máy (xem CheckpointFeature.apply).
+    case 'rewind_open': {
+      if (typeof o.promptId !== 'string' || !ID.test(o.promptId)) return bad('bad_id');
+      return { ok: true, cmd: { type: 'rewind_open', promptId: o.promptId, ...(o.list === true ? { list: true } : {}) } };
+    }
+    case 'rewind_plan': {
+      if (typeof o.promptId !== 'string' || !ID.test(o.promptId)) return bad('bad_id');
+      if (o.what !== 'code' && o.what !== 'conversation' && o.what !== 'both') return bad('bad_rewind');
+      const scope = o.scope === 'turn' ? 'turn' : 'from';
+      let files: string[] | undefined;
+      if (o.files !== undefined) {
+        if (!Array.isArray(o.files) || o.files.length > 200) return bad('bad_files');
+        files = [];
+        for (const f of o.files) {
+          if (typeof f !== 'string' || f.length === 0 || f.length > 500 || /[ -]/.test(f)) return bad('bad_files');
+          files.push(f);
+        }
+      }
+      return { ok: true, cmd: { type: 'rewind_plan', promptId: o.promptId, what: o.what, scope, ...(files ? { files } : {}) } };
+    }
+    case 'rewind_apply':
+    case 'rewind_cancel':
+    case 'rewind_redo':
+      return { ok: true, cmd: { type: o.type } };
     case 'get_image': {
       if (typeof o.key !== 'string' || o.key.length === 0 || o.key.length > 200) return bad('bad_key');
       return { ok: true, cmd: { type: 'get_image', key: o.key } };

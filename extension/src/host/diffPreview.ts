@@ -53,6 +53,14 @@ export class DiffPreview implements vscode.TextDocumentContentProvider, vscode.D
     return true;
   }
 
+  /** (lane:checkpoints-rewind) Diff «bản gốc của lượt (checkpoint) ↔ tệp hiện tại trên đĩa». `before` null = tệp chưa tồn tại trước lượt đó. */
+  async openAgainstFile(rel: string, abs: string, before: string | null): Promise<void> {
+    const callId = `cp-${this.records.size}-${Date.now().toString(36)}`;
+    this.record(callId, { abs, rel, before, after: '' });
+    const left = vscode.Uri.from({ scheme: DiffPreview.scheme, path: `/${callId}/before/${path.basename(rel)}` });
+    await vscode.commands.executeCommand('vscode.diff', left, vscode.Uri.file(abs), `${rel} — trước lượt ↔ hiện tại`, { preview: true });
+  }
+
   dispose(): void {
     this.registration.dispose();
     this.records.clear();

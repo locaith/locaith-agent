@@ -9,6 +9,7 @@
 
 import type { ModelInfo, ThinkingLevel, Usage } from '../core/types';
 import type { DocKind } from './docKinds';
+import type { CheckpointTurn, RewindScope, RewindView, RewindWhat } from './checkpoints'; // (lane:checkpoints-rewind)
 
 export type { DocKind, ModelInfo, ThinkingLevel, Usage };
 
@@ -807,6 +808,10 @@ export interface ViewState {
   // ── (lane:loop-guards) ──
   // ── (lane:blind-verifier) ──
   // ── (lane:checkpoints-rewind) ──
+  /** Checkpoint từng lượt (tệp trợ lý đã sửa, đã chụp bản gốc). CÓ MẶT (kể cả mảng rỗng) = host hỗ trợ Quay lại; vắng = bản trình duyệt / không hỗ trợ. */
+  checkpoints?: CheckpointTurn[];
+  /** Thẻ «Quay lại» đang mở (menu / xem trước / kết quả). null = đóng. */
+  rewind?: RewindView | null;
   // ── (lane:perm-rules) ──
   // ── (lane:hooks) ──
   // ── (lane:commands-agents) ──
@@ -1008,6 +1013,17 @@ export type WebviewMessage =
   // ── (lane:loop-guards) ──
   // ── (lane:blind-verifier) ──
   // ── (lane:checkpoints-rewind) ──
+  /** Mở menu «Quay lại điểm này» dưới tin nhắn `promptId`. */
+  | { type: 'rewind_open'; promptId: string; list?: boolean }
+  /** Xin kế hoạch khôi phục (host kiểm tra đĩa, đánh dấu xung đột) → `view.rewind.stage = 'plan'`. `files` (rel) = chỉ các tệp này. */
+  | { type: 'rewind_plan'; promptId: string; what: RewindWhat; scope?: RewindScope; files?: string[] }
+  /** Xác nhận kế hoạch đang hiện trong `view.rewind`. */
+  | { type: 'rewind_apply' }
+  | { type: 'rewind_cancel' }
+  /** Đảo ngược lần khôi phục mã vừa rồi (một lần). */
+  | { type: 'rewind_redo' }
+  /** Mở diff của VS Code: bản gốc (checkpoint) ↔ hiện tại trên đĩa. */
+  | { type: 'checkpoint_diff'; promptId: string; rel: string }
   // ── (lane:perm-rules) ──
   // ── (lane:hooks) ──
   // ── (lane:commands-agents) ──

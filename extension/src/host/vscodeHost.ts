@@ -1,12 +1,13 @@
 import * as vscode from 'vscode';
 import { normalizeForCompare } from '../core/fsutil/paths';
-import type { PermissionDecision } from '../core/engine/types';
+import { NotUtf8Error, type PermissionDecision } from '../core/engine/types';
 import { NodeToolHost } from '../core/host/nodeHost';
 import type { PermissionRequest } from '../shared/protocol';
 import type { ConfigService } from './config';
 import type { DiffPreview } from './diffPreview';
 import type { Logger } from './logger';
 import type { SecretsService } from './secrets';
+import type { Snapshot } from './checkpoints/store'; // (lane:checkpoints-rewind)
 
 export interface VsCodeHostDeps {
   config: ConfigService;
@@ -17,6 +18,8 @@ export interface VsCodeHostDeps {
   extraRoots: () => string[];
   /** Xin phép người dùng (do ChatController cài đặt). */
   askPermission: (req: PermissionRequest, signal: AbortSignal) => Promise<PermissionDecision>;
+  /** (lane:checkpoints-rewind) Gọi SAU mỗi lần ghi tệp thành công: `before` = nội dung trước đó (null = chưa có). */
+  onFileWrite?: (abs: string, before: Snapshot, after: string) => void;
 }
 
 /**
@@ -48,6 +51,24 @@ export class VsCodeToolHost extends NodeToolHost {
   }
 
   override async writeText(abs: string, content: string): Promise<void> {
+    // (lane:checkpoints-rewind) Chụp bản gốc trước khi ghi để có thể quay lại. Lỗi ở đây không bao giờ làm hỏng lần ghi.
+    const track = this.deps.onFileWrite;
+    if (!track) return this.writeTextInner(abs, content);
+    let before: Snapshot;
+    try {
+      before = await this.readText(abs);
+    } catch (e) {
+      before = { skipped: e instanceof NotUtf8Error ? 'binary' : 'unreadable' };
+    }
+    await this.writeTextInner(abs, content);
+    try {
+      track(abs, before, content);
+    } catch {
+      /* không theo dõi được thì thôi */
+    }
+  }
+
+  private async writeTextInner(abs: string, content: string): Promise<void> {
     const doc = this.openDoc(abs);
     if (doc) {
       // Qua WorkspaceEdit để editor cập nhật tại chỗ, giữ lịch sử hoàn tác (Ctrl+Z) của người dùng.
