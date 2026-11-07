@@ -261,7 +261,8 @@ interface Rule {
 
 const first = (seg: string): string => (/^\S+/.exec(seg)?.[0] ?? '').toLowerCase();
 const startsWithCmd = (seg: string, names: string[]): boolean => names.includes(first(seg));
-const startsWithFlag = (seg: string, name: string): boolean => new RegExp(`^${name}(\\.exe)?\\s+-[a-zA-Z]`, 'i').test(seg);
+/** `tên -cờ` kiểu Unix. `tên.exe` (curl.exe, where.exe) là cách gọi ĐÚNG để né alias PowerShell nên không tính. */
+const startsWithFlag = (seg: string, name: string): boolean => new RegExp(`^${name}\\s+-[a-zA-Z]`, 'i').test(seg);
 
 /** PowerShell (cả 5.1 và 7): thói quen Unix/bash không chạy được, hoặc chạy sai nghĩa vì alias (`rm -rf`, `ls -la`, `curl -s`). */
 const PS_RULES: Rule[] = [
@@ -375,7 +376,8 @@ const PS_RULES: Rule[] = [
   },
   {
     code: 'heredoc',
-    test: (_seg, masked) => /<<-?\s*['"]?[A-Za-z_]\w*/.test(masked),
+    // PowerShell không có toán tử `<<` (dịch bit là -shl): mọi `<<` ngoài chuỗi đều là heredoc bash (tên thẻ có thể đã bị che vì nằm trong nháy).
+    test: (_seg, masked) => /<<-?/.test(masked),
     vi: 'Heredoc `<<EOF` là bash — PowerShell dùng here-string `@\'` … `\'@` (dòng riêng), hoặc tốt hơn: ghi tệp bằng write_file rồi chạy.',
     en: 'Heredoc `<<EOF` is bash — PowerShell uses here-strings `@\'` … `\'@` on their own lines, or better: write the file with write_file, then run it.',
   },
