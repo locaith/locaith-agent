@@ -65,6 +65,19 @@ const vi = {
   // ── (lane:checkpoints-rewind) ──
   // ── (lane:perm-rules) ──
   // ── (lane:hooks) ──
+  hookPill: 'Hook {event} · {items}',
+  hookItemOk: '{name} ✓ {ms} ms',
+  hookItemFail: '{name} ✗ {ms} ms',
+  hookItemBlock: '{name} ✗ chặn {ms} ms',
+  hookItemTimeout: '{name} ✗ quá hạn',
+  hookWarn: 'Hook {event}: {text}',
+  hookNoReason: 'hook chặn mà không nêu lý do',
+  hookToolBlocked: 'Hook {event} đã chặn lệnh gọi {tool}: {reason}',
+  hookToolEdited: '[Hook {event}] đã chỉnh đối số của {tool} trước khi chạy.',
+  hookNote: '[Hook {event}] {text}',
+  hookStopCap: 'Hook Stop đã ép trợ lý làm tiếp {n} lần, đạt trần nên dừng ở đây.',
+  hookStopped: 'Hook {event} yêu cầu dừng{reason}.',
+  hookPromptBlocked: 'Hook UserPromptSubmit đã chặn tin nhắn này: {reason}',
   // ── (lane:commands-agents) ──
   // ── (lane:bg-tasks) ──
   // ── (lane:ide-context) ──
@@ -133,6 +146,19 @@ const en: typeof vi = {
   // ── (lane:checkpoints-rewind) ──
   // ── (lane:perm-rules) ──
   // ── (lane:hooks) ──
+  hookPill: 'Hook {event} · {items}',
+  hookItemOk: '{name} ✓ {ms} ms',
+  hookItemFail: '{name} ✗ {ms} ms',
+  hookItemBlock: '{name} ✗ blocked {ms} ms',
+  hookItemTimeout: '{name} ✗ timeout',
+  hookWarn: 'Hook {event}: {text}',
+  hookNoReason: 'hook blocked without giving a reason',
+  hookToolBlocked: 'Hook {event} blocked the {tool} call: {reason}',
+  hookToolEdited: '[Hook {event}] edited the arguments of {tool} before it ran.',
+  hookNote: '[Hook {event}] {text}',
+  hookStopCap: 'The Stop hook forced the assistant to continue {n} times, hit the cap, so stopping here.',
+  hookStopped: 'Hook {event} asked to stop{reason}.',
+  hookPromptBlocked: 'The UserPromptSubmit hook blocked this message: {reason}',
   // ── (lane:commands-agents) ──
   // ── (lane:bg-tasks) ──
   // ── (lane:ide-context) ──
