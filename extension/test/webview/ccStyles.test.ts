@@ -102,10 +102,10 @@ describe('thành phần: cấu trúc DOM đơn giản, tên lớp rõ (trang Rem
     expect(sources.toolRow).toMatch(/toolDescription\(lang, block\)/);
     expect(sources.toolRow).toMatch(/<b class=\{cx\('cc-action', cls\)\}>\{name\}<\/b>/);
     expect(sources.toolRow).toMatch(/class="cc-desc cc-path"/);
-    expect(sources.toolRow).toMatch(/nested && Boolean\(fullCommand \|\| content \|\| block\.diff\)/);
+    expect(sources.toolRow).toMatch(/nested && Boolean\(fullCommand \|\| content \|\| showDiff\)/);
     expect(sources.toolRow).toMatch(/<CmdInOut command=\{fullCommand\}/);
     expect(sources.toolRow).toMatch(/<FilePreview content=\{content\}/);
-    expect(sources.toolRow).toMatch(/<DiffView diff=\{block\.diff\} callId=\{block\.id\}/);
+    expect(sources.toolRow).toMatch(/<DiffView diff=\{showDiff\} callId=\{block\.id\}/);
     expect(sources.toolRow).toMatch(/writeLineCount\(block\)/);
     // mở tệp chỉ ở VS Code (bản Chrome không có editor)
     expect(sources.toolRow).toMatch(/platform === 'vscode' \? \(\) => post\(\{ type: 'open_file'/);

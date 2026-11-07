@@ -11,7 +11,7 @@ export function Stamp({ ts }: { ts: number | undefined }) {
   if (!text) return null;
   return (
     <div class="cc-stamp">
-      <time dateTime={new Date(ts!).toISOString()}>{text}</time>
+      <time dateTime={Number.isNaN(new Date(ts!).getTime()) ? undefined : new Date(ts!).toISOString()}>{text}</time>
     </div>
   );
 }

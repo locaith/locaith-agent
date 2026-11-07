@@ -145,6 +145,12 @@
   font-size: var(--nd-fs-code);
   color: var(--vscode-textLink-foreground, var(--accent-text));
 }
+.cc-desc.cc-path[role="link"] {
+  cursor: pointer;
+}
+.cc-desc.cc-path[role="link"]:hover {
+  text-decoration: underline;
+}
 .cc-tool .tool-state {
   margin-left: 0;
 }

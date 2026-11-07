@@ -15,7 +15,7 @@ import type { ActivityRow, WorkStats } from './timeline';
 
 // ── giờ & ngày ────────────────────────────────────────────────────────────────
 
-const finiteTs = (ts: unknown): ts is number => typeof ts === 'number' && Number.isFinite(ts) && ts > 0;
+const finiteTs = (ts: unknown): ts is number => typeof ts === 'number' && Number.isFinite(ts) && ts > 0 && ts <= 8.64e15;
 
 /** «17:52» (vi, 24 giờ) · «5:52 PM» (en, 12 giờ). Dấu thời gian không hợp lệ → chuỗi rỗng (ẩn, không bịa). */
 export function formatClock(ts: number | undefined, lang: Lang): string {

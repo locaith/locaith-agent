@@ -63,12 +63,14 @@ function ToolRowView({ block, nested = false }: { block: ToolBlock; nested?: boo
   const isWrite = block.name === 'write_file';
   const content = isWrite && typeof block.args?.content === 'string' ? block.args.content : '';
   const lineCount = isWrite ? writeLineCount(block) : undefined;
+  // (lane:cc-timeline-ui) Write tệp MỚI: host trả cả summary «N dòng» lẫn diff toàn-thêm → chỉ hiện «N dòng» + xem trước, không vẽ diff lặp nội dung. Edit / ghi đè giữ diff.
+  const showDiff = block.diff && !(isWrite && block.diff.isNew && lineCount !== undefined) ? block.diff : undefined;
   const showArgs = (!isKnownTool(block.name) || block.name === 'scratchpad') && Object.keys(block.args ?? {}).length > 0;
   const fullCommand = isCmd && typeof block.args?.command === 'string' ? block.args.command : '';
   const hasOutput = block.output !== undefined && (block.output.length > 0 || block.state !== 'running');
-  const expandable = Boolean(block.diff || fullCommand || showArgs || hasOutput || content || block.state === 'error');
+  const expandable = Boolean(showDiff || fullCommand || showArgs || hasOutput || content || block.state === 'error');
   // Lệnh đang chạy có đầu ra → tự mở; dòng lồng trong nhóm đã mở → bày sẵn IN/OUT, xem trước, diff (một lần bấm là thấy hết, như Claude Code).
-  const autoOpen = (isCmd && block.state === 'running' && Boolean(block.output)) || (nested && Boolean(fullCommand || content || block.diff));
+  const autoOpen = (isCmd && block.state === 'running' && Boolean(block.output)) || (nested && Boolean(fullCommand || content || showDiff));
   const open = expandable && (userOpen ?? autoOpen);
 
   const running = block.state === 'running';
@@ -77,7 +79,7 @@ function ToolRowView({ block, nested = false }: { block: ToolBlock; nested?: boo
     block.state === 'error' ? t('tool.failed') : block.state === 'denied' ? t('tool.denied') : block.state === 'cancelled' ? t('tool.cancelled') : '';
 
   const meta: string[] = [];
-  if (block.summary && !block.diff && lineCount === undefined) meta.push(block.summary);
+  if (block.summary && !showDiff && lineCount === undefined) meta.push(block.summary);
   // Agent con đã xong/đã dừng: số liệu cuối («461,4k token · 12 lệnh») để so sánh các agent với nhau.
   if (block.agent) {
     const s = agentStats(block);
@@ -87,6 +89,22 @@ function ToolRowView({ block, nested = false }: { block: ToolBlock; nested?: boo
 
   const openFile = desc.file && platform === 'vscode' ? () => post({ type: 'open_file', path: desc.file!.path, line: desc.file!.line }) : undefined;
   const pathLike = d.kind === 'path' && !!desc.file;
+  // (lane:cc-timeline-ui) Bấm đường dẫn = mở tệp (VS Code), không gập dòng. Nằm trong nút tool-head nên dùng span role=link (không lồng <button>) + chặn nổi bọt.
+  const openFileOnClick = openFile
+    ? (e: Event) => {
+        e.stopPropagation();
+        openFile();
+      }
+    : undefined;
+  const openFileOnKey = openFile
+    ? (e: KeyboardEvent) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          e.stopPropagation();
+          openFile();
+        }
+      }
+    : undefined;
 
   const head = (
     <>
@@ -104,7 +122,7 @@ function ToolRowView({ block, nested = false }: { block: ToolBlock; nested?: boo
           {d.text &&
             (pathLike ? (
               // Đường dẫn đầy đủ màu liên kết; bấm mở tệp (VS Code). Không cắt — xuống dòng như ảnh mẫu.
-              <span class="cc-desc cc-path" title={openFile ? `${t('cc.openFile')}: ${d.text}` : d.text}>
+              <span class="cc-desc cc-path" title={openFile ? `${t('cc.openFile')}: ${d.text}` : d.text} onClick={openFileOnClick} onKeyDown={openFileOnKey} role={openFile ? 'link' : undefined} tabIndex={openFile ? 0 : undefined}>
                 {d.text}
               </span>
             ) : (
@@ -116,13 +134,13 @@ function ToolRowView({ block, nested = false }: { block: ToolBlock; nested?: boo
         </span>
       </span>
       <span class="tool-meta">
-        {block.diff && (
+        {showDiff && (
           <span class="diff-stat">
-            <span class="diff-stat-add">+{block.diff.added}</span>
-            <span class="diff-stat-del">−{block.diff.removed}</span>
+            <span class="diff-stat-add">+{showDiff.added}</span>
+            <span class="diff-stat-del">−{showDiff.removed}</span>
           </span>
         )}
-        {lineCount !== undefined && !block.diff && <span class="tool-meta-text cc-lines">{t('cc.lines', { n: formatInt(lineCount, lang) })}</span>}
+        {lineCount !== undefined && !showDiff && <span class="tool-meta-text cc-lines">{t('cc.lines', { n: formatInt(lineCount, lang) })}</span>}
         {meta.length > 0 && <span class="tool-meta-text">{meta.join(' · ')}</span>}
         {expandable && <Icon name={open ? 'chevron-up' : 'chevron-down'} size={14} class="tool-chevron" />}
       </span>
@@ -161,7 +179,7 @@ function ToolRowView({ block, nested = false }: { block: ToolBlock; nested?: boo
         <div class="tool-body">
           {fullCommand && <CmdInOut command={fullCommand} output={block.output} error={block.state === 'error'} running={running} />}
           {content && block.state !== 'error' && <FilePreview content={content} path={desc.file?.path ?? ''} />}
-          {block.diff && <DiffView diff={block.diff} callId={block.id} collapsedRows={nested ? 10 : 18} />}
+          {showDiff && <DiffView diff={showDiff} callId={block.id} collapsedRows={nested ? 10 : 18} />}
           {showArgs && (
             <div class="tool-section">
               <div class="tool-section-title">{t('tool.args')}</div>

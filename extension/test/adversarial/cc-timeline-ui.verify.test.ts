@@ -57,10 +57,10 @@ describe('D. Dòng Ghi tệp với DỮ LIỆU THẬT của host (không phải 
 describe('G. Dấu thời gian: giá trị hữu hạn nhưng ngoài dải Date (dữ liệu phiên/sao lưu không đáng tin)', () => {
   const HUGE = 9e15; // hữu hạn, > 0, nhưng vượt dải Date (8,64e15) → new Date(HUGE) = Invalid Date
 
-  it('bối cảnh: tệp sao lưu với ts = 9e15 đi qua sanitizeBackupSession nguyên vẹn (num() chỉ kiểm hữu hạn)', () => {
+  it('tệp sao lưu với ts = 9e15 (ngoài dải Date) bị sanitizeBackupSession đưa về 0 — không đi tới giao diện', () => {
     const r = sanitizeBackupSession({ session: { id: 'abc123', messages: [] }, transcript: [{ kind: 'user', id: 'u1', text: 'x', attachments: [], ts: HUGE }] }, 'ws');
-    expect(r?.transcript[0]).toMatchObject({ kind: 'user', ts: HUGE });
-    // Stamp.tsx:13 gọi `new Date(ts!).toISOString()` cho mọi ts mà formatClock chấp nhận → RangeError lúc render (không có error boundary).
+    expect(r?.transcript[0]).toMatchObject({ kind: 'user', ts: 0 });
+    // (bối cảnh) Stamp.tsx gọi `new Date(ts!).toISOString()` cho mọi ts mà formatClock chấp nhận → RangeError lúc render (không có error boundary).
     expect(() => new Date(HUGE).toISOString()).toThrow(RangeError);
   });
 

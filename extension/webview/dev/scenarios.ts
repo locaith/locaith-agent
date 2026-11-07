@@ -899,8 +899,8 @@ export function ccTimelineState(opts: { working?: boolean } = {}): ViewState {
         endedAt: today(18, 41),
         blocks: [
           ...reads('a3:r', T3 + 6000, 31, [4]),
-          { type: 'tool', id: 'a3:w1', name: 'write_file', args: { path: 'src/core/engine/extensions/gate.ts', content: GATE_TS }, state: 'done', summary: '58 dòng', startedAt: T3 + 90_000, durationMs: 60 },
-          { type: 'tool', id: 'a3:w2', name: 'write_file', args: { path: 'src/core/engine/extensions/index.ts', content: REGISTRY_TS }, state: 'done', summary: '23 dòng', startedAt: T3 + 92_000, durationMs: 40 },
+          { type: 'tool', id: 'a3:w1', name: 'write_file', args: { path: 'src/core/engine/extensions/gate.ts', content: GATE_TS }, state: 'done', summary: '58 dòng', diff: { path: 'src/core/engine/extensions/gate.ts', added: 58, removed: 0, hunks: [], isNew: true }, startedAt: T3 + 90_000, durationMs: 60 },
+          { type: 'tool', id: 'a3:w2', name: 'write_file', args: { path: 'src/core/engine/extensions/index.ts', content: REGISTRY_TS }, state: 'done', summary: '23 dòng', diff: { path: 'src/core/engine/extensions/index.ts', added: 23, removed: 0, hunks: [], isNew: true }, startedAt: T3 + 92_000, durationMs: 40 },
           { type: 'tool', id: 'a3:e1', name: 'edit_file', args: { path: 'src/utils/formatMoney.ts' }, state: 'done', summary: '+9 −3', diff: DIFF_EDIT, startedAt: T3 + 95_000, durationMs: 130 },
           cmd('a3:c1', T3 + 100_000, 'Chạy typecheck ba tsconfig', 'npm run typecheck', '> tsc -p tsconfig.json && tsc -p webview/tsconfig.json && tsc -p tsconfig.browser.json\n\nsrc/core/engine/extensions/gate.ts(31,11): error TS2339: Property \'reject\' does not exist on type \'FinalizeContext\'.\nsrc/core/engine/extensions/gate.ts(27,32): error TS2339: Property \'stop\' does not exist on type \'BeforeModelContext\'.', { state: 'error', durationMs: 6200 }),
           cmd('a3:c2', T3 + 110_000, 'Chạy lại typecheck sau khi sửa', 'npm run typecheck', '> tsc -p tsconfig.json && tsc -p webview/tsconfig.json && tsc -p tsconfig.browser.json\n', { durationMs: 5900 }),

@@ -146,12 +146,12 @@ function AgentLines({ rows }: { rows: Parameters<typeof agentRowsOf>[0] }) {
  * (0.6.3 → lane:cc-timeline-ui) Dòng nhóm của một lượt ĐÃ XONG: «[chấm] 22 lệnh gọi công cụ · 2 lỗi · sửa 3 tệp   2 phút 13 giây ⌄».
  * Bấm để mở lại đúng như lúc đang chạy; mặc định gấp để câu trả lời cuối không bị đẩy xuống dưới một chuỗi dài suy nghĩ / công cụ / chữ xen giữa.
  */
-function WorkSummary({ stats, open, onToggle, rows }: { stats: WorkStats; open: boolean; onToggle: () => void; rows: Parameters<typeof agentRowsOf>[0] }) {
+function WorkSummary({ stats, open, onToggle, rows, live = false }: { stats: WorkStats; open: boolean; onToggle: () => void; rows: Parameters<typeof agentRowsOf>[0]; live?: boolean }) {
   const { t } = useApp();
   return (
     <div class="act work-sum" role="list">
       <div class={cx('act-row', 'work-row', 'cc-group', open && 'is-open', stats.failed > 0 && 'has-fail')} role="listitem">
-        <RunHead calls={stats.calls} failed={stats.failed} edits={stats.edits} steps={stats.steps} live={false} durationMs={stats.durationMs} open={open} onToggle={onToggle} expandTitle={t('work.expand')} collapseTitle={t('work.collapse')} />
+        <RunHead calls={stats.calls} failed={stats.failed} edits={stats.edits} steps={stats.steps} live={live} durationMs={stats.durationMs} open={open} onToggle={onToggle} expandTitle={t('work.expand')} collapseTitle={t('work.collapse')} />
         {!open && <AgentLines rows={rows} />}
       </div>
     </div>
@@ -254,7 +254,7 @@ function AssistantTurnView({ item, live, isLast }: { item: AssistantItem; live: 
     <section class="turn turn-assistant" aria-label={t('turn.assistant')} aria-busy={live}>
       {split ? (
         <>
-          <WorkSummary stats={split.stats} open={workOpen} onToggle={() => setWorkOpen((v) => !v)} rows={workRows} />
+          <WorkSummary stats={split.stats} open={workOpen} onToggle={() => setWorkOpen((v) => !v)} rows={workRows} live={live} />
           {workOpen ? (
             <div class="work-body">
               {split.work.map((seg) => render(seg, false, false, true))}
@@ -267,7 +267,8 @@ function AssistantTurnView({ item, live, isLast }: { item: AssistantItem; live: 
           {split.kept.map((seg) => render(seg, false, false))}
           {/* Giờ của câu trả lời mở đầu sau một nhóm (như «6:16 PM» của Claude Code) — lấy từ lúc lượt xong; thiếu thì không vẽ. */}
           {item.done && split.tail.length > 0 && <Stamp ts={item.endedAt} />}
-          {split.tail.map((seg) => render(seg, false, false))}
+          {/* (lane:cc-timeline-ui) Lượt đang chạy: đoạn cuối của đuôi vẫn "sống" (đang nghĩ / đang gõ), không vẽ cứng live=false. */}
+          {split.tail.map((seg, ti) => render(seg, live && ti === split.tail.length - 1 && seg.kind === 'text', live && ti === split.tail.length - 1))}
         </>
       ) : (
         // Lượt đang chạy (hoặc lượt ngắn): gom MỌI đoạn hoạt động liền nhau thành MỘT dòng.
