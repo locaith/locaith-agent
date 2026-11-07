@@ -268,7 +268,7 @@ export class BrowserController {
       }
       if (this.session.mode === 'bypass' && !this.d.config.allowBypass()) this.session.mode = 'default';
       Object.keys(this.session.artifacts).forEach((k) => this.seenArtifacts.add(k));
-      this.view = { ...this.baseView(), transcript: p.transcript };
+      this.view = { ...this.baseView(), ...this.meterPatch(p.transcript), transcript: p.transcript };
       this.presence.resetSteps(maxStepOf(p.transcript) + 1);
       if (p.transcript.length) {
         // Tác vụ đang chạy dở bị dừng khi khung chat đóng: nói rõ để người dùng không tưởng nó đã xong.
@@ -304,8 +304,8 @@ export class BrowserController {
   }
 
   /** (lane:sessions-ux) Đồng hồ chi phí/nén ở tiêu đề (cùng logic với bản VS Code). */
-  private meterPatch(): Pick<ViewState, 'meter'> {
-    return { meter: buildMeter(this.session, this.view?.transcript ?? [], findPricing(this.view?.providers, this.session.provider, this.session.model)) };
+  private meterPatch(transcript?: readonly TItem[], session: SessionState = this.session): Pick<ViewState, 'meter'> {
+    return { meter: buildMeter(session, transcript ?? this.view?.transcript ?? [], findPricing(this.view?.providers, session.provider, session.model)) };
   }
 
   /** (lane:sessions-ux) Cổng cho rẽ nhánh / tìm kiếm / ghim / xoá hàng loạt — logic dùng chung với bản VS Code (src/host/sessionsUx.ts). */
@@ -905,7 +905,7 @@ export class BrowserController {
     this.presence.resetSteps(maxStepOf(p.transcript) + 1);
     this.seenArtifacts.clear();
     Object.keys(this.session.artifacts).forEach((k) => this.seenArtifacts.add(k));
-    this.view = { ...this.baseView(), transcript: p.transcript, providers: this.view.providers, ...(await this.listings()), screen: 'chat', browser: this.browserState(await this.currentTabs()) };
+    this.view = { ...this.baseView(), ...this.meterPatch(p.transcript), transcript: p.transcript, providers: this.view.providers, ...(await this.listings()), screen: 'chat', browser: this.browserState(await this.currentTabs()) };
     this.post({ type: 'init', state: this.view });
     await this.d.lastSession?.set(this.session.id);
   }
@@ -1058,7 +1058,7 @@ export class BrowserController {
       this.presence.resetSteps();
       this.seenArtifacts.clear();
       await this.d.lastSession?.set(undefined);
-      this.view = { ...this.baseView(), providers: this.view.providers, ...(await this.listings()), screen: 'chat', browser: this.browserState(await this.currentTabs()) };
+      this.view = { ...this.baseView(), ...this.meterPatch([]), providers: this.view.providers, ...(await this.listings()), screen: 'chat', browser: this.browserState(await this.currentTabs()) };
       this.post({ type: 'init', state: this.view });
     });
   }
@@ -1074,6 +1074,7 @@ export class BrowserController {
         type: 'init',
         state: {
           ...this.baseView(),
+          ...this.meterPatch(p.transcript, p.session), // (lane:sessions-ux)
           sessionId: p.session.id,
           title: p.session.title,
           provider: p.session.provider,
@@ -1116,7 +1117,7 @@ export class BrowserController {
       this.presence.resetSteps(maxStepOf(p.transcript) + 1);
       this.seenArtifacts.clear();
       Object.keys(this.session.artifacts).forEach((k) => this.seenArtifacts.add(k));
-      this.view = { ...this.baseView(), transcript: p.transcript, providers: this.view.providers, ...(await this.listings()), screen: 'chat', browser: this.browserState(await this.currentTabs()) };
+      this.view = { ...this.baseView(), ...this.meterPatch(p.transcript), transcript: p.transcript, providers: this.view.providers, ...(await this.listings()), screen: 'chat', browser: this.browserState(await this.currentTabs()) };
       this.post({ type: 'init', state: this.view });
       await this.d.lastSession?.set(this.session.id);
     });
@@ -1134,7 +1135,7 @@ export class BrowserController {
       this.pinnedTabId = undefined;
       this.presence.resetSteps();
       await this.d.lastSession?.set(undefined);
-      this.view = { ...this.baseView(), providers: this.view.providers, ...(await this.listings()), screen: 'history', browser: this.browserState(await this.currentTabs()) };
+      this.view = { ...this.baseView(), ...this.meterPatch([]), providers: this.view.providers, ...(await this.listings()), screen: 'history', browser: this.browserState(await this.currentTabs()) };
       this.post({ type: 'init', state: this.view });
       this.toast('info', trashedMsg);
       return;

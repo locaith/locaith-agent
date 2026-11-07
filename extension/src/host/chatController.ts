@@ -3,7 +3,8 @@ import { AgentEngine, type QueuedMessage, type QueueState, type RunResult } from
 import { coreRunExtensions } from '../core/engine/extensions';
 import { hostRunExtensions } from './hostExtensions';
 import { SlashRegistry, type SlashContext } from './slashRegistry';
-import { handleSessionsUxMessage, meterOf, registerSessionsSlash, type SessionsUxPort } from './sessionsUx'; // (lane:sessions-ux)
+import { handleSessionsUxMessage, registerSessionsSlash, type SessionsUxPort } from './sessionsUx'; // (lane:sessions-ux)
+import { buildMeter, findPricing } from '../shared/sessionMeter'; // (lane:sessions-ux)
 import { loadProjectInstructions } from '../core/engine/instructions';
 import { resumeInstruction } from '../core/engine/resume';
 import { MEMORY_DIR, MEMORY_INDEX, type MemoryScope, type MemorySnapshot } from '../core/engine/memory';
@@ -417,8 +418,9 @@ export class ChatController implements vscode.Disposable {
     };
   }
 
-  private meterPatch(): Pick<ViewState, 'meter'> {
-    return { meter: meterOf(this.sessionsUxPort()) };
+  /** Đồng hồ cho (transcript, phiên) chỉ định; mặc định là cuộc đang mở. Khi dựng view MỚI phải truyền transcript mới, vì this.view lúc đó còn là view cũ. */
+  private meterPatch(transcript?: readonly TItem[], session: SessionState = this.session): Pick<ViewState, 'meter'> {
+    return { meter: buildMeter(session, transcript ?? this.view?.transcript ?? [], findPricing(this.view?.providers, session.provider, session.model)) };
   }
 
   private async orchestrationInfo(): Promise<OrchestrationInfo> {
@@ -1613,7 +1615,7 @@ export class ChatController implements vscode.Disposable {
     await this.saveNow();
     this.session = this.freshSession();
     this.seenArtifacts.clear();
-    this.view = { ...this.baseView(), providers: this.view.providers, ...this.carryStrips(), ...(await this.listings()), screen: 'chat' };
+    this.view = { ...this.baseView(), ...this.meterPatch([]), providers: this.view.providers, ...this.carryStrips(), ...(await this.listings()), screen: 'chat' };
     this.post({ type: 'init', state: this.view });
   }
 
@@ -1631,6 +1633,7 @@ export class ChatController implements vscode.Disposable {
         type: 'init',
         state: {
           ...this.baseView(),
+          ...this.meterPatch(rec.items, p.session), // (lane:sessions-ux)
           sessionId: p.session.id,
           title: p.session.title,
           provider: p.session.provider,
@@ -1678,7 +1681,7 @@ export class ChatController implements vscode.Disposable {
     // Phiên cũ có thể thiếu transcript (chỉ còn vài lượt cuối): dựng lại từ messages, giữ bản gốc, rồi ghi bản đã hàn gắn.
     const rec = reconcileTranscript(p.session.messages, p.transcript);
     if (rec.rebuilt) await this.d.store.backupRaw(p.session.id);
-    this.view = { ...this.baseView(), transcript: rec.items, providers: this.view.providers, ...this.carryStrips(), ...(await this.listings()), screen: 'chat' };
+    this.view = { ...this.baseView(), ...this.meterPatch(rec.items), transcript: rec.items, providers: this.view.providers, ...this.carryStrips(), ...(await this.listings()), screen: 'chat' };
     this.post({ type: 'init', state: this.view });
     if (p.migrated) {
       const n = rec.rebuilt ? '' : this.lang === 'vi' ? ' Cuộc trò chuyện này đã được nâng cấp theo bản mới — dùng tiếp bình thường.' : ' This conversation was upgraded to the current version — just continue it.';
@@ -1699,7 +1702,7 @@ export class ChatController implements vscode.Disposable {
       await this.saveNow(); // bản trong Thùng rác phải là bản mới nhất
       await this.d.store.moveToTrash(id);
       this.session = this.freshSession();
-      this.view = { ...this.baseView(), providers: this.view.providers, ...this.carryStrips(), ...(await this.listings()), screen: 'history' };
+      this.view = { ...this.baseView(), ...this.meterPatch([]), providers: this.view.providers, ...this.carryStrips(), ...(await this.listings()), screen: 'history' };
       this.post({ type: 'init', state: this.view });
       this.toast('info', trashedMsg);
       return;

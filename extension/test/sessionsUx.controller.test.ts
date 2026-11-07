@@ -204,3 +204,24 @@ describe('Remote: lệnh rẽ nhánh / ghim qua parseCommand', () => {
     expect(parseCommand({ type: 'delete_sessions', ids: ['a'] }, { canBypass: false }).ok).toBe(false); // xoá hàng loạt KHÔNG mở cho Remote
   });
 });
+
+describe('đồng hồ khi đổi phiên', () => {
+  it('load_session: meter.compactions lấy từ transcript của phiên vừa mở, không phải phiên trước', async () => {
+    const store = withStore([]);
+    const { newSession } = await import('../src/core/engine/types');
+    const s = newSession({ id: 'cmp1', provider: 'fake', model: 'm', title: 'Đã nén', updatedAt: 5 });
+    s.messages = [{ role: 'user', content: [{ type: 'text', text: 'hi' }] }];
+    const tr = [
+      { kind: 'user', id: 'u1', text: 'hi', attachments: [], ts: 5 },
+      { kind: 'notice', id: 'n1', level: 'info', text: 'đã nén', ts: 6, compact: { clearedResults: 4 } },
+    ] as never;
+    await store.save(s, tr);
+    expect(h.view().meter?.compactions ?? 0).toBe(0);
+    await h.ctl.handleRemote({ type: 'load_session', id: 'cmp1' } as never);
+    expect(h.view().meter!.compactions).toBe(1);
+    expect(h.view().meter!.clearedResults).toBe(4);
+    await h.ctl.handleRemote({ type: 'new_session' });
+    expect(h.view().meter!.compactions).toBe(0);
+    expect(h.view().meter!.clearedResults).toBe(0);
+  });
+});
