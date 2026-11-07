@@ -127,6 +127,14 @@ function expandCcGroup(i) {
       return {
         body: !!body,
         border: body ? getComputedStyle(body).borderLeftWidth : '',
+        // «Phẳng»: KHÔNG phần tử nào trong lượt trả lời có viền trái MỘT BÊN (thanh dọc) — hộp IN/OUT, khung mã, trích dẫn có viền đủ 4 cạnh/ngoại lệ riêng.
+        rails: q('.turn-assistant *')
+          .filter((e) => {
+            const c = getComputedStyle(e);
+            return parseFloat(c.borderLeftWidth) > 0 && c.borderLeftStyle !== 'none' && parseFloat(c.borderTopWidth) === 0 && parseFloat(c.borderBottomWidth) === 0 && !e.closest('blockquote');
+          })
+          .map((e) => e.className || e.tagName),
+        indent: body ? parseFloat(getComputedStyle(body).marginLeft) + parseFloat(getComputedStyle(body).paddingLeft) : -1,
         thought: q('.cc-think').map((e) => e.textContent),
         actions: q('.work-body .cc-action').map((e) => e.textContent),
         io: q('.cc-io-label').map((e) => e.textContent),
@@ -138,7 +146,9 @@ function expandCcGroup(i) {
         overflowX: tl ? tl.scrollWidth - tl.clientWidth : -1,
       };
     });
-    if (!r.body || r.border !== '1px') throw new Error(`thân nhóm phải mở với thanh dọc 1px: ${JSON.stringify(r)}`);
+    if (!r.body) throw new Error(`thiếu thân nhóm sau khi mở: ${JSON.stringify(r)}`);
+    if (r.border !== '0px' || r.rails.length) throw new Error(`thân nhóm phải PHẲNG (không thanh dọc): ${JSON.stringify({ border: r.border, rails: r.rails })}`);
+    if (r.indent !== 0) throw new Error(`thân nhóm không được thụt lề (chấm thẳng một cột): ${r.indent}`);
     if (r.foot !== 1) throw new Error('thiếu nút Thu gọn ở cuối thân nhóm');
     if (r.overflowX > 1) throw new Error(`tràn ngang ${r.overflowX}px`);
     if (i === 0) {
@@ -362,6 +372,10 @@ const SHOTS = [
   // Ảnh nguồn cho ảnh chụp màn hình trang cửa hàng Chrome (nền sáng, nền tảng browser): _work/chrome-store-shots-07.mjs ghép lại.
   { name: 'store-timeline-light-420', q: { scenario: 'cc-timeline', theme: 'light', platform: 'browser' }, w: 420, h: 760 },
   { name: 'store-research-light-420', q: { scenario: 'research', theme: 'light', speed: '0', platform: 'browser' }, w: 420, h: 760 },
+  // Kiểm «phẳng» (không thanh dọc) cho nhóm «Việc: …» và khối suy nghĩ bung ra
+  { name: 'flat-taskflow-expanded-dark-420', q: { scenario: 'taskflow', theme: 'dark', expand: '1' }, w: 420, h: 900, full: true },
+  { name: 'flat-taskflow-expanded-light-300', q: { scenario: 'taskflow', theme: 'light', expand: '1' }, w: 300, h: 900, full: true },
+  { name: 'flat-thinking-dark-420', q: { scenario: 'thinking', theme: 'dark', expand: '1' }, w: 420, h: 700 },
   { name: 'rating-ask-dark-420', q: { scenario: 'rating', theme: 'dark', platform: 'browser' }, w: 420, h: 520 },
   { name: 'rating-thanks-dark-420', q: { scenario: 'rating-thanks', theme: 'dark', platform: 'browser' }, w: 420, h: 520 },
   { name: 'rating-queued-light-420', q: { scenario: 'rating-queued', theme: 'light', platform: 'browser' }, w: 420, h: 520 },
@@ -472,6 +486,20 @@ async function runShots(browser) {
     try {
       await openPage(page, s.page ?? 'harness.html', s.q);
       if (s.act) await s.act(page);
+      // «Phẳng» TOÀN CỤC (anh chê «nhiều viền dọc quá» 07/11/2026): không phần tử nào trong dòng thời gian có viền trái MỘT BÊN (thanh dọc).
+      // Ngoại lệ có chủ đích: trích dẫn markdown (blockquote), dải trạng thái hàng chờ (queue), chế độ tương phản cao.
+      if ((s.page ?? 'harness.html') === 'harness.html') {
+        const rails = await page.evaluate(() =>
+          [...document.querySelectorAll('.timeline *')]
+            .filter((e) => {
+              const c = getComputedStyle(e);
+              return parseFloat(c.borderLeftWidth) > 0 && c.borderLeftStyle !== 'none' && parseFloat(c.borderTopWidth) === 0 && parseFloat(c.borderBottomWidth) === 0;
+            })
+            .filter((e) => !e.closest('blockquote, .queue, .queue-strip, .rmt'))
+            .map((e) => `${e.tagName.toLowerCase()}.${String(e.className).split(' ').join('.')}`),
+        );
+        if (rails.length) throw new Error(`còn thanh dọc (viền trái một bên): ${JSON.stringify([...new Set(rails)].slice(0, 8))}`);
+      }
       const file = path.join(OUT, `${s.name}.png`);
       await page.screenshot({ path: file, fullPage: Boolean(s.full) });
       // Ảnh toàn trang rất dài → cắt thành các lát dễ đọc (mỗi lát `slice` px CSS).

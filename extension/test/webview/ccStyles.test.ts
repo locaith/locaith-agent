@@ -75,8 +75,19 @@ describe('stylesheet timeline-cc.css', () => {
     expect(css).toMatch(/\.cc-group,[\s\S]*?\{[^}]*border-left:\s*0;[^}]*box-shadow:\s*none/);
     expect(block('.cc-io.is-error .cc-io-pre')).not.toMatch(/background/);
     expect(block('.cc-io.is-error .cc-io-pre')).toMatch(/color:/);
-    // mở ra: thanh dọc mảnh 1px bên trái
-    expect(css).toMatch(/\.cc-group > \.tool-group-body,[\s\S]*?border-left:\s*1px solid var\(--line\)/);
+    // mở ra: PHẲNG như Claude Code (anh chê «nhiều viền dọc quá» 07/11/2026) — không thanh dọc, không thụt lề; nhóm lồng chỉ thụt nhẹ
+    expect(css).toMatch(/\.cc-group > \.tool-group-body,\s*\.cc-group > \.task-group-body,\s*\.work-body\s*\{[^}]*margin-left:\s*0;[^}]*padding-left:\s*0;[^}]*border-left:\s*0;/);
+    expect(css).toMatch(/\.cc-group \.cc-group > \.tool-group-body,[\s\S]*?\{[^}]*margin-left:\s*14px/);
+    // …và không còn BẤT KỲ thanh dọc một bên nào trong tệp này (chặn việc thêm lại)
+    expect(css).not.toMatch(/border-left:\s*\d+px\s+(solid|dashed|dotted)/);
+    // đường nối dọc giữa các chấm của dòng thời gian cũ cũng bỏ
+    expect(css).toMatch(/\.act > \.act-row:not\(:last-child\)::after\s*\{[^}]*content:\s*none/);
+    // «Thu gọn»: chỉ là chữ nhỏ (không đường kẻ); nhiều cái liền nhau ở cuối khối lồng thì chỉ giữ cái ngoài cùng
+    expect(block('.collapse-foot')).toMatch(/border:\s*0/);
+    expect(css).toMatch(/:has\(\+ \.collapse-foot\) \.collapse-foot\s*\{[^}]*display:\s*none/);
+    // IN/OUT là MỘT hộp (ô OUT đậm hơn một chút), ô bên trong không có viền riêng
+    expect(block('.cc-io-pre')).toMatch(/border:\s*0/);
+    expect(css).toMatch(/\.cc-inout\s*\{[^}]*border:\s*1px solid[^}]*border-radius:\s*8px/);
     // ô IN/OUT cắt ~4 dòng, phần cắt mờ dần
     expect(block('.cc-io-pre.is-clamped')).toMatch(/mask-image:\s*linear-gradient/);
     expect(block('.cc-io-pre.is-clamped')).toMatch(/1\.55em \* 4/);

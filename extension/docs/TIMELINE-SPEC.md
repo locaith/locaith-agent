@@ -7,7 +7,9 @@ Tài liệu này đủ để một kỹ sư dựng lại dòng thời gian trên
 Nguyên tắc chung (áp cho mọi dòng):
 
 * **Một thứ = MỘT dòng**: `[chấm trạng thái 7 px] nhãn xám nhạt cỡ nhỏ … (meta nhỏ bên phải) [⌄]`. Không khung kín, không tô nền cả khối, không biểu tượng, không dấu «…» ở nhãn.
-* Mở ra: thân xếp dọc, **thanh dọc 1 px** bên trái (`border-left: 1px solid line`), nút **Thu gọn** ở cuối thân.
+* Mở ra: **PHẲNG** như Claude Code (anh chê «nhiều viền dọc quá», 07/11/2026): thân xếp dọc, **KHÔNG thanh dọc, KHÔNG đường nối giữa các chấm, KHÔNG đường kẻ ngang**; mọi chấm thẳng MỘT cột với chấm của dòng nhóm. Nhóm lồng trong nhóm («Việc: …», «Đã sửa N tệp») chỉ thụt nhẹ 14 px để thấy cấp, vẫn không vạch.
+  Ô IN/OUT là MỘT hộp (nhãn nằm trong hộp, ô OUT đậm hơn một chút thay đường kẻ ngăn). Nút **Thu gọn** ở cuối thân là chữ nhỏ xám căn trái (không khung, không đường kẻ; vùng bấm vẫn ≥ 40 px trên điện thoại); nhiều Thu gọn liền nhau ở cuối các khối lồng nhau thì chỉ hiện cái ngoài cùng (`:has(+ .collapse-foot) .collapse-foot { display: none }`).
+  Đường dẫn dài xuống dòng ở ranh giới thư mục (chèn `<wbr>` / ký tự rộng-không sau mỗi `/` hoặc `\`), không bẻ giữa từ. Bộ dò tự động: `webview/dev/shoot.mjs` thất bại nếu có phần tử nào trong `.timeline` có viền trái MỘT BÊN.
 * Chấm: `ok` xanh lá · `fail` đỏ · `live` xám nhấp nháy nhẹ (opacity 0,45 → 1, 1,6 s; tắt khi `prefers-reduced-motion`) · `muted` xám · `warn` cam.
 * Tương phản cao: chữ phụ dùng màu chữ chính, chấm có viền 1 px, shimmer tắt. Khung hẹp (≤ 320 px): ô IN/OUT xếp dọc, ẩn thời lượng.
 * Mọi chữ hai ngôn ngữ (vi/en). Chuỗi ở bảng cuối.
@@ -207,7 +209,7 @@ Quy tắc đếm (`rowStats`): `tool` +1 (lỗi +1, sửa tệp +1 edits) · `to
 | 2 | 53 tool (2 `error`) + 1 agent done {tokens 654900, tools 249, durationMs 2394000} | «54 lệnh gọi công cụ · 2 lỗi» chấm đỏ; dưới nó dòng agent «654,9k token · 249 lệnh · 39 phút 54 giây» chấm xanh | cùng trên |
 | 3 | 31 read (1 error) + 2 write (summary «58 dòng», «23 dòng») + 1 edit (+9 −3) + 2 cmd (1 error) | «36 … · 2 lỗi · sửa 3 tệp»; gập vẫn bày 3 dòng Ghi/Ghi/Sửa với «58 dòng», «23 dòng», «+9 −3» | cùng trên |
 | 4 | lượt đang chạy, 9 done + 1 run_command `running` với `run_in_background: true` | «Đang chạy Lệnh · 10 lệnh gọi công cụ», dòng phụ «Chạy nền», chấm sống; chip đồng hồ «1m»; placeholder «Xếp hàng tin nhắn khác…» | cùng trên |
-| 5 | mở nhóm 1 | thân có thanh dọc 1 px; «Đã suy nghĩ 14 giây», «Lệnh …», IN/OUT ×2, «Đã suy nghĩ 3 giây», từng Đọc/Tìm; Thu gọn ở cuối | `expandCcGroup(0)` |
+| 5 | mở nhóm 1 | thân PHẲNG (không thanh dọc, không thụt lề); «Đã suy nghĩ 14 giây», «Lệnh …», IN/OUT ×2, «Đã suy nghĩ 3 giây», từng Đọc/Tìm; Thu gọn ở cuối | `expandCcGroup(0)` |
 | 6 | mở nhóm 3 | 2 khung xem trước (4 dòng, mờ dần), «58 dòng», ≥ 3 đường dẫn màu liên kết, đúng 1 ô OUT lỗi (chữ đỏ) | `expandCcGroup(2)` |
 | 7 | notice info `compact` {auto, 968000, 41, 12, summary} | «Đã nén cuộc trò chuyện · tự động · giải phóng 968k token ⌄»; mở: «tóm tắt 41 tin nhắn · lược 12 kết quả công cụ», tóm tắt, Thu gọn | `cc-compact-open` |
 | 8 | 2 mục khác ngày | 1 đường ngăn «T7, 07/11» / «Sat, Nov 7»; mục đầu không có | `ccTimeline.test.ts` timelineMarks |

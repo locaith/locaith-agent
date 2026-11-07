@@ -35,7 +35,13 @@ function argsJson(args: Record<string, unknown>): string {
   return s.length > ARGS_LIMIT ? s.slice(0, ARGS_LIMIT) + '\n…' : s;
 }
 
+/** Chèn điểm ngắt dòng (<wbr>) sau mỗi dấu gạch chéo (xuôi hoặc ngược): đường dẫn dài xuống dòng ở ranh giới thư mục thay vì bẻ giữa từ (trình duyệt không tự ngắt sau «/»). Không đổi textContent. */
+function breakablePath(text: string) {
+  return text.split(/(?<=[\\/])/).map((part, i) => (i === 0 ? part : [<wbr key={i} />, part]));
+}
+
 /** Màu chấm + màu chữ trạng thái theo state của khối. */
+
 export function toolTone(state: ToolBlock['state']): { dot: DotTone; cls: string } {
   switch (state) {
     case 'error':
@@ -126,7 +132,7 @@ function ToolRowView({ block, nested = false }: { block: ToolBlock; nested?: boo
             (pathLike ? (
               // Đường dẫn đầy đủ màu liên kết; bấm mở tệp (VS Code). Không cắt — xuống dòng như ảnh mẫu.
               <span class="cc-desc cc-path" title={openFile ? `${t('cc.openFile')}: ${d.text}` : d.text} onClick={openFileOnClick} onKeyDown={openFileOnKey} role={openFile ? 'link' : undefined} tabIndex={openFile ? 0 : undefined}>
-                {d.text}
+                {breakablePath(d.text)}
               </span>
             ) : (
               <span class={cx('cc-desc', (d.kind === 'command' || d.kind === 'url') && 'is-code')} title={d.text}>

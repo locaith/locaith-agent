@@ -1,6 +1,6 @@
 /* ── (lane:cc-timeline-ui) Dòng thời gian GỌN kiểu Claude Code ─────────────────────────────────────────────────────────────
    Nạp CUỐI CÙNG (main.css) để thắng các kiểu cũ. Nguyên tắc: một thứ = MỘT dòng [chấm] + chữ xám nhạt cỡ nhỏ + (⌄);
-   không khung kín, không tô nền cả khối, không biểu tượng thừa; mở ra thì thanh dọc mảnh bên trái + nút Thu gọn ở cuối.
+   không khung kín, không tô nền cả khối, không biểu tượng thừa; mở ra thì PHẲNG (không thanh dọc, không đường kẻ — chấm thẳng một cột) + chữ «Thu gọn» nhỏ ở cuối.
    Tôn trọng prefers-reduced-motion, tương phản cao, khung hẹp ~260–320 px. */
 
 /* ── chấm trạng thái ── */
@@ -91,16 +91,50 @@
   color: var(--fg-muted);
   font-weight: 400;
 }
-/* Mở ra: thanh dọc mảnh bên trái nối các chấm, thân xếp dọc. */
+/* Mở ra: PHẲNG như Claude Code — KHÔNG thanh dọc, KHÔNG đường kẻ; các chấm thẳng một cột với chấm của dòng nhóm.
+   Nhóm lồng trong nhóm («Việc: …», «Đã sửa N tệp») chỉ thụt nhẹ để thấy cấp, vẫn không vạch. */
 .cc-group > .tool-group-body,
 .cc-group > .task-group-body,
 .work-body {
-  margin-left: 8px;
-  padding-left: 12px;
-  border-left: 1px solid var(--line);
+  margin-left: 0;
+  padding-left: 0;
+  border-left: 0;
 }
-.cc-group .tool-group-body .tool-group-body {
-  margin-left: 8px;
+.cc-group .cc-group > .tool-group-body,
+.cc-group .cc-group > .task-group-body,
+.work-body .cc-group > .tool-group-body,
+.work-body .cc-group > .task-group-body {
+  margin-left: 14px;
+}
+/* Mọi thân .tool-group-body còn lại (vd. «Kiểm tra độc lập», nhóm lệnh cũ) cũng phẳng; riêng khối kiểm tra thụt thẳng cột chữ. */
+.tool-group-body {
+  margin-left: 0;
+  padding-left: 0;
+  border-left: 0;
+}
+.verify-body {
+  margin-left: 26px;
+}
+/* Đường nối dọc giữa các chấm ("cột sống" của dòng thời gian cũ, components.css): bỏ — Claude Code chỉ có chấm, không có đường nối. */
+.act > .act-row:not(:last-child)::after {
+  content: none;
+}
+/* Các thanh dọc còn lại của lớp cũ / lane khác trong dòng thời gian: bỏ hết. */
+.thinking-body {
+  padding-left: 0;
+  border-left: 0;
+}
+.cp-list,
+.bgt-body {
+  margin-left: 0;
+  padding-left: 0;
+  border-left: 0;
+}
+.rw-card {
+  margin-left: 0;
+  padding-left: 0;
+  border-left: 0;
+  border-image: none;
 }
 /* Dòng agent ngay dưới nhóm gập. */
 .cc-agents {
@@ -140,7 +174,9 @@
   flex: 1 1 auto;
   white-space: normal;
   overflow: visible;
-  overflow-wrap: anywhere;
+  /* break-word (không phải anywhere): ưu tiên ngắt ở dấu «/» của đường dẫn, chỉ bẻ giữa từ khi một đoạn dài hơn cả dòng. */
+  overflow-wrap: break-word;
+  word-break: normal;
   font-family: var(--nd-font-code);
   font-size: var(--nd-fs-code);
   color: var(--vscode-textLink-foreground, var(--accent-text));
@@ -168,21 +204,30 @@
 }
 
 /* ── IN / OUT ── */
+/* Một HỘP duy nhất (nhãn IN/OUT nằm trong hộp); ô OUT đậm hơn một chút thay cho đường kẻ ngăn. */
 .cc-inout {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 0;
   min-width: 0;
+  border: 1px solid color-mix(in srgb, var(--line-soft) 55%, transparent);
+  border-radius: 8px;
+  background: var(--code-bg);
+  overflow: hidden;
 }
 .cc-io {
   display: grid;
-  grid-template-columns: 30px minmax(0, 1fr);
+  grid-template-columns: 44px minmax(0, 1fr);
   align-items: start;
-  gap: 6px;
+  gap: 0;
   min-width: 0;
 }
+.cc-io.is-out {
+  background: color-mix(in srgb, var(--fg) 5%, var(--code-bg));
+}
 .cc-io-label {
-  padding-top: 6px;
+  padding-top: 7px;
+  padding-left: 8px;
   font-size: var(--nd-fs-xs);
   line-height: 1;
   font-weight: 600;
@@ -196,10 +241,10 @@
 }
 .cc-io-pre {
   margin: 0;
-  padding: 6px 8px;
-  border: 1px solid var(--line-soft);
-  border-radius: 8px;
-  background: var(--code-bg);
+  padding: 6px 8px 6px 2px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
   font-family: var(--nd-font-code);
   font-size: var(--nd-fs-code);
   line-height: 1.55;
@@ -268,7 +313,7 @@
 .cc-preview-pre {
   margin: 0;
   padding: 6px 8px;
-  border: 1px solid var(--line-soft);
+  border: 1px solid color-mix(in srgb, var(--line-soft) 55%, transparent);
   border-radius: 8px;
   background: var(--code-bg);
   font-family: var(--nd-font-code);
@@ -373,9 +418,9 @@
   overflow-wrap: anywhere;
 }
 .cc-compact-body {
-  margin: 2px 0 4px 8px;
-  padding-left: 12px;
-  border-left: 1px solid var(--line);
+  margin: 2px 0 4px 18px;
+  padding-left: 0;
+  border-left: 0;
   font-size: var(--nd-fs-sm);
   color: var(--fg-muted);
 }
@@ -481,6 +526,32 @@
 }
 .cc-clock-text {
   font-size: var(--nd-fs-xs);
+}
+
+/* ── «Thu gọn» ở cuối khối: CHỈ là chữ nhỏ xám, không đường kẻ, không khung — căn trái ──
+   Trong thân nhóm phẳng thì thụt thẳng cột chữ (qua chấm); trong thân công cụ (đã thụt sẵn) thì sát lề trái của nội dung. */
+.collapse-foot {
+  justify-content: flex-start;
+  align-self: flex-start;
+  width: auto;
+  margin: 2px 0 0 0;
+  padding: 2px 6px 2px 0;
+  border: 0;
+  border-radius: 6px;
+  font-weight: 400;
+}
+.work-body > .collapse-foot,
+.tool-group-body > .collapse-foot,
+.task-group-body > .collapse-foot {
+  margin-left: 26px;
+}
+.collapse-foot:hover {
+  background: transparent;
+  text-decoration: underline;
+}
+/* Nhiều «Thu gọn» xếp liền nhau ở cuối các khối lồng nhau: chỉ giữ cái NGOÀI CÙNG (cái trong đã nằm trong khối mà cái ngoài sắp đóng). */
+:has(+ .collapse-foot) .collapse-foot {
+  display: none;
 }
 
 /* ── dòng agent: bộ số in đậm nhẹ ── */
