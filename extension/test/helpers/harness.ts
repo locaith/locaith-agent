@@ -38,6 +38,8 @@ export interface Harness {
 export interface HarnessOptions {
   files?: Record<string, string>;
   settings?: Partial<EngineSettings>;
+  /** Mức suy luận của phiên (mặc định 'medium'). */
+  thinkingLevel?: SessionState['thinkingLevel'];
   hostSettings?: Record<string, unknown>;
   secrets?: Record<string, string>;
   /** Quyết định cho mọi yêu cầu xin phép (mặc định: allow). */
@@ -59,6 +61,8 @@ export interface HarnessOptions {
   sessionProvider?: string;
   /** Kho kỹ năng thay cho kho dựng sẵn (kiểm thử kỹ năng riêng của một họ mô hình). */
   skillsRegistry?: SkillRegistry;
+  /** (lane:bg-tasks) Shell của host thật (test tiến trình nhanh hơn với 'cmd' trên Windows). */
+  shellPreference?: string;
 }
 
 export function makeHarness(script: Step[], opts: HarnessOptions = {}): Harness {
@@ -68,6 +72,7 @@ export function makeHarness(script: Step[], opts: HarnessOptions = {}): Harness 
   const host = new NodeToolHost({
     roots: [dir],
     settings: opts.hostSettings,
+    shellPreference: opts.shellPreference,
     secrets: opts.secrets,
     fetchImpl: opts.fetchImpl,
     onPermission: async (req) => {
@@ -94,7 +99,7 @@ export function makeHarness(script: Step[], opts: HarnessOptions = {}): Harness 
     ...opts.engineDeps,
   };
   const engine = new AgentEngine(deps);
-  const session = newSession({ id: 's1', provider: opts.sessionProvider ?? 'fake', model: 'fake-1', thinkingLevel: 'medium' });
+  const session = newSession({ id: 's1', provider: opts.sessionProvider ?? 'fake', model: 'fake-1', thinkingLevel: opts.thinkingLevel ?? 'medium' });
   return {
     dir,
     host,

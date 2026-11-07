@@ -9,6 +9,7 @@
 import { newSession, type ArtifactRecord, type SessionState } from '../core/engine/types';
 import type { ChatMessage, ContentBlock } from '../core/types';
 import { DOC_KINDS, type DocKind } from './docKinds';
+import { contextStatsOf } from './sessionMigrate';
 import { MAX_BACKUP_BYTES, PERMISSION_MODES, THINKING_LEVELS, type AssistantItem, type AttachmentInfo, type TItem, type TodoItem } from './protocol';
 
 export const BACKUP_FORMAT = 'ai-agent-sessions';
@@ -68,6 +69,8 @@ export function backupFileName(scope: 'one' | 'all', title: string | undefined, 
 const isObj = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v);
 const str = (v: unknown, max = 1_000_000): string | undefined => (typeof v === 'string' ? v.slice(0, max) : undefined);
 const num = (v: unknown): number | undefined => (typeof v === 'number' && Number.isFinite(v) ? v : undefined);
+/** Dấu thời gian hợp lệ cho Date (0 ≤ ts ≤ 8,64e15); ngoài dải → undefined. */
+const tsNum = (v: unknown): number | undefined => (typeof v === 'number' && Number.isFinite(v) && v >= 0 && v <= 8.64e15 ? v : undefined);
 const small = (v: unknown, max = 200): string => str(v, max) ?? '';
 
 function sanitizeBlock(b: unknown): ContentBlock | null {
@@ -112,7 +115,7 @@ function sanitizeMessage(m: unknown): ChatMessage | null {
     content,
     ...(m.role === 'assistant' ? { provider: str(m.provider, 100), model: str(m.model, 200) } : {}),
     ...(m.synthetic === true ? { synthetic: true } : {}),
-    ...(num(m.ts) !== undefined ? { ts: num(m.ts) } : {}),
+    ...(tsNum(m.ts) !== undefined ? { ts: tsNum(m.ts) } : {}),
   };
 }
 
@@ -143,14 +146,14 @@ function sanitizeTranscript(v: unknown): TItem[] {
   for (const t of v.slice(0, MAX_MESSAGES)) {
     if (!isObj(t) || typeof t.id !== 'string') continue;
     if (t.kind === 'user' && typeof t.text === 'string') {
-      out.push({ kind: 'user', id: t.id.slice(0, 80), text: t.text.slice(0, MAX_BLOCK_CHARS), ts: num(t.ts) ?? 0, ...(t.steer === true ? { steer: true } : {}), attachments: (Array.isArray(t.attachments) ? t.attachments.slice(0, 30) : []).map(sanitizeAttachment).filter((a): a is AttachmentInfo => a !== null) });
+      out.push({ kind: 'user', id: t.id.slice(0, 80), text: t.text.slice(0, MAX_BLOCK_CHARS), ts: tsNum(t.ts) ?? 0, ...(t.steer === true ? { steer: true } : {}), attachments: (Array.isArray(t.attachments) ? t.attachments.slice(0, 30) : []).map(sanitizeAttachment).filter((a): a is AttachmentInfo => a !== null) });
     } else if (t.kind === 'assistant' && Array.isArray(t.blocks)) {
       const blocks = t.blocks
         .filter((b): b is Record<string, unknown> => isObj(b) && typeof b.type === 'string')
         .map((b) => (b.type === 'tool' && (b.state === 'running' || b.state === 'awaiting_permission') ? { ...b, state: 'cancelled', permission: undefined } : b));
-      out.push({ ...(t as unknown as AssistantItem), blocks: blocks as unknown as AssistantItem['blocks'], done: true });
+      out.push({ ...(t as unknown as AssistantItem), ts: tsNum(t.ts) ?? 0, ...(t.endedAt !== undefined ? { endedAt: tsNum(t.endedAt) } : {}), blocks: blocks as unknown as AssistantItem['blocks'], done: true });
     } else if (t.kind === 'notice' && typeof t.text === 'string') {
-      out.push({ kind: 'notice', id: t.id.slice(0, 80), level: t.level === 'warn' || t.level === 'error' ? t.level : 'info', text: t.text.slice(0, 20_000), ts: num(t.ts) ?? 0 });
+      out.push({ kind: 'notice', id: t.id.slice(0, 80), level: t.level === 'warn' || t.level === 'error' ? t.level : 'info', text: t.text.slice(0, 20_000), ts: tsNum(t.ts) ?? 0 });
     }
   }
   return out;
@@ -170,7 +173,21 @@ function sanitizeArtifacts(v: unknown): Record<string, ArtifactRecord> {
 
 function sanitizeTodos(v: unknown): TodoItem[] {
   if (!Array.isArray(v)) return [];
-  return v.slice(0, 200).flatMap((t) => (isObj(t) && typeof t.title === 'string' ? [{ id: small(t.id, 80) || String(Math.random()), title: small(t.title, 500), status: t.status === 'completed' || t.status === 'in_progress' ? t.status : 'pending' } as TodoItem] : []));
+  // (lane:loop-guards) chấp nhận thêm 'blocked' + note.
+  return v
+    .slice(0, 200)
+    .flatMap((t) =>
+      isObj(t) && typeof t.title === 'string'
+        ? [
+            {
+              id: small(t.id, 80) || String(Math.random()),
+              title: small(t.title, 500),
+              status: t.status === 'completed' || t.status === 'in_progress' || t.status === 'blocked' ? t.status : 'pending',
+              ...(t.status === 'blocked' && typeof t.note === 'string' && t.note ? { note: small(t.note, 300) } : {}),
+            } as TodoItem,
+          ]
+        : [],
+    );
 }
 
 /**
@@ -207,6 +224,7 @@ export function sanitizeBackupSession(raw: unknown, workspaceKey: string): Backu
     artifacts: sanitizeArtifacts(s.artifacts),
     historyEdited: true,
     lastContextTokens: 0,
+    ...contextStatsOf(s.contextStats), // (lane:ctx-compaction)
     usageTotals: { input: num((s.usageTotals as { input?: unknown } | undefined)?.input) ?? 0, output: num((s.usageTotals as { output?: unknown } | undefined)?.output) ?? 0 },
   });
   return { workspace: workspaceKey, session, transcript, ...(num(raw.deletedAt) !== undefined ? { deletedAt: num(raw.deletedAt) } : {}) };

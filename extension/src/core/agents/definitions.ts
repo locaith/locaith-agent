@@ -36,6 +36,10 @@ export interface AgentDef {
   prompt: string;
   source: AgentSource;
   dir?: string;
+  /** (lane:commands-agents) Màu nhãn trong giao diện (frontmatter `color`, như Claude Code). */
+  color?: string;
+  /** (lane:commands-agents) Tệp định nghĩa (agent từ tệp). */
+  file?: string;
 }
 
 export const READONLY_TOOLS = ['read_file', 'list_dir', 'glob', 'grep', 'web_search', 'fetch_url', 'load_skill', 'search_skills', 'scratchpad'];
@@ -109,6 +113,20 @@ export function builtinAgents(): AgentDef[] {
         'Return a verdict (pass / fail / uncertain) followed by the evidence for it. Do not modify anything.',
       source: 'builtin',
     },
+    // (lane:commands-agents) chạy kiểm thử như một việc trọn gói: tìm đúng lệnh, chạy, đọc lỗi, báo cáo — không sửa mã.
+    {
+      name: 'test-runner',
+      description: 'Chạy kiểm thử/kiểm tra kiểu/build của dự án, đọc lỗi rồi báo đúng con số (đạt/đỏ, tệp:dòng, nguyên nhân khả dĩ). Không sửa mã. Mỗi lệnh vẫn xin phép người dùng.',
+      tier: 'fast',
+      tools: ['read_file', 'list_dir', 'glob', 'grep', 'run_command'],
+      maxTurns: 12,
+      thinking: 'low',
+      prompt:
+        'You run the project\'s checks and report results. First find the right commands (package.json scripts, Makefile, pyproject, CI config); prefer the narrowest command that answers the question. ' +
+        'Run them, read the failures, and report: the exact command, totals (passed/failed/skipped), each failure with file:line and the key error line, and the most likely cause. ' +
+        'Never edit files, never "fix" tests, never claim success you did not observe. If a command cannot run, say why.',
+      source: 'builtin',
+    },
     {
       name: 'general',
       description: 'Kỹ sư đa năng cho một việc trọn gói: đọc, sửa, chạy lệnh, kiểm chứng rồi báo đúng những gì đã làm. Mọi thao tác ghi/chạy lệnh vẫn xin phép người dùng như luồng chính.',
@@ -171,6 +189,7 @@ export function agentFromMarkdown(text: string, fallbackName: string, source: Ag
     prompt: body.slice(0, 20_000),
     source,
     dir,
+    ...(/^[a-z]{3,12}$|^#[0-9a-f]{3,8}$/i.test(String(meta.color ?? '').trim()) ? { color: String(meta.color).trim().toLowerCase() } : {}),
   };
 }
 
@@ -192,6 +211,7 @@ export class AgentRegistry {
     for (const a of this.builtin) this.map.set(a.name, a);
     let loaded = 0;
     const errors: string[] = [];
+    const fromDirs = new Set<string>(); // (lane:commands-agents) thư mục đứng trước (ưu tiên cao hơn) thắng thư mục sau cùng tên
     for (const d of dirs) {
       let entries;
       try {
@@ -208,6 +228,9 @@ export class AgentRegistry {
           if (text == null) continue;
           const def = agentFromMarkdown(text, e.name.replace(/\.md$/i, ''), d.source, d.path);
           if (def) {
+            def.file = file; // (lane:commands-agents)
+            if (fromDirs.has(def.name)) continue;
+            fromDirs.add(def.name);
             this.map.set(def.name, def);
             loaded++;
           }

@@ -35,18 +35,28 @@ export interface ResumeTodo {
  */
 export function resumeInstruction(text: string, todos: readonly ResumeTodo[], lang: 'vi' | 'en'): string | null {
   if (!isBareContinue(text)) return null;
-  const pending = todos.filter((x) => x.status !== 'completed').map((x) => x.title.trim()).filter(Boolean);
+  const pending = todos.filter((x) => x.status !== 'completed' && x.status !== 'blocked').map((x) => x.title.trim()).filter(Boolean);
   const list = pending.slice(0, 8).map((t) => `- ${t.slice(0, 120)}`).join('\n');
+  // (lane:loop-guards) Việc 'blocked' KHÔNG tính là còn mở (không kích hoạt cổng nhắc), nhưng nêu riêng để model gỡ nếu gỡ được.
+  const blockedList = todos
+    .filter((x) => x.status === 'blocked')
+    .map((x) => x.title.trim())
+    .filter(Boolean)
+    .slice(0, 5)
+    .map((t) => `- ${t.slice(0, 120)}`)
+    .join('\n');
   if (lang === 'en') {
     return (
       '[Continue after a stop — do not restart.] Pick up exactly where you stopped and finish ALL outstanding work before you report.\n' +
       'Any tool call marked as cancelled in the history was interrupted: do not run it again unless it is still needed.\n' +
-      (pending.length ? `Still open (${pending.length}):\n${list}\nUpdate the task list to match reality as you go, then verify and report.` : 'Nothing is left open — finish the last step, verify it, and report the result.')
+      (pending.length ? `Still open (${pending.length}):\n${list}\nUpdate the task list to match reality as you go, then verify and report.` : 'Nothing is left open — finish the last step, verify it, and report the result.') +
+      (blockedList ? `\nBlocked earlier (not counted as open; retry only if you can now unblock them):\n${blockedList}` : '')
     );
   }
   return (
     '[Tiếp tục sau khi dừng — không làm lại từ đầu.] Làm tiếp đúng chỗ đã dừng và hoàn tất TẤT CẢ việc còn tồn trước khi báo xong.\n' +
     'Lệnh nào trong lịch sử bị đánh dấu đã huỷ thì đã bị gián đoạn: đừng chạy lại trừ khi vẫn còn cần.\n' +
-    (pending.length ? `Còn tồn (${pending.length}):\n${list}\nVừa làm vừa cập nhật danh sách việc cho đúng thực tế, rồi kiểm chứng và báo kết quả.` : 'Không còn việc nào đang mở — làm nốt bước cuối, kiểm chứng rồi báo kết quả.')
+    (pending.length ? `Còn tồn (${pending.length}):\n${list}\nVừa làm vừa cập nhật danh sách việc cho đúng thực tế, rồi kiểm chứng và báo kết quả.` : 'Không còn việc nào đang mở — làm nốt bước cuối, kiểm chứng rồi báo kết quả.') +
+    (blockedList ? `\nĐã bị chặn trước đó (không tính là còn mở; chỉ làm lại nếu giờ gỡ được):\n${blockedList}` : '')
   );
 }

@@ -35,7 +35,8 @@ import type {
   WebviewMessage,
 } from '../shared/protocol';
 import { PERMISSION_MODES, THINKING_LEVELS } from '../shared/protocol';
-import { RATING_URL, shouldAskRating, type RatingState } from './rating';
+import { RATING_COMMENT_MAX, RATING_URL, buildRatingPayload, shouldAskRating, type RatingPayload, type RatingState } from './rating';
+import type { RatingSendResult } from './ratingSend';
 import { backupFileName, makeBackup } from '../shared/sessionBackup';
 import type { BaseSessionStore } from '../shared/sessionStore';
 import { newId, reduceView } from '../shared/transcript';
@@ -51,6 +52,11 @@ import { hasRedactions, redactForStorage, redactTranscript, settleForExit } from
 import { createBrowserToolRegistry } from './tools';
 import { hostOf, TabScope } from './tools/policy';
 import { Presence } from './presence';
+import { buildMeter, findPricing } from '../shared/sessionMeter'; // (lane:sessions-ux)
+import { contextReport, costReport } from '../shared/sessionMeter';
+import { getPromptStats } from '../core/engine/promptStats';
+import { forkCurrent, handleSessionsUxMessage, type SessionsUxPort } from '../host/sessionsUx';
+import { openExternalOnce } from '../core/host/openOnce'; // (lane:customer-bugs)
 
 export interface ArtifactHost {
   open(rec: ArtifactRecord): Promise<void> | void;
@@ -77,31 +83,39 @@ export interface BrowserControllerDeps {
   lastSession?: { get(): Promise<string | undefined>; set(id: string | undefined): Promise<void> };
   /** Đọc tệp tải lên (PDF/Word/Excel/HTML/CSV/TXT) thành chữ. Bản thật nạp lười từ docparse.js (xem panel.tsx); bỏ trống = chưa hỗ trợ đọc tệp. */
   extractDocument?: DocExtractor;
+  /** Gửi một đánh giá về Locaith (mặc định ở panel.tsx = `postRating`). Bỏ trống = không gửi gì (kiểm thử / chạy không mạng): đánh giá vẫn được ghi nhận và chờ gửi. */
+  sendFeedback?: (payload: RatingPayload) => Promise<RatingSendResult>;
 }
 
 const SLASH: Record<Lang, SlashCommandInfo[]> = {
   vi: [
     { name: 'new', description: 'Bắt đầu cuộc trò chuyện mới' },
     { name: 'clear', description: 'Xoá và bắt đầu lại (giống /new)' },
-    { name: 'compact', description: 'Nén tin nhắn cũ để giải phóng ngữ cảnh' },
+    { name: 'compact', description: 'Nén tin nhắn cũ để giải phóng ngữ cảnh — /compact <giữ lại gì> (tuỳ chọn)' },
     { name: 'model', description: 'Đổi model — /model <tên>' },
     { name: 'mode', description: 'Đổi chế độ quyền — /mode plan' },
     { name: 'thinking', description: 'Đổi mức suy luận — /thinking high' },
     { name: 'skills', description: 'Xem các kỹ năng có sẵn' },
     { name: 'retry', description: 'Chạy lại tin nhắn cuối' },
     { name: 'export', description: 'Tải cuộc trò chuyện về dạng Markdown' },
+    { name: 'fork', description: 'Rẽ nhánh cuộc trò chuyện thành cuộc mới' }, // (lane:sessions-ux)
+    { name: 'context', description: 'Xem ngữ cảnh đang dùng, chia theo từng phần' },
+    { name: 'cost', description: 'Xem token đã dùng và ước tính chi phí' },
     { name: 'help', description: 'Xem hướng dẫn nhanh' },
   ],
   en: [
     { name: 'new', description: 'Start a new conversation' },
     { name: 'clear', description: 'Clear and start over (same as /new)' },
-    { name: 'compact', description: 'Compact old messages to free up context' },
+    { name: 'compact', description: 'Compact old messages to free up context — /compact <what to keep> (optional)' },
     { name: 'model', description: 'Change model — /model <name>' },
     { name: 'mode', description: 'Change permission mode — /mode plan' },
     { name: 'thinking', description: 'Change reasoning level — /thinking high' },
     { name: 'skills', description: 'List available skills' },
     { name: 'retry', description: 'Re-run the last message' },
     { name: 'export', description: 'Download the conversation as Markdown' },
+    { name: 'fork', description: 'Branch this conversation into a new one' }, // (lane:sessions-ux)
+    { name: 'context', description: 'Show context usage, broken down by part' },
+    { name: 'cost', description: 'Show tokens used and the estimated cost' },
     { name: 'help', description: 'Quick help' },
   ],
 };
@@ -175,6 +189,9 @@ export class BrowserController {
   private abort: AbortController | null = null;
   /** Đang trong giai đoạn chuẩn bị của send() (trước khi `running` bật). */
   private starting = false;
+  /** Lời cảm ơn đang hiện sau khi người dùng chạm sao (không lưu: tắt khung là hết). */
+  private ratingThanks: { stars: number } | null = null;
+  private ratingFlush: Promise<void> | null = null;
   private readonly waiters = new Map<string, (d: PermissionDecision) => void>();
   private readonly host: BrowserToolHost;
   private readonly registry: ToolRegistry;
@@ -258,7 +275,7 @@ export class BrowserController {
       }
       if (this.session.mode === 'bypass' && !this.d.config.allowBypass()) this.session.mode = 'default';
       Object.keys(this.session.artifacts).forEach((k) => this.seenArtifacts.add(k));
-      this.view = { ...this.baseView(), transcript: p.transcript };
+      this.view = { ...this.baseView(), ...this.meterPatch(p.transcript), transcript: p.transcript };
       this.presence.resetSteps(maxStepOf(p.transcript) + 1);
       if (p.transcript.length) {
         // Tác vụ đang chạy dở bị dừng khi khung chat đóng: nói rõ để người dùng không tưởng nó đã xong.
@@ -293,8 +310,48 @@ export class BrowserController {
     return this.d.skills.list().map((s) => ({ name: s.name, description: s.description, loaded: this.session.loadedSkills.includes(s.name), source: s.source }));
   }
 
+  /** (lane:sessions-ux) Đồng hồ chi phí/nén ở tiêu đề (cùng logic với bản VS Code). */
+  private meterPatch(transcript?: readonly TItem[], session: SessionState = this.session): Pick<ViewState, 'meter'> {
+    return { meter: buildMeter(session, transcript ?? this.view?.transcript ?? [], findPricing(this.view?.providers, session.provider, session.model)) };
+  }
+
+  /** (lane:sessions-ux) Cổng cho rẽ nhánh / tìm kiếm / ghim / xoá hàng loạt — logic dùng chung với bản VS Code (src/host/sessionsUx.ts). */
+  private sessionsUxPort(): SessionsUxPort {
+    // eslint-disable-next-line @typescript-eslint/no-this-alias
+    const self = this;
+    return {
+      get lang() {
+        return self.lang;
+      },
+      get busy() {
+        return self.busy;
+      },
+      store: this.d.store,
+      session: () => this.session,
+      transcript: () => this.view?.transcript ?? [],
+      context: () => this.contextInfo(),
+      pricing: () => findPricing(this.view?.providers, this.session.provider, this.session.model),
+      saveNow: () => this.saveNow(),
+      open: (id) => this.loadSession(id),
+      refreshListings: async () => this.patch(await this.listings()),
+      post: (msg) => this.post(msg),
+      notice: (level, text) => this.emit({ t: 'notice', level, text }),
+      toast: (level, text) => this.toast(level, text),
+    };
+  }
+
   private contextInfo(): ViewState['context'] {
-    return { usedTokens: this.session.lastContextTokens, limitTokens: this.d.providers.contextWindow(this.session.provider, this.session.model) };
+    const usedTokens = this.session.lastContextTokens;
+    const limitTokens = this.d.providers.contextWindow(this.session.provider, this.session.model);
+    // (lane:ctx-compaction) số liệu giữ ngữ cảnh gọn cho thanh đo — đồng bộ với chatController.contextInfo()
+    const stats = this.session.contextStats;
+    return {
+      usedTokens,
+      limitTokens,
+      percent: limitTokens > 0 ? Math.round((usedTokens / limitTokens) * 100) : 0,
+      clearedResults: stats?.clearedResults ?? 0,
+      compactions: stats?.compactions ?? 0,
+    };
   }
 
   private browserState(tabs: TabsInfo = { tab: this.view?.browser?.tab ?? null, viewing: this.view?.browser?.viewing ?? null }, siteAccess = this.view?.browser?.siteAccess ?? false): BrowserViewState {
@@ -390,6 +447,7 @@ export class BrowserController {
     };
     this.post({ type: 'init', state: this.view });
     void this.refreshProvidersInBackground();
+    void this.flushRating();
   }
 
   private async refreshProvidersInBackground(force = false): Promise<void> {
@@ -550,7 +608,7 @@ export class BrowserController {
         this.patch({ skills: this.skillSummaries() });
         break;
       case 'usage':
-        this.patch({ context: this.contextInfo() });
+        this.patch({ context: this.contextInfo(), ...this.meterPatch() }); // (lane:sessions-ux)
         break;
       case 'mode':
         this.patch({ mode: ev.mode });
@@ -609,6 +667,12 @@ export class BrowserController {
         return this.startNewSession();
       case 'load_session':
         return this.loadSession(m.id);
+      // (lane:sessions-ux)
+      case 'fork_session':
+      case 'search_sessions':
+      case 'pin_session':
+      case 'delete_sessions':
+        return handleSessionsUxMessage(this.sessionsUxPort(), m);
       case 'delete_session':
         return this.deleteSession(m.id);
       case 'restore_session':
@@ -743,12 +807,35 @@ export class BrowserController {
         return;
       case 'open_external': {
         const u = String(m.url ?? '');
-        if (/^https?:\/\//i.test(u)) await this.d.api.openExternal(u);
+        if (/^https?:\/\//i.test(u)) await openExternalOnce(u, (x) => this.d.api.openExternal(x)); // (lane:customer-bugs) chống nảy đúp
         return;
       }
+      case 'rating_submit': {
+        // Chạm một sao = GỬI NGAY về Locaith (không mở trang nào, không bắt viết gì). Ghi nhận trước, gửi sau: mất mạng thì chờ lần mở khung kế tiếp.
+        const stars = m.stars;
+        if (typeof stars !== 'number' || !Number.isInteger(stars) || stars < 1 || stars > 5) return;
+        await this.d.config.submitRating(stars);
+        this.ratingThanks = { stars };
+        await this.syncRating();
+        await this.flushRating();
+        return;
+      }
+      case 'rating_comment': {
+        // Nhận xét bằng chữ là TUỲ CHỌN và chỉ có sau khi đã chấm sao.
+        const text = typeof m.text === 'string' ? m.text.trim().slice(0, RATING_COMMENT_MAX) : '';
+        if (!text || !this.ratingThanks) return;
+        await this.d.config.addRatingComment(text);
+        await this.flushRating();
+        return;
+      }
+      case 'rating_close':
+        this.ratingThanks = null;
+        await this.syncRating();
+        return;
       case 'rating_rate':
-        // Mở trang đánh giá Chrome Web Store rồi thôi hỏi (đã làm đúng việc người dùng muốn).
+        // Lựa chọn THÊM (nút riêng ở lời cảm ơn): đánh giá công khai trên Chrome Web Store — mở đúng trang rồi thôi hỏi.
         await this.d.config.markRatingOpened();
+        this.ratingThanks = null;
         await this.syncRating();
         await this.d.api.openExternal(RATING_URL[this.lang]).catch(() => undefined);
         return;
@@ -832,11 +919,43 @@ export class BrowserController {
   /** Hiện/ẩn dải mời đánh giá theo trạng thái đã lưu (chỉ bản trình duyệt). */
   private async syncRating(state?: RatingState): Promise<void> {
     const s = state ?? (await this.d.config.rating());
-    const show = shouldAskRating(s);
-    const next = show ? { sends: s.sends } : undefined;
+    const thanks = this.ratingThanks;
+    // Đang cảm ơn: giữ dải để báo «đã gửi» hay «sẽ gửi khi có mạng»; còn lại thì theo luật mời đánh giá.
+    const sentStars = !(s.pending ?? []).some((p) => p.kind === 'stars');
+    const next = thanks ? { sends: s.sends, picked: thanks.stars, sent: sentStars } : shouldAskRating(s) ? { sends: s.sends } : undefined;
     if (JSON.stringify(this.view.rating ?? null) === JSON.stringify(next ?? null)) return;
     this.view = { ...this.view, ...(next ? { rating: next } : { rating: undefined }) };
     this.patch({ rating: next });
+  }
+
+  /**
+   * Gửi các đánh giá đang chờ về Locaith (tuần tự, tối đa vài mục). Lỗi tạm → giữ lại để lần mở khung sau thử tiếp; máy chủ từ chối hẳn → bỏ.
+   * Không bao giờ ném lỗi và không chạy chồng hai lần.
+   */
+  private flushRating(): Promise<void> {
+    const send = this.d.sendFeedback;
+    if (!send) return Promise.resolve();
+    if (this.ratingFlush) return this.ratingFlush;
+    const run = (async () => {
+      try {
+        for (let i = 0; i < 4; i++) {
+          const s = await this.d.config.rating();
+          const p = s.pending?.[0];
+          if (!p) break;
+          const ctx = { version: this.d.version, lang: this.lang, sends: s.sends, browser: /\bEdg\//.test(globalThis.navigator?.userAgent ?? '') ? ('edge' as const) : ('chrome' as const) };
+          const res = await send(buildRatingPayload(p, ctx)).catch(() => 'retry' as const);
+          if (res === 'retry') break;
+          await this.d.config.markRatingSent(p.kind);
+        }
+      } catch (err) {
+        this.d.logger.log('warn', `Gửi đánh giá: ${err instanceof Error ? err.message : String(err)}`);
+      } finally {
+        this.ratingFlush = null;
+        await this.syncRating().catch(() => undefined);
+      }
+    })();
+    this.ratingFlush = run;
+    return run;
   }
 
   /** Nhận cuộc đang xem (đã nạp sẵn) làm cuộc hiện tại — không chặn, không mất gì của cuộc kia (đã lưu). */
@@ -859,7 +978,7 @@ export class BrowserController {
     this.presence.resetSteps(maxStepOf(p.transcript) + 1);
     this.seenArtifacts.clear();
     Object.keys(this.session.artifacts).forEach((k) => this.seenArtifacts.add(k));
-    this.view = { ...this.baseView(), transcript: p.transcript, providers: this.view.providers, ...(await this.listings()), screen: 'chat', browser: this.browserState(await this.currentTabs()) };
+    this.view = { ...this.baseView(), ...this.meterPatch(p.transcript), transcript: p.transcript, providers: this.view.providers, ...(await this.listings()), screen: 'chat', browser: this.browserState(await this.currentTabs()) };
     this.post({ type: 'init', state: this.view });
     await this.d.lastSession?.set(this.session.id);
   }
@@ -934,7 +1053,8 @@ export class BrowserController {
   private async createEngine(): Promise<AgentEngine> {
     const s = this.session;
     const provider = this.d.providers.get(s.provider);
-    const settings = { ...this.d.config.engine(), contextWindow: this.d.providers.contextWindow(s.provider, s.model) };
+    // (lane:output-timeouts) kèm trần đầu ra thật của model để trần thích ứng kẹp theo
+    const settings = { ...this.d.config.engine(), contextWindow: this.d.providers.contextWindow(s.provider, s.model), modelMaxOutputTokens: this.d.providers.maxOutputTokens(s.provider, s.model) };
     const fast = this.d.config.summarizerEnabled() ? await this.d.providers.fastTarget(s.provider) : null;
     const summarizer = fast ? new Summarizer({ provider: fast.provider, model: fast.model, language: settings.language, log: (l, m) => this.d.logger.log(l, m) }) : null;
     return new AgentEngine({
@@ -968,7 +1088,7 @@ export class BrowserController {
     this.emit({ t: 'run_state', running });
     if (!running) {
       this.flushNow();
-      void this.saveNow().then(async () => this.patch({ ...(await this.listings()), context: this.contextInfo() }));
+      void this.saveNow().then(async () => this.patch({ ...(await this.listings()), context: this.contextInfo(), ...this.meterPatch() })); // (lane:sessions-ux)
     }
   }
 
@@ -1012,7 +1132,7 @@ export class BrowserController {
       this.presence.resetSteps();
       this.seenArtifacts.clear();
       await this.d.lastSession?.set(undefined);
-      this.view = { ...this.baseView(), providers: this.view.providers, ...(await this.listings()), screen: 'chat', browser: this.browserState(await this.currentTabs()) };
+      this.view = { ...this.baseView(), ...this.meterPatch([]), providers: this.view.providers, ...(await this.listings()), screen: 'chat', browser: this.browserState(await this.currentTabs()) };
       this.post({ type: 'init', state: this.view });
     });
   }
@@ -1028,6 +1148,7 @@ export class BrowserController {
         type: 'init',
         state: {
           ...this.baseView(),
+          ...this.meterPatch(p.transcript, p.session), // (lane:sessions-ux)
           sessionId: p.session.id,
           title: p.session.title,
           provider: p.session.provider,
@@ -1070,7 +1191,7 @@ export class BrowserController {
       this.presence.resetSteps(maxStepOf(p.transcript) + 1);
       this.seenArtifacts.clear();
       Object.keys(this.session.artifacts).forEach((k) => this.seenArtifacts.add(k));
-      this.view = { ...this.baseView(), transcript: p.transcript, providers: this.view.providers, ...(await this.listings()), screen: 'chat', browser: this.browserState(await this.currentTabs()) };
+      this.view = { ...this.baseView(), ...this.meterPatch(p.transcript), transcript: p.transcript, providers: this.view.providers, ...(await this.listings()), screen: 'chat', browser: this.browserState(await this.currentTabs()) };
       this.post({ type: 'init', state: this.view });
       await this.d.lastSession?.set(this.session.id);
     });
@@ -1088,7 +1209,7 @@ export class BrowserController {
       this.pinnedTabId = undefined;
       this.presence.resetSteps();
       await this.d.lastSession?.set(undefined);
-      this.view = { ...this.baseView(), providers: this.view.providers, ...(await this.listings()), screen: 'history', browser: this.browserState(await this.currentTabs()) };
+      this.view = { ...this.baseView(), ...this.meterPatch([]), providers: this.view.providers, ...(await this.listings()), screen: 'history', browser: this.browserState(await this.currentTabs()) };
       this.post({ type: 'init', state: this.view });
       this.toast('info', trashedMsg);
       return;
@@ -1291,7 +1412,7 @@ export class BrowserController {
         await this.startNewSession();
         return true;
       case 'compact':
-        await this.compact();
+        await this.compact(args); // (lane:ctx-compaction) /compact <hướng dẫn>
         return true;
       case 'retry':
         await this.retryLast(false);
@@ -1299,6 +1420,20 @@ export class BrowserController {
       case 'export':
         await this.exportChat();
         return true;
+      // (lane:sessions-ux)
+      case 'fork':
+        await forkCurrent(this.sessionsUxPort());
+        return true;
+      case 'context': {
+        const port = this.sessionsUxPort();
+        info(contextReport({ lang: this.lang, ctx: this.contextInfo(), messages: this.session.messages, stats: getPromptStats(this.session), meter: buildMeter(this.session, this.view.transcript, port.pricing()) }));
+        return true;
+      }
+      case 'cost': {
+        const port = this.sessionsUxPort();
+        info(costReport({ lang: this.lang, meter: buildMeter(this.session, this.view.transcript, port.pricing()), pricing: port.pricing(), model: this.session.model }));
+        return true;
+      }
       case 'skills': {
         const list = this.d.skills.list().map((s) => `- **${s.name}**${this.session.loadedSkills.includes(s.name) ? ' ✓' : ''}: ${s.description}`);
         info(`${vi ? 'Kỹ năng có sẵn' : 'Available skills'}:\n${list.join('\n')}`);
@@ -1355,7 +1490,8 @@ export class BrowserController {
     }
   }
 
-  private async compact(): Promise<void> {
+  /** (lane:ctx-compaction) `/compact [hướng dẫn]` — thông báo mang số liệu `compact` cho dòng thời gian. */
+  private async compact(instructions = ''): Promise<void> {
     if (this.busy) return this.toast('info', this.lang === 'vi' ? 'Hãy dừng tác vụ đang chạy trước.' : 'Stop the running task first.');
     if (this.session.messages.length < 4) {
       this.emit({ t: 'notice', level: 'info', text: this.lang === 'vi' ? 'Cuộc trò chuyện còn ngắn, chưa cần nén.' : 'The conversation is short; nothing to compact.' });
@@ -1366,13 +1502,15 @@ export class BrowserController {
     this.abort = abort;
     try {
       const engine = await this.createEngine();
-      const msg = await engine.compactNow(this.session, abort.signal);
-      this.emit({ t: 'notice', level: 'info', text: msg ?? (this.lang === 'vi' ? 'Không có gì để nén.' : 'Nothing to compact.') });
+      const r = await engine.compactWith(this.session, abort.signal, { instructions: instructions.trim() || undefined });
+      if (r) this.emit({ t: 'notice', level: 'info', text: r.text, compact: r.compact });
+      else this.emit({ t: 'notice', level: 'info', text: this.lang === 'vi' ? 'Không có gì để nén.' : 'Nothing to compact.' });
     } catch (err) {
       this.emit({ t: 'notice', level: 'error', text: err instanceof Error ? err.message : String(err) });
     } finally {
       this.abort = null;
       this.setRunning(false);
+      this.patch({ context: this.contextInfo() }); // (lane:ctx-compaction) số đo ngữ cảnh mới sau khi nén
     }
   }
 
@@ -1394,6 +1532,7 @@ export class BrowserController {
     const content = msgs[idx].content;
     // Cắt đuôi chỉ để lại một TIỀN TỐ nguyên vẹn của hội thoại cũ nên khối suy luận còn lại vẫn hợp lệ — không đặt `historyEdited`.
     this.session.messages = msgs.slice(0, idx);
+    this.session.lastContextTokens = 0; // số đo của lịch sử đã bị cắt (xlane)
     this.patch({ transcript: this.view.transcript.slice(0, ti) });
     if (editOnly) {
       // Tệp tải lên: bản hiển thị không còn phần chữ → lấy lại từ bản lưu của tin cuối (nếu còn); phiên mới khôi phục từ kho thì phải đính kèm lại.

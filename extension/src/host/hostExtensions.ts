@@ -12,12 +12,12 @@ import type { SessionState } from '../core/engine/types';
 import type { VsCodeToolHost } from './vscodeHost';
 import type { ControllerDeps } from './chatController';
 // ── import của từng tính năng (mỗi lane một dòng, bỏ dấu // khi dùng) ──
-// import { verifierExtension } from './extensions/verifier'; // (lane:blind-verifier)
-// import { hooksExtension } from './extensions/hooks'; // (lane:hooks)
-// import { backgroundTasksExtension } from './extensions/backgroundTasks'; // (lane:bg-tasks)
-// import { ideDiagnosticsExtension } from './extensions/ideDiagnostics'; // (lane:ide-context)
+import { verifierExtension } from './extensions/verifier'; // (lane:blind-verifier)
+import { hooksExtension } from './extensions/hooks'; // (lane:hooks)
+import { backgroundTasksExtension } from './extensions/backgroundTasks'; // (lane:bg-tasks)
+import { ideDiagnosticsExtension } from './extensions/ideDiagnostics'; // (lane:ide-context)
 // import { instructionsExtension } from './extensions/instructions'; // (lane:instructions-memory)
-// import { permissionRulesExtension } from './extensions/permissionRules'; // (lane:perm-rules)
+import { permissionRulesExtension } from './extensions/permissionRules'; // (lane:perm-rules)
 // import { checkpointsExtension } from './extensions/checkpoints'; // (lane:checkpoints-rewind)
 
 /** Mọi thứ một extension phía host có thể cần. Cần thêm gì thì lấy từ `deps` (ControllerDeps) — đừng sửa interface này. */
@@ -32,12 +32,20 @@ export interface HostExtensionContext {
 export function hostRunExtensions(ctx: HostExtensionContext): RunExtension[] {
   void ctx;
   return [
-    // permissionRulesExtension(ctx), // (lane:perm-rules)
-    // hooksExtension(ctx), // (lane:hooks)
-    // ideDiagnosticsExtension(ctx), // (lane:ide-context)
+    permissionRulesExtension(ctx), // (lane:perm-rules)
+    hooksExtension(ctx), // (lane:hooks)
+    ideDiagnosticsExtension(ctx), // (lane:ide-context)
     // instructionsExtension(ctx), // (lane:instructions-memory)
     // checkpointsExtension(ctx), // (lane:checkpoints-rewind)
-    // backgroundTasksExtension(ctx), // (lane:bg-tasks)
-    // verifierExtension(ctx), // (lane:blind-verifier)  — luôn ĐỨNG CUỐI: kiểm tra sau khi mọi cổng khác đã chấp nhận
+    backgroundTasksExtension(ctx), // (lane:bg-tasks)
+    verifierExtension(ctx), // (lane:blind-verifier)  — luôn ĐỨNG CUỐI: kiểm tra sau khi mọi cổng khác đã chấp nhận
   ];
+}
+
+/**
+ * Extension cho engine của AGENT CON (`agent`, `workflow_run`): luật quyền (deny/ask/allow) + hook PreToolUse/PostToolUse. Thiếu luật quyền ở đây thì
+ * luật `deny` bị vượt qua chỉ bằng cách nhờ agent con làm thay (xlane). `hooksSub` do controller truyền vào (nó giữ dịch vụ hook).
+ */
+export function hostSubAgentExtensions(ctx: HostExtensionContext, hooksSub: RunExtension): RunExtension[] {
+  return [permissionRulesExtension(ctx), hooksSub];
 }

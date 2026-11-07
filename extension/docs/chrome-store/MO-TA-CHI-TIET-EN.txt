@@ -1,0 +1,17 @@
+Locaith AI is an AI assistant that lives in the side panel of Chrome and Microsoft Edge.
+
+• Ask about the page you are viewing: summarise it, pull figures into a table, translate, explain a highlighted passage (right-click → "Ask Locaith AI about the selection", "Explain the selection", "Summarize this page").
+• Search the web and read the pages it finds directly, so answers come with sources.
+• Draft reports, tables, charts and interactive pages right in the chat, and download the results. You can attach PDF, Word, Excel and text files to ask about their contents.
+• Work through multi-step tasks on a page: click, type, select, scroll, open and switch tabs. By default the extension asks before every action; "Full access" mode only turns on when you ask for it. You can stop it at any time.
+• Keep your conversation history on this device, search it, branch it, export it as Markdown.
+
+You use your own API key with the model provider you choose, or sign in with a provider account where one-click sign-in is supported. A demo mode lets you try the interface right away, no key needed.
+
+Privacy:
+• On first use the extension tells you exactly what data goes where, and only runs after you agree.
+• Your API key is kept in the extension's own storage on this device (not encrypted) and is only sent to the provider it belongs to.
+• The extension reads a page only when you ask or give a command. Access to all sites is optional, requested only when you press a button in Settings, and can be revoked at any time.
+• No remote code, no ads, no browsing-history tracking, no selling of data.
+
+Privacy policy: https://www.locaith.ai/chinh-sach-quyen-rieng-tu-chrome/

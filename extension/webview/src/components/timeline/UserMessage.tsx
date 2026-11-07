@@ -2,14 +2,15 @@ import { useState } from 'preact/hooks';
 import type { UserItem } from '../../../../src/shared/protocol';
 import { useApp } from '../../ctx';
 import { cx, memo } from '../../util';
-import { post } from '../../vscode';
 import { AttachmentChip } from '../Chips';
 import { Icon } from '../Icons';
+import { MessageActionSlot } from './MessageActionSlot'; // (lane:cc-timeline-ui)
+import { MessageMenu } from '../MessageMenu'; // (lane:sessions-ux)
 
 const CLAMP_CHARS = 900;
 const CLAMP_LINES = 14;
 
-function UserMessageView({ item, canEdit }: { item: UserItem; canEdit: boolean }) {
+function UserMessageView({ item, canEdit, busy = false }: { item: UserItem; canEdit: boolean; busy?: boolean }) {
   const { t } = useApp();
   const [expanded, setExpanded] = useState(false);
   const long = item.text.length > CLAMP_CHARS || item.text.split('\n').length > CLAMP_LINES;
@@ -37,17 +38,8 @@ function UserMessageView({ item, canEdit }: { item: UserItem; canEdit: boolean }
             {expanded ? t('tool.showLess') : t('act.expand')}
           </button>
         )}
-        {canEdit && (
-          <button
-            type="button"
-            class="user-edit"
-            title={t('turn.editLast')}
-            aria-label={t('turn.editLast')}
-            onClick={() => post({ type: 'edit_last' })}
-          >
-            <Icon name="pencil" size={13} />
-          </button>
-        )}
+        {/* (lane:cc-timeline-ui) ô thao tác góc trên-phải; (lane:sessions-ux) menu ⋯: Sao chép · Sửa và gửi lại · Rẽ nhánh từ đây (thay nút bút chì đơn lẻ); lane checkpoints-rewind gắn thêm biểu tượng quay lại vào đây. */}
+        <MessageActionSlot>{!item.steer && <MessageMenu itemId={item.id} text={item.text} canEdit={canEdit} busy={busy} />}</MessageActionSlot>
       </div>
     </section>
   );

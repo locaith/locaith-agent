@@ -1,0 +1,17 @@
+Locaith AI là trợ lý AI nằm ngay trong thanh bên của Chrome và Microsoft Edge.
+
+• Hỏi về trang đang xem: tóm tắt, trích số liệu thành bảng, dịch, giải thích đoạn bôi đen (chuột phải → «Hỏi Locaith AI về đoạn đã chọn», «Giải thích đoạn đã chọn», «Tóm tắt trang này»).
+• Tra cứu web và đọc thẳng các trang tìm được để trả lời kèm nguồn.
+• Soạn báo cáo, bảng, biểu đồ và trang tương tác ngay trong khung chat; tải kết quả về máy. Có thể đính kèm tệp PDF, Word, Excel, văn bản để hỏi về nội dung.
+• Làm việc nhiều bước trên trang: bấm, gõ, chọn, cuộn, mở và chuyển tab. Mặc định tiện ích hỏi trước mỗi thao tác; chế độ «Toàn quyền» chỉ bật khi chính bạn yêu cầu. Dừng được bất cứ lúc nào.
+• Lưu lịch sử trò chuyện trên máy, tìm lại, rẽ nhánh, xuất ra tệp Markdown.
+
+Bạn dùng khoá API của riêng mình với nhà cung cấp mô hình AI mình chọn, hoặc đăng nhập bằng tài khoản nhà cung cấp hỗ trợ đăng nhập một chạm. Có chế độ demo để thử giao diện ngay, không cần khoá.
+
+Quyền riêng tư:
+• Ở lần mở đầu tiên, tiện ích nêu rõ dữ liệu nào được gửi tới đâu và chỉ chạy sau khi bạn đồng ý.
+• Khoá API lưu trong bộ nhớ riêng của tiện ích trên máy này (không mã hoá), chỉ gửi tới đúng nhà cung cấp của khoá.
+• Tiện ích chỉ đọc trang khi bạn hỏi hoặc ra lệnh. Quyền đọc mọi trang là tuỳ chọn, chỉ xin khi bạn bấm nút trong Cài đặt, và thu hồi được bất cứ lúc nào.
+• Không tải mã từ internet, không quảng cáo, không theo dõi lịch sử duyệt web, không bán dữ liệu.
+
+Chính sách quyền riêng tư: https://www.locaith.ai/chinh-sach-quyen-rieng-tu-chrome/

@@ -49,6 +49,7 @@ export { TRASH_DAYS };
 const DAY_MS = 24 * 60 * 60 * 1000;
 const INDEX = 'index.json';
 const TRASH_INDEX = 'trash.index.json';
+const PINS = 'pinned.list.json'; // (lane:sessions-ux)
 const SESSION_FILE = /^[\w-]+\.json$/;
 const TRASH_FILE = /^trash\.([\w-]+)\.json$/;
 const SAFE_ID = /^[\w-]+$/;
@@ -222,10 +223,11 @@ export class BaseSessionStore {
     return this.enqueue(async () => {
       const { idx, changed } = await this.syncIndex();
       if (changed) await this.writeIndex(idx);
+      const pins = await this.readPins(); // (lane:sessions-ux)
       return idx
         .filter((e) => e.workspace === this.workspaceKey)
         .sort((a, b) => b.updatedAt - a.updatedAt)
-        .map(({ workspace: _w, ...rest }) => rest);
+        .map(({ workspace: _w, ...rest }) => (pins.has(rest.id) ? { ...rest, pinned: true } : rest));
     });
   }
 
@@ -234,9 +236,35 @@ export class BaseSessionStore {
     return this.enqueue(async () => {
       const { idx, changed } = await this.syncIndex();
       if (changed) await this.writeIndex(idx);
+      const pins = await this.readPins(); // (lane:sessions-ux)
       return [...idx]
         .sort((a, b) => b.updatedAt - a.updatedAt)
-        .map(({ workspace, workspaceName, ...rest }) => (workspace === this.workspaceKey ? rest : { ...rest, other: true, ...(workspaceName ? { workspaceName } : {}) }));
+        .map(({ workspace, workspaceName, ...rest }) => (workspace === this.workspaceKey ? rest : { ...rest, other: true, ...(workspaceName ? { workspaceName } : {}) }))
+        .map((s) => (pins.has(s.id) ? { ...s, pinned: true } : s));
+    });
+  }
+
+  // ── (lane:sessions-ux) Ghim cuộc trò chuyện: tệp riêng `pinned.list.json` (tên có dấu chấm nên không bị nhận nhầm là tệp phiên). ──
+
+  private async readPins(): Promise<Set<string>> {
+    try {
+      const v = JSON.parse(dec.decode(await this.io.read(PINS)));
+      return new Set(Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string' && SAFE_ID.test(x)) : []);
+    } catch {
+      return new Set();
+    }
+  }
+
+  /** Ghim / bỏ ghim. Đồng thời dọn mã của cuộc không còn tồn tại. */
+  setPinned(id: string, pinned: boolean): Promise<void> {
+    return this.enqueue(async () => {
+      if (!SAFE_ID.test(id)) return;
+      const pins = await this.readPins();
+      if (pinned) pins.add(id);
+      else pins.delete(id);
+      const { idx } = await this.syncIndex();
+      const live = new Set(idx.map((e) => e.id));
+      await this.io.write(PINS, enc.encode(JSON.stringify([...pins].filter((p) => live.has(p)).slice(0, 500))));
     });
   }
 

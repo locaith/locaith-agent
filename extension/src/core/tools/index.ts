@@ -4,10 +4,13 @@ import { createChromeTool, type ChromeCaller } from '../chrome/tools';
 import type { SkillRegistry } from '../skills/registry';
 import { ToolRegistry } from '../engine/toolRegistry';
 import type { ToolHost } from '../engine/types';
+import { showBeforeAfterTool } from './beforeAfter';
 import { createArtifactTool, listArtifactTypesTool, updateArtifactTool } from './artifact';
+import { getDiagnosticsTool } from './diagnostics'; // (lane:ide-context)
 import { editFileTool, globTool, grepTool, listDirTool, readFileTool, writeFileTool } from './fs';
 import { createSkillTools, exitPlanModeTool, offerOptionsTool, rememberTool, scratchpadTool, todoWriteTool, type MarketSearch } from './meta';
 import { createTerminalTool } from './terminal';
+import { backgroundTools } from './backgroundTools'; // (lane:bg-tasks)
 import { fetchUrlTool, webSearchTool } from './web/web';
 
 export interface ToolRegistryOptions {
@@ -43,15 +46,22 @@ export function createToolRegistry(opts: ToolRegistryOptions): ToolRegistry {
     .register(createTerminalTool(opts.host))
     .register(scratchpadTool)
     .register(exitPlanModeTool);
+  if (opts.host.startProcess) for (const t of backgroundTools) r.register(t); // (lane:bg-tasks) command_output / command_stop / command_list
   // Agent con: `agent` luôn có; `workflow_run` ẩn cho tới khi kỹ năng `multi-agent` được nạp.
   if (opts.agents) for (const t of createAgentTools({ ...opts.agents, registry: () => r })) r.register(t);
   if (opts.chrome) r.register(createChromeTool(opts.chrome) as never);
+  // (lane:ide-context) Chẩn đoán IDE: chỉ khi host có language server (VS Code). CLI/Chrome không có → công cụ không xuất hiện.
+  if (opts.host.diagnostics) r.register(getDiagnosticsTool);
   // Công cụ ẩn: chỉ mở khi kỹ năng `artifacts` được nạp.
   r.register(listArtifactTypesTool).register(createArtifactTool).register(updateArtifactTool);
+  // (lane:customer-bugs) Công cụ ẩn: chỉ mở khi kỹ năng `ui-truoc-sau` được nạp.
+  r.register(showBeforeAfterTool);
   return r;
 }
 
 export * from './artifact';
+export * from './diagnostics'; // (lane:ide-context)
+export * from './beforeAfter';
 export * from './fs';
 export * from './meta';
 export * from './terminal';

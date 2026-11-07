@@ -91,6 +91,21 @@ Ghép đôi từng trình duyệt (liên kết/QR + so mã + «Cho phép») quá
 
 Client theo dõi `seq`: tin tới **trước** snapshot được giữ lại rồi áp sau; hở số ở luồng trực tiếp ⇒ chờ 400 ms cho chỗ trống được lấp (đảo thứ tự) rồi mới `sub{since}` để bù; `epoch` đổi (host khởi động lại) ⇒ snapshot mới (hiện diện cũng mang `epoch` để biết ngay); im lặng 45 s ⇒ bắt tay lại.
 
+### Trường hiển thị tuỳ chọn cho dòng thời gian gọn (0.6.31, `REMOTE_API_VERSION` KHÔNG đổi)
+
+Trang Remote vẽ dòng thời gian theo đặc tả [TIMELINE-SPEC.md](TIMELINE-SPEC.md). Dữ liệu chỉ thêm **trường tuỳ chọn** vào loại đã có — reducer `switch` kín của bản web cũ vẫn chạy, chỉ không vẽ thứ mới:
+
+| Ở đâu | Trường | Ý nghĩa | `sanitize.ts` |
+|---|---|---|---|
+| sự kiện `thinking` | `ts?: number` | lúc delta được phát (engine đóng dấu) | giữ nếu là số nguyên không âm hợp lệ, bỏ nếu lạ (`sanitizeEvent`) |
+| khối `thinking` | `startedAt?`, `durationMs?` | reducer `transcript.ts` tính từ `ts`: «Đã suy nghĩ 14 giây» | số nguyên không âm; giá trị lạ bị bỏ (`sanitizeBlock`); chữ vẫn cắt 4000 |
+| khối/mục `notice` | `compact?: CompactInfo` | dòng «Đã nén cuộc trò chuyện · tự động · giải phóng 968k token» | đã có từ trước (`sanitizeCompact`) |
+| khối `tool` | `args.description` (chuỗi) | mô tả một dòng do model đặt, ưu tiên hiển thị | cắt 600 ký tự như mọi đối số |
+| khối `tool` | `summary` «58 dòng» | số dòng của Write — nguồn DUY NHẤT ở Remote vì `args.content` bị cắt 600 ký tự | không đổi |
+| khối `tool` | `args.run_in_background` / `args.background` = true | dòng phụ «Chạy nền» | không đổi |
+
+Bản web không cần đổi gì để tiếp tục chạy; muốn vẽ giống VS Code thì chép các hàm thuần liệt kê trong TIMELINE-SPEC.md. Kiểm thử: `npx vitest run test/thinkingDuration.test.ts test/compactNotice.test.ts test/remoteSanitize.test.ts`.
+
 ## 3. Giới hạn & hằng số
 
 Realtime (gói Free): ≤ 250 KB/tin (ta giữ < 80 KB), 100 tin/giây/dự án, 200 kết nối đồng thời. Host: ≤ 5 phiên/thiết bị, ≤ 10 phiên «tài khoản» (0.6.5), ≤ 20 phiên tổng, phiên chưa xác lập 30 s, im lặng 90 s thì bỏ;

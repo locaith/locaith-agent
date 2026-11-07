@@ -9,8 +9,11 @@
 
 import type { ModelInfo, ThinkingLevel, Usage } from '../core/types';
 import type { DocKind } from './docKinds';
+import type { SessionMeterView, SessionSearchHit } from './sessionsUxTypes'; // (lane:sessions-ux)
+import type { CheckpointTurn, RewindScope, RewindView, RewindWhat } from './checkpoints'; // (lane:checkpoints-rewind)
 
 export type { DocKind, ModelInfo, ThinkingLevel, Usage };
+export type { SessionMeterView, SessionSearchHit }; // (lane:sessions-ux)
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Kiểu dữ liệu hiển thị
@@ -24,12 +27,15 @@ export type { DocKind, ModelInfo, ThinkingLevel, Usage };
  */
 export type PermissionMode = 'default' | 'acceptEdits' | 'plan' | 'bypass';
 
-export type TodoStatus = 'pending' | 'in_progress' | 'completed';
+/** (lane:loop-guards) 'blocked' = việc không đóng được, kèm `note` lý do; phiên cũ không có giá trị này (tuỳ chọn, tương thích ngược). */
+export type TodoStatus = 'pending' | 'in_progress' | 'completed' | 'blocked';
 
 export interface TodoItem {
   id: string;
   title: string;
   status: TodoStatus;
+  /** (lane:loop-guards) Lý do ngắn khi `status === 'blocked'` (tuỳ chọn). */
+  note?: string;
 }
 
 /**
@@ -44,6 +50,8 @@ export interface SuggestionOption {
   prompt: string;
   /** Một dòng giải thích thêm (tuỳ chọn). */
   detail?: string;
+  /** (lane:output-timeouts) 'continue' = nút «Chạy tiếp (phần N)» do harness phát khi lượt bị cắt/buộc dừng — giao diện vẽ gọn một dòng. Bản cũ bỏ qua: vẫn là nút thường. */
+  kind?: 'continue';
 }
 
 export interface DiffLine {
@@ -88,6 +96,10 @@ export interface PermissionRequest {
   canAllowSession: boolean;
   /** Nhãn của lựa chọn phiên, ví dụ "Luôn cho phép `npm test` trong phiên này". */
   sessionLabel?: string;
+  /** (lane:perm-rules) Luật `ask` đã buộc hỏi (dạng `run_command(git push*)`), nếu có. */
+  rule?: string;
+  /** (lane:perm-rules) Đặc tả «Luôn cho phép» đề xuất (phần tử đầu là chính; người dùng sửa được). Thiếu/rỗng = không đề xuất. */
+  suggest?: string[];
 }
 
 export type PillKind = 'thinking' | 'writing' | 'working';
@@ -139,6 +151,8 @@ export interface ToolBlock {
   permission?: PermissionRequest;
   /** Chỉ có ở công cụ `agent` / `workflow_run`: tiến độ sống (xem AgentProgress). Thiếu → dòng công cụ thường như trước. */
   agent?: AgentProgress;
+  /** (lane:perm-rules) Luật `allow` đã cho lệnh này qua không cần hỏi, ví dụ `run_command(npm test:*)`. */
+  rule?: string;
   startedAt: number;
   durationMs?: number;
 }
@@ -159,10 +173,51 @@ export interface CompactInfo {
   summary?: string;
 }
 
+/**
+ * (lane:ctx-compaction) Thanh đo ngữ cảnh. Hai trường đầu là của bản cũ (Remote cũ vẫn đọc được); phần còn lại tuỳ chọn.
+ */
+export interface ContextInfo {
+  usedTokens: number;
+  limitTokens: number;
+  /** usedTokens / limitTokens × 100, làm tròn (0–100+). */
+  percent?: number;
+  /** Số kết quả công cụ cũ đã lược trong phiên (đọc lại được). */
+  clearedResults?: number;
+  /** Số lần tóm tắt toàn bộ trong phiên. */
+  compactions?: number;
+}
+
+/**
+ * (lane:blind-verifier) Kết quả KIỂM TRA ĐỘC LẬP (reviewer mù) gắn vào một thông báo `notice`. Trường tuỳ chọn trên loại sẵn có
+ * → đi qua relay nguyên vẹn; bản Remote cũ không biết trường này vẫn hiện `text` (đã mang đủ nội dung).
+ */
+export interface VerifyInfo {
+  /** Khoá để cập nhật tại chỗ: cùng khoá trong cùng lượt → thay dòng cũ (đang chạy → kết quả). */
+  key: string;
+  state: 'running' | 'pass' | 'fail' | 'uncertain' | 'skipped';
+  /** Vòng kiểm tra (1-based) / tối đa. */
+  round: number;
+  maxRounds: number;
+  missing?: string[];
+  defects?: string[];
+  unverifiedClaims?: string[];
+  /** Hết vòng mà vẫn còn mục chưa xử lý: danh sách trên là TỒN ĐỌNG đã báo cho người dùng. */
+  outstanding?: boolean;
+  /** Vì sao không kiểm tra được (skipped) — chữ ngắn cho người dùng. */
+  reason?: string;
+  durationMs?: number;
+  model?: string;
+  tokens?: number;
+}
+
 export type ABlock =
   | { type: 'text'; id: string; text: string }
-  /** Văn bản suy luận thật do hãng trả (nếu có) — hiển thị trong khối thu gọn. */
-  | { type: 'thinking'; id: string; text: string }
+  /**
+   * Văn bản suy luận thật do hãng trả (nếu có) — hiển thị trong khối thu gọn.
+   * (lane:cc-timeline-ui) `startedAt`/`durationMs` TUỲ CHỌN: mốc delta đầu và khoảng tới delta cuối (từ `ts` của sự kiện `thinking`),
+   * để vẽ «Đã suy nghĩ 14 giây». Phiên cũ không có → chỉ «Đã suy nghĩ».
+   */
+  | { type: 'thinking'; id: string; text: string; startedAt?: number; durationMs?: number }
   /** Dòng trạng thái chạy trực tiếp ("Đang đối chiếu điểm số…"): chấm cam khi đang chạy, xám khi xong. */
   | { type: 'pill'; id: string; text: string; kind: PillKind; active: boolean }
   /** "Đã thêm tác vụ: …" */
@@ -171,7 +226,7 @@ export type ABlock =
   | { type: 'skill'; id: string; skill: string; unlocked: string[] }
   | ToolBlock
   | ({ type: 'artifact'; id: string; state: 'writing' | 'ready'; sizeChars?: number } & ArtifactRef)
-  | { type: 'notice'; id: string; level: 'info' | 'warn' | 'error'; text: string; compact?: CompactInfo };
+  | { type: 'notice'; id: string; level: 'info' | 'warn' | 'error'; text: string; compact?: CompactInfo; verify?: VerifyInfo /* (lane:blind-verifier) */ };
 
 /** Tệp người dùng tải lên (PDF, Word, Excel, HTML, CSV, TXT) sau khi đã được đọc thành chữ. */
 export interface DocInfo {
@@ -242,6 +297,10 @@ export interface NoticeItem {
   text: string;
   ts: number;
   compact?: CompactInfo;
+  /** (lane:blind-verifier) Kết quả kiểm tra độc lập chạy tay (/verify) — thông báo độc lập. */
+  verify?: VerifyInfo;
+  /** (lane:sessions-ux) Dòng đầu nhánh: «Rẽ nhánh từ …» — bấm để mở cuộc gốc. Tuỳ chọn: bản cũ / Remote cũ chỉ thấy dòng chữ. */
+  fork?: { fromId: string; fromTitle: string };
 }
 
 export type TItem = UserItem | AssistantItem | NoticeItem;
@@ -253,15 +312,20 @@ export type TItem = UserItem | AssistantItem | NoticeItem;
 export type UiEvent =
   | { t: 'user'; id: string; text: string; attachments: AttachmentInfo[]; ts: number; steer?: boolean }
   | { t: 'assistant_start'; id: string; provider: string; model: string; ts: number }
-  /** Nối vào khối văn bản cuối của lượt trả lời `id` (hoặc mở khối mới nếu khối cuối không phải văn bản). */
-  | { t: 'text'; id: string; delta: string }
-  | { t: 'thinking'; id: string; delta: string }
+  /**
+   * Nối vào khối văn bản cuối của lượt trả lời `id` (hoặc mở khối mới nếu khối cuối không phải văn bản).
+   * (lane:output-timeouts) `trimTail`: bỏ bấy nhiêu ký tự ở CUỐI khối văn bản cuối TRƯỚC khi nối `delta` — dùng khi harness lùi câu trả lời
+   * bị cắt về ranh giới câu. Trường tuỳ chọn: bản cũ/Remote cũ bỏ qua và chỉ nối `delta`.
+   */
+  | { t: 'text'; id: string; delta: string; trimTail?: number }
+  /** (lane:cc-timeline-ui) `ts` tuỳ chọn: lúc delta này được phát (engine đóng dấu) → reducer tính thời lượng suy nghĩ. */
+  | { t: 'thinking'; id: string; delta: string; ts?: number }
   /** Tạo mới hoặc cập nhật dòng trạng thái: cùng pillId và dòng đó còn active → thay chữ; ngược lại mở dòng mới, các dòng active cũ chuyển xám. */
   | { t: 'pill'; id: string; pillId: string; text: string; kind: PillKind }
   /** Danh sách tác vụ hiện tại (ảnh chụp đầy đủ) + những tiêu đề vừa được thêm lần này. */
   | { t: 'tasks'; id: string; todos: TodoItem[]; added: string[] }
   | { t: 'skill'; id: string; skill: string; unlocked: string[] }
-  | { t: 'tool_start'; id: string; callId: string; name: string; args: Record<string, unknown> }
+  | { t: 'tool_start'; id: string; callId: string; name: string; args: Record<string, unknown>; /* (lane:perm-rules) */ rule?: string }
   | { t: 'tool_progress'; id: string; callId: string; output: string }
   /** Ảnh chụp tiến độ MỚI NHẤT (không phải số gia) của agent con đang chạy — gộp được: chỉ giữ cái cuối cùng cho mỗi callId. */
   | ({ t: 'agent_progress'; id: string; callId: string } & AgentProgress)
@@ -282,7 +346,7 @@ export type UiEvent =
   | { t: 'usage'; id: string; usage: Usage; contextTokens?: number }
   | { t: 'assistant_end'; id: string; stopReason: string }
   /** Có id → gắn vào lượt trả lời đó; không có → thành NoticeItem độc lập. */
-  | { t: 'notice'; id?: string; level: 'info' | 'warn' | 'error'; text: string; compact?: CompactInfo }
+  | { t: 'notice'; id?: string; level: 'info' | 'warn' | 'error'; text: string; compact?: CompactInfo; verify?: VerifyInfo /* (lane:blind-verifier) */ }
   | { t: 'run_state'; running: boolean }
   | { t: 'mode'; mode: PermissionMode }
   /** Cập nhật bảng tác vụ cố định phía trên ô nhập. */
@@ -361,6 +425,8 @@ export interface SessionSummary {
   /** Cuộc trò chuyện được tạo khi mở thư mục làm việc khác. */
   other?: boolean;
   workspaceName?: string;
+  /** (lane:sessions-ux) Đã ghim lên đầu danh sách lịch sử. */
+  pinned?: boolean;
 }
 
 /** Cuộc trò chuyện đã xoá, đang nằm trong Thùng rác (khôi phục được trong 30 ngày). */
@@ -565,6 +631,8 @@ export interface EditorContextInfo {
   file?: string;
   language?: string;
   selection?: { startLine: number; endLine: number; chars: number };
+  /** (lane:ide-context) Người dùng đã tắt việc gửi kèm tệp/vùng chọn của editor (cài đặt `context.editor`). Chip vẫn hiện để bật lại. */
+  off?: boolean;
 }
 
 /** Tab mà trợ lý đang "nhìn" (bản trình duyệt). */
@@ -774,8 +842,8 @@ export interface ViewState {
   /** Thùng rác: các cuộc trò chuyện đã xoá, còn khôi phục được. */
   trash: TrashSummary[];
   workspace: { name: string; folders: string[] } | null;
-  /** Ước lượng token đang dùng so với giới hạn của model. */
-  context: { usedTokens: number; limitTokens: number } | null;
+  /** Ước lượng token đang dùng so với giới hạn của model (+ số liệu giữ ngữ cảnh gọn — lane:ctx-compaction). */
+  context: ContextInfo | null;
   editor: EditorContextInfo | null;
   skills: SkillSummary[];
   slashCommands: SlashCommandInfo[];
@@ -807,19 +875,52 @@ export interface ViewState {
   // ── (lane:loop-guards) ──
   // ── (lane:blind-verifier) ──
   // ── (lane:checkpoints-rewind) ──
+  /** Checkpoint từng lượt (tệp trợ lý đã sửa, đã chụp bản gốc). CÓ MẶT (kể cả mảng rỗng) = host hỗ trợ Quay lại; vắng = bản trình duyệt / không hỗ trợ. */
+  checkpoints?: CheckpointTurn[];
+  /** Thẻ «Quay lại» đang mở (menu / xem trước / kết quả). null = đóng. */
+  rewind?: RewindView | null;
   // ── (lane:perm-rules) ──
+  /** Bộ luật quyền allow/ask/deny (khu quản lý trong Cài đặt, lệnh /permissions). Chỉ bản VS Code; không gửi ra Remote. */
+  permissions?: PermissionsView;
   // ── (lane:hooks) ──
   // ── (lane:commands-agents) ──
   // ── (lane:bg-tasks) ──
+  /** (lane:bg-tasks) Tác vụ nền của cuộc trò chuyện đang mở (chip «N tác vụ nền»). Vắng = không có. */
+  bgTasks?: import('./bgTasks').BgTaskView[];
   // ── (lane:ide-context) ──
   // ── (lane:sessions-ux) ──
+  /** Đồng hồ ngữ cảnh + chi phí ở thanh tiêu đề (token vào/ra, số lần nén, ước tính chi phí). */
+  meter?: SessionMeterView;
   // ── (lane:customer-bugs) ──
   // ── (lane:gateway-client) ──
   // ── (lane:mcp-parity) ──
   // ── (lane:instructions-memory) ──
   // ── (lane:tools-parity) ──
-  /** Lời mời đánh giá trên Chrome Web Store (chỉ bản trình duyệt, chỉ hiện sau vài lần dùng). */
-  rating?: { sends: number };
+  /**
+   * Lời mời đánh giá (chỉ bản trình duyệt, chỉ hiện sau vài lần dùng). Chạm một sao là gửi NGAY về Locaith:
+   * `picked` = số sao vừa chọn (dải chuyển sang «Cảm ơn…»), `sent` = đã tới Locaith (false = đang gửi / sẽ gửi khi có mạng).
+   */
+  rating?: { sends: number; picked?: number; sent?: boolean };
+}
+
+/** (lane:perm-rules) Một luật quyền đã nạp, kèm nguồn. */
+export interface PermissionRuleInfo {
+  action: 'allow' | 'ask' | 'deny';
+  /** Dạng chữ `tool(spec)` hoặc `tool`. */
+  text: string;
+  source: 'user' | 'workspace';
+}
+
+/** (lane:perm-rules) Trạng thái khu quản lý luật quyền. */
+export interface PermissionsView {
+  /** Luật đang CÓ HIỆU LỰC (luật allow của workspace chỉ có mặt khi đã được xác nhận). */
+  rules: PermissionRuleInfo[];
+  /** Luật allow do workspace đề xuất, chưa được xác nhận (băm nội dung để xác nhận đúng danh sách đang thấy). Thiếu = không có. */
+  workspaceAllowPending?: { hash: string; rules: string[] };
+  /** Workspace chưa tin cậy → mọi luật allow (kể cả của người dùng) bị bỏ qua. */
+  untrusted?: boolean;
+  /** Bật khu quản lý trong Cài đặt (lệnh /permissions vừa gọi). */
+  focus?: boolean;
 }
 
 /** Loại tệp xem trước được ngay trong khung chat (0.6.3). `doc` = HTML/PDF/Word/Excel/PowerPoint: chỉ có thẻ mở, không nhúng. */
@@ -884,6 +985,8 @@ export type HostMessage =
   // ── (lane:bg-tasks) ──
   // ── (lane:ide-context) ──
   // ── (lane:sessions-ux) ──
+  /** Trả lời `search_sessions`: gửi dần theo lô (`done` = đã quét xong). `query` = đúng truy vấn đã hỏi (bỏ kết quả của truy vấn cũ). */
+  | { type: 'session_search'; reqId: number; query: string; hits: SessionSearchHit[]; done: boolean }
   // ── (lane:customer-bugs) ──
   // ── (lane:gateway-client) ──
   // ── (lane:mcp-parity) ──
@@ -982,7 +1085,10 @@ export type WebviewMessage =
   | { type: 'bio_install' }
   | { type: 'chrome_pair_allow'; id: string }
   | { type: 'chrome_pair_deny'; id: string }
-  /** Lời mời đánh giá trên Chrome Web Store: mở trang đánh giá, hoặc tắt hẳn. */
+  /** Lời mời đánh giá: chạm sao = gửi ngay (`rating_submit`); nhận xét chữ tuỳ chọn (`rating_comment`); đóng lời cảm ơn; «Không hiện lại»; và đánh giá cả trên cửa hàng (`rating_rate`, lựa chọn thêm). */
+  | { type: 'rating_submit'; stars: number }
+  | { type: 'rating_comment'; text: string }
+  | { type: 'rating_close' }
   | { type: 'rating_rate' }
   | { type: 'rating_dismiss' }
   | { type: 'bio_auto_retry' }
@@ -1008,12 +1114,41 @@ export type WebviewMessage =
   // ── (lane:loop-guards) ──
   // ── (lane:blind-verifier) ──
   // ── (lane:checkpoints-rewind) ──
+  /** Mở menu «Quay lại điểm này» dưới tin nhắn `promptId`. */
+  | { type: 'rewind_open'; promptId: string; list?: boolean }
+  /** Xin kế hoạch khôi phục (host kiểm tra đĩa, đánh dấu xung đột) → `view.rewind.stage = 'plan'`. `files` (rel) = chỉ các tệp này. */
+  | { type: 'rewind_plan'; promptId: string; what: RewindWhat; scope?: RewindScope; files?: string[] }
+  /** Xác nhận kế hoạch đang hiện trong `view.rewind`. */
+  | { type: 'rewind_apply' }
+  | { type: 'rewind_cancel' }
+  /** Đảo ngược lần khôi phục mã vừa rồi (một lần). */
+  | { type: 'rewind_redo' }
+  /** Mở diff của VS Code: bản gốc (checkpoint) ↔ hiện tại trên đĩa. */
+  | { type: 'checkpoint_diff'; promptId: string; rel: string }
   // ── (lane:perm-rules) ──
+  /** «Luôn cho phép»: lưu luật `rule` (đã sửa được) vào cài đặt `scope`, rồi cho lệnh đang chờ (`id` của thẻ quyền) chạy. */
+  | { type: 'permission_always'; id: string; rule: string; scope: 'user' | 'workspace' }
+  | { type: 'perm_rules_add'; action: 'allow' | 'ask' | 'deny'; rule: string; scope: 'user' | 'workspace' }
+  | { type: 'perm_rules_remove'; action: 'allow' | 'ask' | 'deny'; rule: string; scope: 'user' | 'workspace' }
+  /** Xác nhận (một lần, theo băm nội dung) danh sách luật allow mà workspace đề xuất. */
+  | { type: 'perm_rules_trust_workspace'; hash: string }
+  /** Mở/đóng khu quản lý luật (bỏ cờ `focus`). */
+  | { type: 'perm_rules_open' }
   // ── (lane:hooks) ──
   // ── (lane:commands-agents) ──
   // ── (lane:bg-tasks) ──
+  /** (lane:bg-tasks) Thao tác trên một tác vụ nền: Dừng / Sao chép đầu ra / Xem đầy đủ trong editor. */
+  | { type: 'bg_task'; id: string; action: import('./bgTasks').BgTaskAction }
   // ── (lane:ide-context) ──
+  | { type: 'set_editor_context'; on: boolean }
   // ── (lane:sessions-ux) ──
+  /** Rẽ nhánh cuộc đang mở thành cuộc mới, sau lượt của tin người dùng `itemId` (thiếu = từ cuối). */
+  | { type: 'fork_session'; itemId?: string }
+  /** Tìm toàn văn trong tiêu đề + nội dung mọi cuộc trò chuyện. Trả lời bằng `session_search`. */
+  | { type: 'search_sessions'; reqId: number; query: string }
+  | { type: 'pin_session'; id: string; pinned: boolean }
+  /** Xoá hàng loạt = chuyển cả nhóm vào Thùng rác. */
+  | { type: 'delete_sessions'; ids: string[] }
   // ── (lane:customer-bugs) ──
   // ── (lane:gateway-client) ──
   // ── (lane:mcp-parity) ──

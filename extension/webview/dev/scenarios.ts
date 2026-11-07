@@ -451,6 +451,9 @@ const permCmd: PermissionRequest = {
   command: 'npm test -- --run src/utils/formatMoney.test.ts',
   canAllowSession: true,
   sessionLabel: 'Luôn cho phép `npm test` trong phiên này',
+  // (lane:perm-rules) đặc tả «Luôn cho phép» host đề xuất + luật ask đã buộc hỏi
+  suggest: ['run_command(npm test:*)'],
+  rule: 'run_command(npm test*)',
 };
 
 const permPlan: PermissionRequest = {
@@ -646,7 +649,22 @@ export function onboardingState(): ViewState {
 }
 
 export function settingsState(withKeys: boolean): ViewState {
-  return baseState({ screen: 'settings', providers: withKeys ? PROVIDERS : noKeyProviders() });
+  return baseState({
+    screen: 'settings',
+    providers: withKeys ? PROVIDERS : noKeyProviders(),
+    // (lane:perm-rules) khu quản lý luật quyền mở sẵn (như sau lệnh /permissions), có luật của cả hai nguồn và một danh sách dự án đề xuất chờ xác nhận
+    permissions: {
+      focus: true,
+      rules: [
+        { action: 'deny', text: 'read_file(.env*)', source: 'user' },
+        { action: 'deny', text: 'run_command(git push*)', source: 'workspace' },
+        { action: 'ask', text: 'write_file(docs/**)', source: 'workspace' },
+        { action: 'allow', text: 'run_command(npm test:*)', source: 'user' },
+        { action: 'allow', text: 'edit_file(src/**)', source: 'user' },
+      ],
+      workspaceAllowPending: { hash: '1a2b3c4d', rules: ['run_command(npm run build:*)', 'fetch_url(domain:api.github.com)'] },
+    },
+  });
 }
 
 // ── 0.6.0: nhiều việc cùng lúc — dòng tóm tắt «N lệnh gọi công cụ» + dòng agent con sống (webview/src/styles/parallel.css) ──
@@ -753,6 +771,173 @@ export function parallelAgentsState(opts: { narrow?: boolean } = {}): ViewState 
   });
 }
 
+// ── (lane:cc-timeline-ui) Dòng thời gian gọn kiểu Claude Code: tái hiện CẢ BA ảnh mẫu trong một cuộc trò chuyện ─────────────────
+//    nhóm gập xanh «22 lệnh gọi công cụ» · dòng nén · nhóm đỏ «54 · 2 lỗi» + dòng agent có số · nhóm «36 · 2 lỗi» có Write/Edit/Bash ·
+//    ngày mới + giờ · lượt đang chạy nền («Đang chạy Lệnh · 10 lệnh gọi công cụ / Chạy nền») · ô nhập đang chạy (đồng hồ, placeholder xếp hàng).
+
+const GATE_TS = `/**
+ * Cổng hoàn thành như một RunExtension (trước đây là khối \`completionGate\` nằm thẳng trong \`run()\`).
+ * Gắn vào seams: finalize → kiểm «câu trả lời cuối có khớp việc đã làm», end → ghi trace.
+ */
+import type { RunExtension, RunHooks } from '../seams';
+import { t } from '../strings';
+
+export interface GateOptions {
+  /** Số vòng tối đa trước khi buộc chốt. */
+  maxTurns: number;
+  /** Ngưỡng ký tự coi là «câu trả lời cuối» (đã có nội dung thật, không chỉ lời dẫn). */
+  minAnswerChars: number;
+}
+
+const DEFAULTS: GateOptions = { maxTurns: 200, minAnswerChars: 80 };
+
+export function gateExtension(opts: Partial<GateOptions> = {}): RunExtension {
+  const o = { ...DEFAULTS, ...opts };
+  return {
+    name: 'gate',
+    hooks(): RunHooks {
+      return {
+        beforeModel(ctx) {
+          if (ctx.turn >= o.maxTurns) ctx.stop(t(ctx.lang, 'gate.maxTurns'));
+        },
+        finalize(ctx) {
+          if (ctx.answer.length < o.minAnswerChars && ctx.pendingTodos > 0) ctx.reject(t(ctx.lang, 'gate.unfinished'));
+        },
+      };
+    },
+  };
+}
+`;
+
+const REGISTRY_TS = `/**
+ * Đăng ký các RunExtension DÙNG CHUNG mọi bề mặt (VS Code, Chrome, CLI, agent con): không phụ thuộc môi trường.
+ * Extension chỉ-VS-Code nằm ở src/host/hostExtensions.ts.
+ */
+import type { RunExtension } from '../seams';
+import { gateExtension } from './gate';
+
+export function coreExtensions(): RunExtension[] {
+  return [gateExtension()];
+}
+`;
+
+/** Khối lệnh shell với mô tả do model đặt, IN/OUT thật (đầu ra dài để thử cắt + mờ dần). */
+function cmd(id: string, startedAt: number, description: string, command: string, output: string, extra: Partial<Extract<ABlock, { type: 'tool' }>> = {}): ABlock {
+  return { type: 'tool', id, name: 'run_command', args: { command, description }, state: 'done', output, startedAt, durationMs: 1800, ...extra };
+}
+
+export function ccTimelineState(opts: { working?: boolean } = {}): ViewState {
+  const now = Date.now();
+  const d = new Date(now);
+  const today = (h: number, m: number) => new Date(d.getFullYear(), d.getMonth(), d.getDate(), h, m).getTime();
+  const yesterday = (h: number, m: number) => today(h, m) - 86_400_000;
+  const img = (n: number): AttachmentInfo => ({ kind: 'image', label: 'image.png', mediaType: 'image/png', sizeBytes: 180_000 + n * 11_000 });
+  const T1 = today(17, 52);
+  const T2 = today(18, 16);
+  const T3 = today(18, 29);
+  const reads = (prefix: string, from: number, n: number, failAt: number[] = []): ABlock[] =>
+    Array.from({ length: n }, (_, i) => {
+      const kind = i % 3 === 0 ? 'read_file' : i % 3 === 1 ? 'grep' : 'glob';
+      const args = kind === 'read_file' ? { path: `src/core/engine/${['engine', 'seams', 'completion', 'dispatcher'][i % 4]}.ts` } : kind === 'grep' ? { pattern: ['completionGate', 'RunExtension', 'registerSlash'][i % 3], path: 'src' } : { pattern: 'src/**/*.ts' };
+      const failed = failAt.includes(i);
+      return { type: 'tool', id: `${prefix}${i}`, name: kind, args, state: failed ? 'error' : 'done', summary: failed ? undefined : kind === 'read_file' ? `${120 + i * 7} dòng` : `${3 + (i % 5)} kết quả`, output: failed ? 'Lỗi: không tìm thấy tệp src/core/engine/dispatcher.ts (đã bị đổi tên ở 0.6.30).' : 'ok', startedAt: from + i * 2500, durationMs: 120 + i * 9 } as ABlock;
+    });
+  const live: ABlock[] = [
+    ...reads('L', now - 60_000, 9),
+    { type: 'tool', id: 'Lbg', name: 'run_command', args: { command: 'npx vitest run --no-file-parallelism', description: 'Chạy toàn bộ bộ kiểm thử', run_in_background: true }, state: 'running', output: '', startedAt: now - 8000 },
+  ];
+  if (opts.working) live[live.length - 1] = { ...(live[live.length - 1] as Extract<ABlock, { type: 'tool' }>), state: 'done', output: 'Test Files  118 passed (118)\nTests  1.642 passed (1.642)', durationMs: 7800 };
+  return baseState({
+    title: 'Phiên locaith-ai-sao-luu.json dở dang',
+    running: true,
+    canQueue: true,
+    mode: 'bypass',
+    allowBypass: true,
+    thinkingLevel: 'max',
+    context: { usedTokens: 412_000, limitTokens: 1_000_000 },
+    remote: { enabled: true, signedIn: true, relay: 'online', devices: 1, streams: 1 },
+    transcript: [
+      { kind: 'user', id: 'u0', text: '"locaith-ai-sao-luu-em-day-san-pham-extension-chrome-len-kho-2026-11-06.json" thằng Locaith-v5-flash vừa cải thiện rất nhiều thứ cho anh, em kiểm lại và cập nhật hết cho anh nhé.', attachments: [], ts: yesterday(1, 27) },
+      {
+        kind: 'assistant',
+        id: 'a0',
+        provider: 'locaith',
+        model: 'locaith-v5-flash',
+        ts: yesterday(1, 27) + 4000,
+        done: true,
+        stopReason: 'end_turn',
+        endedAt: yesterday(1, 29),
+        blocks: [{ type: 'text', id: 'a0:t', text: 'Em chưa tự thử trên điện thoại thật. Nếu anh thử mà vẫn không vào, nhắn em chi tiết màn hình hiện gì.' }],
+      },
+      { kind: 'notice', id: 'n0', level: 'info', text: 'Nghỉ 1 ngày 16 giờ. Bộ nhớ đệm prompt có thể đã hết hạn, nên tin kế tiếp sẽ nạp lại khoảng 895k token.', ts: today(17, 51) },
+      { kind: 'user', id: 'u1', text: 'đọc hết lịch sử phần này và xem các vấn đề mà thằng Locaith nó không làm được cho cái extension vscode để được như extension claude code, em làm full hết lại cho anh để được như claude code nhé.', attachments: [img(1)], ts: T1 },
+      {
+        kind: 'assistant',
+        id: 'a1',
+        provider: 'locaith',
+        model: 'locaith-v5-flash',
+        ts: T1 + 2000,
+        done: true,
+        stopReason: 'end_turn',
+        endedAt: T2,
+        usage: { inputTokens: 212_000, outputTokens: 9_400 },
+        blocks: [
+          { type: 'thinking', id: 'a1:k', text: 'Cần xem phiên bản hiện tại, CHANGELOG và các repo phát hành trước khi chạm vào mã. Sau đó so với danh sách tính năng của Claude Code.', startedAt: T1 + 2000, durationMs: 14_000 },
+          cmd('a1:c0', T1 + 16_000, 'Xem phiên bản hiện tại của extension, CHANGELOG và các repo phát hành', 'cd /c/locaith/extension/locaith-agent-vscode/locaith-extension-main && grep -m1 \'"version"\' package.json && head -20 CHANGELOG.md', '    "version": "0.6.30",\n# Changelog\n\n## 0.6.30 — 2026-11-06\n- no full row fills, paths with spaces open, artifact in browser\n- compact threshold setting\n\n## 0.6.29 — 2026-11-05\n- clarify at the start never after the work; loop budget 200 turns'),
+          { type: 'thinking', id: 'a1:k2', text: 'Ghi nhớ mới và repo phát hành nằm ở C:\\locaith-agent-repo.', startedAt: T1 + 20_000, durationMs: 3_000 },
+          cmd('a1:c1', T1 + 24_000, 'Xem ghi nhớ mới và repo phát hành mới C:\\locaith-agent-repo', 'cd /c/Users/PC_WORK/.claude/projects/c--locaith/memory && ls -lt --time-style=+%m-%d_%H:%M | head', 'total 260\n-rw-r--r-- 1 PC_WORK 197121 80936 11-06_07:16 daily-column-sandbox-limits.md\n-rw-r--r-- 1 PC_WORK 197121 12798 11-06_01:41 locaith-agent-vscode-release.md\n-rw-r--r-- 1 PC_WORK 197121  7733 11-06_00:12 locaith-remote-account-trust.md\n-rw-r--r-- 1 PC_WORK 197121  6012 11-05_21:40 locaith-v5-flash-error-catalog.md'),
+          ...reads('a1:r', T1 + 30_000, 20),
+          { type: 'text', id: 'a1:t', text: 'Giờ mình viết gate extension và hai registry (chỉ tệp mới, chưa đụng hub).' },
+        ],
+      },
+      { kind: 'notice', id: 'n1', level: 'info', text: 'Đã nén cuộc trò chuyện · tự động · giải phóng 968k token', ts: T2 + 30_000, compact: { mode: 'auto', tokensFreed: 968_000, summarizedMessages: 41, clearedResults: 12, summary: 'Đã đọc: engine.ts, seams.ts, completion.ts, CHANGELOG.md. Đang làm: tách completionGate thành RunExtension, đăng ký coreExtensions() và hostExtensions(). Còn lại: vá run() theo cấp mô hình, bọc thử lại, chạy test.' } },
+      {
+        kind: 'assistant',
+        id: 'a2',
+        provider: 'locaith',
+        model: 'locaith-v5-flash',
+        ts: T2 + 40_000,
+        done: true,
+        stopReason: 'end_turn',
+        endedAt: T3,
+        blocks: [
+          ...reads('a2:r', T2 + 41_000, 53, [17, 40]),
+          { type: 'tool', id: 'a2:ag', name: 'agent', args: { description: 'Hoàn thiện 0.6.31 dở dang của Locaith: Monitoring: Wait for test run, then package', prompt: 'Chạy test, đóng gói, báo cáo.', agent_type: 'general' }, state: 'done', startedAt: T2 + 60_000, durationMs: 2_394_000, agent: { tokens: 654_900, tools: 249 }, output: 'Đã chạy 249 lệnh; bộ kiểm thử xanh; VSIX 0.6.31 đã đóng gói.' },
+          { type: 'text', id: 'a2:t', text: 'Giờ mình viết gate extension và hai registry (chỉ tệp mới, chưa đụng hub).' },
+        ],
+      },
+      {
+        kind: 'assistant',
+        id: 'a3',
+        provider: 'locaith',
+        model: 'locaith-v5-flash',
+        ts: T3 + 5000,
+        done: true,
+        stopReason: 'end_turn',
+        endedAt: today(18, 41),
+        blocks: [
+          ...reads('a3:r', T3 + 6000, 31, [4]),
+          { type: 'tool', id: 'a3:w1', name: 'write_file', args: { path: 'src/core/engine/extensions/gate.ts', content: GATE_TS }, state: 'done', summary: '58 dòng', diff: { path: 'src/core/engine/extensions/gate.ts', added: 58, removed: 0, hunks: [], isNew: true }, startedAt: T3 + 90_000, durationMs: 60 },
+          { type: 'tool', id: 'a3:w2', name: 'write_file', args: { path: 'src/core/engine/extensions/index.ts', content: REGISTRY_TS }, state: 'done', summary: '23 dòng', diff: { path: 'src/core/engine/extensions/index.ts', added: 23, removed: 0, hunks: [], isNew: true }, startedAt: T3 + 92_000, durationMs: 40 },
+          { type: 'tool', id: 'a3:e1', name: 'edit_file', args: { path: 'src/utils/formatMoney.ts' }, state: 'done', summary: '+9 −3', diff: DIFF_EDIT, startedAt: T3 + 95_000, durationMs: 130 },
+          cmd('a3:c1', T3 + 100_000, 'Chạy typecheck ba tsconfig', 'npm run typecheck', '> tsc -p tsconfig.json && tsc -p webview/tsconfig.json && tsc -p tsconfig.browser.json\n\nsrc/core/engine/extensions/gate.ts(31,11): error TS2339: Property \'reject\' does not exist on type \'FinalizeContext\'.\nsrc/core/engine/extensions/gate.ts(27,32): error TS2339: Property \'stop\' does not exist on type \'BeforeModelContext\'.', { state: 'error', durationMs: 6200 }),
+          cmd('a3:c2', T3 + 110_000, 'Chạy lại typecheck sau khi sửa', 'npm run typecheck', '> tsc -p tsconfig.json && tsc -p webview/tsconfig.json && tsc -p tsconfig.browser.json\n', { durationMs: 5900 }),
+          { type: 'text', id: 'a3:t', text: 'Giờ vá phần run: cấp mô hình theo giai đoạn và bọc thử lại.' },
+        ],
+      },
+      {
+        kind: 'assistant',
+        id: 'a4',
+        provider: 'locaith',
+        model: 'locaith-v5-flash',
+        ts: now - 62_000,
+        done: false,
+        blocks: live,
+      },
+    ],
+  });
+}
+
 // ── Mô hình Locaith (AI Local): hàng chờ khi đông người dùng, thẻ thông báo dữ liệu, mục Cài đặt ─────────────────────
 
 export const LOCAITH_PROVIDER: ProviderSummary = {
@@ -806,4 +991,101 @@ export function locaithState(o: LocaithSceneOptions = {}): ViewState {
       ? { modelQueue: { position: o.queue.position, ahead: o.queue.position - 1, attempt: o.queue.attempt, retryAt: now + o.queue.leftSec * 1000 - 400, waitMs: o.queue.waitSec * 1000, since: now - 38_000, limit: o.queue.limit, active: o.queue.limit, waiting: 23 } }
       : {}),
   };
+}
+
+// ── (lane:output-timeouts) câu trả lời bị cắt ở ranh giới câu + nút «Chạy tiếp phần 2» ──
+export function cutContinueState(opts: { forced?: boolean } = {}): ViewState {
+  const answer =
+    '## Báo cáo hiệu quả quảng cáo tháng 10\n\n' +
+    'Tổng chi 184,2 triệu ₫ cho 6 chiến dịch, thu về 1.912 khách hàng tiềm năng — CPL trung bình **96.300 ₫**, tốt hơn tháng 9 (112.000 ₫).\n\n' +
+    '### 1. Chiến dịch đang đốt tiền\n\n' +
+    '| Chiến dịch | Chi | CPL |\n|---|---|---|\n| Retarget 30 ngày | 41,0 tr | 201.000 ₫ |\n| Lookalike 1% | 22,5 tr | 88.000 ₫ |\n\n' +
+    'Retarget 30 ngày trùng 68% đối tượng với Lookalike 1% nên hai chiến dịch tự đấu giá với nhau.\n\n' +
+    '### 2. Đề xuất phân bổ tuần tới\n\n- Tạm dừng Retarget 30 ngày, chuyển 30 triệu sang Lookalike 1%.\n- Giữ nguyên ba chiến dịch tìm kiếm mới.';
+  return baseState({
+    title: 'Báo cáo quảng cáo Facebook tháng 10',
+    options: opts.forced
+      ? [{ id: 'continue-work', kind: 'continue', label: 'Chạy tiếp', prompt: 'Tiếp tục đúng việc đang dở…' }]
+      : [{ id: 'continue-part-2', kind: 'continue', label: 'Chạy tiếp phần 2', prompt: 'Viết tiếp phần 2 từ đúng chỗ vừa dừng: không lặp lại phần trước, không mở đầu lại, không tóm tắt lại.' }],
+    transcript: [
+      userItem('u1', 'Viết báo cáo đầy đủ về hiệu quả quảng cáo tháng 10 (kèm VAT 10%).', 95_000),
+      {
+        kind: 'assistant',
+        id: 'a1',
+        provider: 'locaith',
+        model: 'locaith-v5-flash',
+        ts: Date.now() - 90_000,
+        done: true,
+        stopReason: 'end_turn',
+        usage: { inputTokens: 12_400, outputTokens: 32_000 },
+        endedAt: Date.now() - 4_000,
+        blocks: opts.forced
+          ? [
+              { type: 'text', id: 'a1:t0', text: answer },
+              {
+                type: 'notice',
+                id: 'a1:n0',
+                level: 'warn',
+                text: 'Model vẫn không phản hồi sau 45 giây ở lần thử lại. Đã giữ phần đã viết và dừng lượt — đây là lỗi phía máy chủ/model, không phải lỗi của bạn.\nĐã dừng vì model không phản hồi.\n• Đã làm: chưa có thay đổi nào được ghi lại (chưa sửa tệp, chưa chạy lệnh).\n• Còn lại: không còn việc nào trong danh sách.\n• Chạy tiếp: bấm «Chạy tiếp» bên dưới hoặc nhắn "tiếp tục" — trợ lý làm nốt từ đúng chỗ dừng.',
+              },
+            ]
+          : [
+              { type: 'text', id: 'a1:t0', text: `${answer}\n\n[tiếp phần 2]\n\n` },
+              { type: 'notice', id: 'a1:n0', level: 'info', text: 'Câu trả lời dài hơn trần đầu ra nên đã cắt ở ranh giới câu. Bấm «Chạy tiếp phần 2» để viết tiếp.' },
+            ],
+      },
+    ],
+  });
+}
+
+// ── (lane:blind-verifier) Kiểm tra độc lập: lượt đã xong có dòng «Kiểm tra độc lập» (đạt / cần sửa / tồn đọng / đang chạy) ──
+export function verifyScene(kind: 'pass' | 'fail' | 'outstanding' | 'running' | 'skipped' = 'fail'): ViewState {
+  const A = 'a_v1';
+  const running = kind === 'running';
+  const verify: TItem[] = [
+    userItem('u1', 'Thêm hàm formatMoney(vi-VN, có VAT) vào src/utils/formatMoney.ts, viết test và chạy test cho mình.', 200_000),
+    {
+      kind: 'assistant',
+      id: A,
+      provider: 'locaith',
+      model: 'locaith-v5-flash',
+      ts: Date.now() - 190_000,
+      done: !running,
+      endedAt: running ? undefined : Date.now() - 20_000,
+      stopReason: running ? undefined : 'end_turn',
+      blocks: [
+        { type: 'tool', id: 'r1', name: 'read_file', args: { path: 'src/utils/formatMoney.ts' }, state: 'done', summary: '42 dòng', startedAt: Date.now() - 180_000, durationMs: 40 },
+        { type: 'tool', id: 'e1', name: 'edit_file', args: { path: 'src/utils/formatMoney.ts' }, state: 'done', summary: '+9 −3', startedAt: Date.now() - 170_000, durationMs: 120, diff: DIFF_EDIT },
+        { type: 'tool', id: 'w1', name: 'write_file', args: { path: 'src/utils/formatMoney.test.ts' }, state: 'done', summary: '+18', startedAt: Date.now() - 160_000, durationMs: 90 },
+        { type: 'tool', id: 'c1', name: 'run_command', args: { command: 'npx vitest run src/utils/formatMoney.test.ts' }, state: 'done', summary: 'thành công', output: ' ✓ src/utils/formatMoney.test.ts (3)\n Test Files  1 passed (1)\n      Tests  3 passed (3)', startedAt: Date.now() - 150_000, durationMs: 4200 },
+        { type: 'text', id: 't1', text: 'Đã thêm `formatMoney` (định dạng `vi-VN`, tuỳ chọn VAT 10 %) và 3 test; `vitest` chạy xanh.' },
+        kind === 'running'
+          ? { type: 'notice', id: 'n1', level: 'info', text: 'Kiểm tra độc lập: đang chạy (vòng 1/2)', verify: { key: 'v1', state: 'running', round: 1, maxRounds: 2 } }
+          : kind === 'pass'
+            ? { type: 'notice', id: 'n1', level: 'info', text: 'Đã kiểm tra độc lập: đạt', verify: { key: 'v1', state: 'pass', round: 1, maxRounds: 2, durationMs: 38_000, model: 'locaith-v5-flash', tokens: 6400 } }
+            : kind === 'skipped'
+              ? { type: 'notice', id: 'n1', level: 'info', text: 'Không kiểm tra độc lập được: quá 4 phút', verify: { key: 'v1', state: 'skipped', round: 1, maxRounds: 2, reason: 'quá 4 phút', durationMs: 240_000 } }
+              : {
+                  type: 'notice',
+                  id: 'n1',
+                  level: 'warn',
+                  text: 'Kiểm tra độc lập: 3 điểm cần sửa',
+                  verify: {
+                    key: 'v1',
+                    state: 'fail',
+                    round: kind === 'outstanding' ? 2 : 1,
+                    maxRounds: 2,
+                    missing: ['Yêu cầu "có VAT" chưa có test: src/utils/formatMoney.test.ts chỉ kiểm tra 3 trường hợp không VAT (dòng 4–18).'],
+                    defects: ['formatMoney(1234.5, { vat: true }) trả về "1.357 ₫" thay vì "1.358 ₫" — làm tròn trước khi cộng VAT (src/utils/formatMoney.ts:21).'],
+                    unverifiedClaims: ['Câu trả lời nói "vitest chạy xanh" nhưng lệnh đã chạy chỉ gồm tệp test mới, chưa chạy toàn bộ bộ test (npx vitest run).'],
+                    ...(kind === 'outstanding' ? { outstanding: true } : {}),
+                    durationMs: 52_000,
+                    model: 'locaith-v5-flash',
+                    tokens: 9100,
+                  },
+                },
+      ],
+    },
+  ];
+  return baseState({ title: 'Thêm formatMoney có VAT', transcript: verify, running, provider: 'anthropic', model: 'claude-sonnet-5-5' });
 }

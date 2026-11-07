@@ -14,6 +14,7 @@ import { BrowserController } from './controller';
 import { ChromeKv } from './kv';
 import { BrowserLogger } from './logger';
 import { PENDING_KEY, type PendingAction } from './pending';
+import { postRating } from './ratingSend';
 import { OAuthManager } from './oauth';
 import { BrowserSecrets } from './secrets';
 import { browserSkills } from './skills';
@@ -129,6 +130,8 @@ async function main(): Promise<void> {
     post: deliver,
     version: chrome.runtime.getManifest().version,
     extractDocument,
+    // Đánh giá một chạm gửi về Locaith (xem rating.ts); host_permissions của manifest cho phép máy chủ này.
+    sendFeedback: (payload) => postRating(payload),
     lastSession: {
       get: async () => sessionKv.get<string>(lastSessionKey),
       set: async (id) => (id ? sessionKv.set(lastSessionKey, id) : sessionKv.remove(lastSessionKey)),

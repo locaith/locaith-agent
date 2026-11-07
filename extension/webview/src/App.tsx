@@ -13,6 +13,7 @@ import { MarketView } from './components/MarketView';
 import { OptionsBar } from './components/OptionsBar';
 import { SettingsView } from './components/SettingsView';
 import { ModelQueueStrip } from './components/ModelQueue';
+import { BgTasksStrip } from './components/BgTasksStrip'; // (lane:bg-tasks)
 import { ChromePairStrip } from './components/ChromePairStrip';
 import { MemoryStrip } from './components/MemoryStrip';
 import { RatingStrip } from './components/RatingStrip';
@@ -218,6 +219,8 @@ export function App() {
           onSettings={() => setScreen((s) => (s === 'settings' ? 'chat' : 'settings'))}
           onBack={goChat}
           remote={view.remote}
+          context={view.context}
+          meter={view.meter}
         />
 
         <main class="app-main">
@@ -247,7 +250,8 @@ export function App() {
           {view.remote && <RemoteStrip remote={view.remote} />}
           {view.chromePair && <ChromePairStrip pair={view.chromePair} />}
           {view.memory && <MemoryStrip memory={view.memory} />}
-          {view.platform === 'browser' && view.rating && <RatingStrip sends={view.rating.sends} />}
+          {view.platform === 'browser' && view.rating && <RatingStrip sends={view.rating.sends} picked={view.rating.picked} sent={view.rating.sent} />}
+          {view.bgTasks && view.bgTasks.length > 0 && <BgTasksStrip tasks={view.bgTasks} />} {/* (lane:bg-tasks) */}
           <OptionsBar options={view.options} running={view.running} />
           <Composer view={view} />
         </footer>

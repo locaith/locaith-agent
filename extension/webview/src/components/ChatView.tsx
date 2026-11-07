@@ -1,10 +1,14 @@
-import { useEffect, useRef, useState } from 'preact/hooks';
+import { Fragment } from 'preact';
+import { useEffect, useMemo, useRef, useState } from 'preact/hooks';
 import type { ViewState } from '../../../src/shared/protocol';
 import { useApp } from '../ctx';
+import { timelineMarks } from '../timelineCc';
 import { Icon } from './Icons';
 import { LocaithConsentCard } from './LocaithConsent';
 import { Welcome } from './Welcome';
 import { AssistantTurn, StandaloneNotice } from './timeline/AssistantTurn';
+import { DayDivider, Stamp } from './timeline/TimeMarks';
+import { ChangeBar, RewindCard, RewindTrigger } from './timeline/Rewind'; // (lane:checkpoints-rewind)
 import { UserMessage } from './timeline/UserMessage';
 
 const NEAR_BOTTOM_PX = 56;
@@ -50,10 +54,24 @@ export function ChatView({ view, hasAnyKey }: { view: ViewState; hasAnyKey: bool
     scrollToBottom();
   }, [view.sessionId, view.transcript.length === 0, lastIsUser ? last?.id : undefined]);
 
+  // (lane:cc-timeline-ui) mốc giờ/ngày — O(n) trên số mục (không phải số khối), tính lại khi transcript đổi.
+  const marks = useMemo(() => timelineMarks(view.transcript), [view.transcript]);
+
   const lastUserIdx = (() => {
     for (let i = view.transcript.length - 1; i >= 0; i--) if (view.transcript[i].kind === 'user') return i;
     return -1;
   })();
+
+  // (lane:checkpoints-rewind) id tin mở lượt (không phải tin chen giữa) của từng mục — để gắn thanh thay đổi và thẻ «Quay lại» đúng lượt.
+  const turnOf: (string | null)[] = [];
+  {
+    let cur: string | null = null;
+    for (const it of view.transcript) {
+      if (it.kind === 'user' && !it.steer) cur = it.id;
+      turnOf.push(cur);
+    }
+  }
+  const rw = view.rewind ?? null;
 
   return (
     <div class="chat">
@@ -64,12 +82,40 @@ export function ChatView({ view, hasAnyKey }: { view: ViewState; hasAnyKey: bool
           ) : (
             view.transcript.map((item, i) => {
               const isLast = i === view.transcript.length - 1;
-              if (item.kind === 'user') return <UserMessage key={item.id} item={item} canEdit={i === lastUserIdx && !view.running} />;
-              if (item.kind === 'assistant')
-                return <AssistantTurn key={item.id} item={item} live={view.running && !item.done} isLast={isLast} />;
-              return <StandaloneNotice key={item.id} item={item} canRetry={isLast && !view.running} />;
+              // (lane:cc-timeline-ui) đường ngăn ngày khi sang ngày mới + giờ nhỏ trên mỗi tin người dùng (giờ của câu trả lời nằm trong AssistantTurn).
+              const mark = marks.get(item.id);
+              const before = mark && (
+                <>
+                  {mark.day !== undefined && <DayDivider ts={mark.day} />}
+                  {item.kind === 'user' && mark.time !== undefined && <Stamp ts={mark.time} />}
+                </>
+              );
+              const next = view.transcript[i + 1];
+              const endsTurn = !next || (next.kind === 'user' && !next.steer);
+              const turnId = turnOf[i];
+              const main =
+                item.kind === 'user' ? (
+                  <UserMessage item={item} canEdit={i === lastUserIdx && !view.running} busy={view.running} />
+                ) : item.kind === 'assistant' ? (
+                  <AssistantTurn item={item} live={view.running && !item.done} isLast={isLast} />
+                ) : (
+                  <StandaloneNotice item={item} canRetry={isLast && !view.running} />
+                );
+              const userHead = item.kind === 'user' && !item.steer;
+              const turn = endsTurn && turnId ? view.checkpoints?.find((c) => c.promptId === turnId) : undefined;
+              return (
+                <Fragment key={item.id}>
+                  {before}
+                  {main}
+                  {userHead && <RewindTrigger promptId={item.id} view={view} />}
+                  {userHead && rw && !rw.recent && rw.scope !== 'turn' && rw.promptId === item.id && <RewindCard view={view} rewind={rw} />}
+                  {turn && <ChangeBar turn={turn} running={view.running && isLast} />}
+                  {endsTurn && rw && !rw.recent && rw.scope === 'turn' && rw.promptId === turnId && <RewindCard view={view} rewind={rw} />}
+                </Fragment>
+              );
             })
           )}
+          {rw?.recent && <RewindCard view={view} rewind={rw} />}
           {/* Thông báo dữ liệu của mô hình Locaith: thẻ ở cuối cuộc trò chuyện, không phải hộp thoại. */}
           {view.locaith?.card && <LocaithConsentCard info={view.locaith} account={view.account} />}
         </div>

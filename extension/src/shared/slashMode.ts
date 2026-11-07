@@ -31,3 +31,20 @@ export function isBypassSlash(text: unknown): boolean {
   const [cmd = '', ...rest] = t.slice(1).split(/\s+/);
   return cmd.toLowerCase() === 'mode' && MODE_ALIASES[fold(rest.join(' '))] === 'bypass';
 }
+
+/**
+ * Lệnh gạch chéo đổi QUYỀN / thực thi (lane:perm-rules, hooks, commands-agents) — chỉ gõ được ngay tại VS Code. Qua Remote (nội dung một tin `send`) chúng
+ * thành đường vòng quanh các chốt mà lệnh Remote chính thức không có: thêm luật `allow`, «tin» luật allow của workspace hoặc hook của dự án (hook chạy
+ * lệnh shell), tạo tệp agent. Cùng tinh thần với `isBypassSlash`.
+ */
+export function isLocalOnlySlash(text: unknown): boolean {
+  const t = String(text ?? '').trim();
+  if (!t.startsWith('/')) return false;
+  const [cmd = '', verb = ''] = t.slice(1).split(/\s+/);
+  const c = cmd.toLowerCase();
+  const v = verb.toLowerCase();
+  if (c === 'permissions') return ['allow', 'ask', 'deny', 'remove', 'rm', 'xoa', 'xoá', 'trust', 'tin'].includes(v);
+  if (c === 'hooks') return ['open', 'trust'].includes(v);
+  if (c === 'agents') return ['new', 'tao', 'create'].includes(v);
+  return false;
+}

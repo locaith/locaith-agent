@@ -270,6 +270,8 @@ export class ProviderError extends Error {
   readonly accountAuth?: boolean;
   /** Số lần thử lại tối đa riêng cho lỗi này (nhỏ hơn mức chung nếu có), ví dụ cổng đang bảo trì chỉ thử lại đúng một lần. */
   readonly retryLimit?: number;
+  /** (lane:gateway-client) Mã lỗi của cổng Locaith (`locaith_quota`, `locaith_rate_limited`…) để chọn đúng nhóm thông điệp. */
+  readonly gatewayCode?: string;
 
   constructor(
     message: string,
@@ -284,6 +286,7 @@ export class ProviderError extends Error {
       verbatim?: boolean;
       accountAuth?: boolean;
       retryLimit?: number;
+      gatewayCode?: string;
       cause?: unknown;
     },
   ) {
@@ -299,6 +302,7 @@ export class ProviderError extends Error {
     this.verbatim = opts.verbatim;
     this.accountAuth = opts.accountAuth;
     this.retryLimit = opts.retryLimit;
+    this.gatewayCode = opts.gatewayCode;
   }
 }
 
@@ -320,6 +324,8 @@ export interface ModelInfo {
   /** Unix ms; dùng để xếp mới nhất lên đầu. */
   createdAt?: number;
   note?: string;
+  /** (lane:sessions-ux) Giá niêm yết USD / 1 triệu token, CHỈ khi hãng trả trong danh sách model (vd. OpenRouter). Thiếu = không biết giá. */
+  pricing?: { inputPerM: number; outputPerM: number };
 }
 
 export interface ModelListResult {
@@ -393,6 +399,8 @@ export interface ProviderRuntimeConfig {
   guard?: () => ProviderError | undefined;
   /** 'account' = khoá là token đăng nhập tài khoản Locaith (không phải khoá API người dùng nhập): đổi thông điệp khi thiếu khoá. */
   credential?: 'account';
+  /** (lane:gateway-client) Người giữ token tài khoản: xử lý 401 = làm mới đúng một lần, gửi lại đúng một lần, không dùng lại token hỏng. */
+  auth?: import('./providers/gatewayAuth').GatewayAuth;
   /** Tuỳ chọn riêng từng adapter (ví dụ { eagerInputStreaming: false } khi qua proxy). */
   options?: Record<string, unknown>;
 }

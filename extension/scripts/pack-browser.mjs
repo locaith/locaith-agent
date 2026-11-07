@@ -5,6 +5,7 @@ import { zipSync } from 'fflate';
 import { readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { verifyBrowserPackage } from './verify-browser-package.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const dist = path.join(root, 'dist-browser');
@@ -28,8 +29,11 @@ try {
 }
 if (!files['manifest.json']) throw new Error('dist-browser/manifest.json không tồn tại.');
 const manifest = JSON.parse(files['manifest.json'].toString('utf8'));
-if (/TEST/.test(manifest.name)) throw new Error('Đây là bản TEST (cấp sẵn quyền mọi trang) — không đóng gói. Build lại bằng `npm run build:browser:prod`.');
-if ([...Object.keys(files)].some((f) => f.includes('testHooks'))) throw new Error('Bản build chứa móc kiểm thử.');
+
+// Chốt chặn tổng TRƯỚC khi nén (biểu tượng Lo, mô tả không tên hãng, không CDN, không quyền thừa, thông báo đồng ý, bản không phải TEST…): xem scripts/verify-browser-package.mjs.
+// Thất bại thì ném lỗi liệt kê mọi mục hỏng và KHÔNG tạo tệp zip.
+const { passed } = verifyBrowserPackage(dist, { root });
+console.log(`Chốt chặn gói: ${passed.length} mục kiểm đạt.`);
 
 // Thời gian cố định để cùng một mã nguồn cho ra cùng một tệp zip.
 const mtime = new Date('2026-01-01T00:00:00Z');

@@ -1,0 +1,116 @@
+/* (lane:bg-tasks) Chip «N tác vụ nền» + bảng gọn. Một dòng xám nhỏ, không khung kín; mở ra = thanh dọc mảnh bên trái. */
+.bgt {
+  margin: 0 0 4px;
+  font-size: var(--nd-fs-xs);
+  color: var(--fg-muted);
+}
+.bgt-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 24px;
+  padding: 2px 4px;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+.bgt-chip:hover {
+  color: var(--fg);
+}
+.bgt-dot {
+  display: inline-block;
+  flex: none;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--fg) 36%, transparent);
+}
+.bgt-dot.is-run {
+  background: var(--ok);
+}
+.bgt-dot.is-bad {
+  background: var(--danger);
+}
+.bgt-body {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 2px 0 2px 7px;
+  padding: 2px 0 2px 10px;
+  border-left: 1px solid var(--line-soft);
+}
+.bgt-item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.bgt-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+.bgt-id {
+  flex: none;
+  padding: 0;
+  background: none;
+  color: var(--fg-faint);
+}
+.bgt-cmd {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--fg);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.bgt-meta {
+  color: var(--fg-faint);
+  overflow-wrap: anywhere;
+}
+.bgt-tail {
+  margin: 2px 0;
+  max-height: 7.5em;
+  overflow: auto;
+  padding: 0;
+  background: none;
+  color: var(--fg-muted);
+  font-family: var(--vscode-editor-font-family, monospace);
+  font-size: var(--nd-fs-xs);
+  line-height: 1.5;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.bgt-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.bgt-btn {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--fg-muted);
+  font: inherit;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+.bgt-btn:hover {
+  color: var(--fg);
+}
+.bgt-chip:focus-visible,
+.bgt-btn:focus-visible {
+  outline: 1px solid var(--vscode-focusBorder, var(--fg-muted));
+  outline-offset: 2px;
+}
+@media (forced-colors: active), (prefers-contrast: more) {
+  .bgt-body {
+    border-left-color: var(--line);
+  }
+  .bgt-dot {
+    border: 1px solid currentColor;
+  }
+}

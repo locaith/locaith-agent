@@ -23,9 +23,12 @@ import {
   type PermissionDecision,
   type RunCommandOptions,
   type RunCommandResult,
+  type ProcessHandle,
+  type StartProcessOptions,
   type ToolHost,
 } from '../engine/types';
 import { buildSpawn, childEnv, detectShell, type ShellInfo } from './shell';
+import { startBackgroundProcess } from './bgProcess'; // (lane:bg-tasks)
 
 export interface NodeHostOptions {
   roots: string[];
@@ -338,6 +341,11 @@ export class NodeToolHost implements ToolHost {
       });
       child.on('close', (code) => finish(code));
     });
+  }
+
+  // (lane:bg-tasks) tiến trình nền: xem bgProcess.ts
+  startProcess(o: StartProcessOptions): ProcessHandle {
+    return startBackgroundProcess(this.shell, o);
   }
 
   fetch(url: string, init?: RequestInit): Promise<Response> {

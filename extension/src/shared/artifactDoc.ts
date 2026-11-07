@@ -103,13 +103,14 @@ export function htmlPage(html: string, css: string): string {
  * artifact không được hiển thị.
  */
 export function renderArtifactDocumentWithFonts(rec: Pick<ArtifactRecord, 'type' | 'content' | 'title'>, css: string, sanitize?: (innerDocument: string) => string): string {
-  const cdn = CDN_ALLOWLIST.map((h) => `https://${h}`).join(' ');
+  // Bản trình duyệt: danh sách rỗng → không nguồn ngoài nào (chuỗi rỗng, không để lại dấu cách thừa).
+  const cdn = CDN_ALLOWLIST.map((h) => ` https://${h}`).join('');
   const interactive = rec.type === 'html';
   // Trang bọc không có script nào của extension; CSP của nó được khung srcdoc thừa hưởng. `frame-src about:` cũng chặn
   // việc điều hướng khung artifact sang http(s) (meta refresh, liên kết) — con đường rò dữ liệu qua URL.
   const common = `object-src 'none'; worker-src 'none'; media-src 'none'; manifest-src 'none'; base-uri 'none'; form-action 'none'`;
   const csp = interactive
-    ? `default-src 'none'; script-src 'unsafe-inline' ${cdn}; style-src 'unsafe-inline' ${cdn}; font-src data: ${cdn}; img-src data: blob:; connect-src 'none'; frame-src about:; ${common}`
+    ? `default-src 'none'; script-src 'unsafe-inline'${cdn}; style-src 'unsafe-inline'${cdn}; font-src data:${cdn}; img-src data: blob:; connect-src 'none'; frame-src about:; ${common}`
     : `default-src 'none'; style-src 'unsafe-inline'; font-src data:; img-src data:; frame-src about:; ${common}`;
   const rawInner = rec.type === 'html' ? INNER_PRELUDE + htmlPage(rec.content, css) : rec.type === 'svg' ? svgPage(rec.content) : markdownPage(rec.content, css);
   const inner = sanitize ? sanitize(rawInner) : rawInner;

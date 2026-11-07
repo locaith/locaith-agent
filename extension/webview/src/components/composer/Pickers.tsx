@@ -273,7 +273,7 @@ export function ModePicker({ view, open, onToggle, onClose }: { view: ViewState;
         class={cx('picker-btn', open && 'is-open', view.mode === 'bypass' && 'is-danger', view.mode === 'plan' && 'is-accent')}
         aria-haspopup="listbox"
         aria-expanded={open}
-        title={`${t('mode.title')}: ${t(mk(view.mode))}`}
+        title={`${t('mode.title')}: ${t(mk(view.mode))} · ${t('mode.shiftTab')}`}
         aria-label={`${t('mode.title')}: ${t(mk(view.mode))}`}
         onClick={onToggle}
       >

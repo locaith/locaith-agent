@@ -12,6 +12,8 @@ import { reduceView } from '../../src/shared/transcript';
 import {
   PROVIDERS,
   baseState,
+  ccTimelineState,
+  cutContinueState, // (lane:output-timeouts)
   errorState,
   locaithState,
   longConversation,
@@ -23,6 +25,7 @@ import {
   settingsState,
   type Step,
   SESSIONS,
+  verifyScene, // (lane:blind-verifier)
 } from './scenarios';
 import { promoReply } from './promo';
 
@@ -736,6 +739,51 @@ function imageScene(): ViewState {
   };
 }
 
+
+/** (lane:customer-bugs) Thẻ «Trước | Sau» của show_before_after: hai ảnh SVG dựng ngay trong cảnh (không cần tệp ngoài). */
+function beforeAfterScene(): ViewState {
+  const v = baseState();
+  const now = Date.now();
+  const page = (bg: string, btn: string, radius: number, title: string) =>
+    btoa(
+      `<svg xmlns="http://www.w3.org/2000/svg" width="640" height="400" viewBox="0 0 640 400"><rect width="640" height="400" fill="${bg}"/><rect x="40" y="40" width="360" height="26" rx="4" fill="#94a3b8"/><rect x="40" y="86" width="540" height="12" rx="3" fill="#64748b"/><rect x="40" y="110" width="480" height="12" rx="3" fill="#64748b"/><rect x="40" y="220" width="180" height="52" rx="${radius}" fill="${btn}"/><text x="130" y="253" text-anchor="middle" font-family="sans-serif" font-size="18" fill="#fff">${title}</text></svg>`,
+    );
+  const img = (data: string) => ({ mediaType: 'image/svg+xml', data });
+  return {
+    ...v,
+    transcript: [
+      { kind: 'user', id: 'u_ba', text: 'Làm đẹp nút đăng nhập ở trang chủ giúp anh', ts: now - 9000, attachments: [] },
+      {
+        kind: 'assistant', id: 'a_ba', provider: 'anthropic', model: 'claude-opus-5-5', ts: now - 6000, done: true, stopReason: 'end_turn',
+        blocks: [
+          { type: 'tool', id: 'ba1', name: 'show_before_after', state: 'done', summary: '2 ảnh', startedAt: now - 7000, durationMs: 80, output: 'Trước: .locaith/shots/home-truoc.png → Sau: .locaith/shots/home-sau.png',
+            args: { before: '.locaith/shots/home-truoc.png', after: '.locaith/shots/home-sau.png', caption: 'Nút đăng nhập bo tròn, đổi sang màu nhấn' },
+            images: [img(page('#f1f5f9', '#64748b', 2, 'Login')), img(page('#f8fafc', '#6d5efc', 26, 'Login'))] },
+          { type: 'text', id: 't_ba', text: 'Em đã bo tròn nút và đổi sang màu nhấn. Ảnh trước và sau ở ngay phía trên.' },
+        ],
+      },
+    ],
+  };
+}
+
+/** Bản trình duyệt: lời mời đánh giá — chạm sao gửi ngay (phase `ask`) rồi dải cảm ơn (`thanks`: đã gửi / chờ mạng). */
+function ratingScene(phase: 'ask' | 'thanks' | 'queued' | 'thanks-low'): ViewState {
+  const v = baseState();
+  const now = Date.now();
+  return {
+    ...v,
+    platform: 'browser',
+    rating: phase === 'ask' ? { sends: 3 } : phase === 'thanks' ? { sends: 3, picked: 5, sent: true } : phase === 'queued' ? { sends: 3, picked: 4, sent: false } : { sends: 3, picked: 2, sent: true },
+    transcript: [
+      { kind: 'user', id: 'u_r', text: 'Tóm tắt giúp mình trang này', ts: now - 9000, attachments: [] },
+      {
+        kind: 'assistant', id: 'a_r', provider: 'anthropic', model: 'claude-opus-5-5', ts: now - 6000, done: true, stopReason: 'end_turn',
+        blocks: [{ type: 'text', id: 't_r', text: 'Trang nói về ba gói giá và chính sách hoàn tiền trong 14 ngày.' }],
+      },
+    ],
+  };
+}
+
 /** Đang chạy: nhiều lần sửa tệp (gộp một dòng), một lần đang sửa, ba agent con đang chạy, một agent lỗi. */
 function agentsScene(): ViewState {
   const v = baseState();
@@ -815,6 +863,36 @@ function taskflowScene(): ViewState {
   };
 }
 
+/** (lane:checkpoints-rewind) Cuộc trò chuyện dài + checkpoint cho tin cuối: thanh «N tệp đã đổi», menu / xem trước / kết quả của «Quay lại». */
+function rewindScene(stage: 'bar' | 'menu' | 'plan' | 'done' | 'recent'): ViewState {
+  const base = longConversation();
+  const id = [...base.transcript].reverse().find((i) => i.kind === 'user')!.id;
+  const files = [
+    { rel: 'src/ads/phanBoNganSach.ts', kind: 'edit' as const, added: 24, removed: 6 },
+    { rel: 'src/ads/bao-cao.test.ts', kind: 'create' as const, added: 41, removed: 0 },
+    { rel: 'data/báo-cáo-tháng-10.csv', kind: 'edit' as const, added: 3, removed: 3, skipped: 'too_large' as const },
+  ];
+  const v: ViewState = { ...base, running: false, checkpoints: [{ promptId: id, files }] };
+  if (stage === 'menu') v.rewind = { promptId: id, stage: 'menu' };
+  if (stage === 'recent') v.rewind = { promptId: id, stage: 'menu', recent: [{ promptId: id, text: 'Mình có bảng báo cáo quảng cáo Facebook tháng 10/2026', files: 3 }] };
+  if (stage === 'plan')
+    v.rewind = {
+      promptId: id,
+      stage: 'plan',
+      what: 'both',
+      scope: 'from',
+      conflicts: 1,
+      messages: 14,
+      files: [
+        { rel: 'src/ads/phanBoNganSach.ts', action: 'restore', added: 6, removed: 24, conflict: true },
+        { rel: 'src/ads/bao-cao.test.ts', action: 'delete', added: 0, removed: 41 },
+        { rel: 'data/báo-cáo-tháng-10.csv', action: 'skip', added: 0, removed: 0, reason: 'too_large' },
+      ],
+    };
+  if (stage === 'done') v.rewind = { promptId: id, stage: 'done', what: 'code', scope: 'from', restored: 2, skipped: 1, canRedo: true };
+  return v;
+}
+
 function initialView(): ViewState {
   let v: ViewState;
   switch (scenario) {
@@ -834,14 +912,37 @@ function initialView(): ViewState {
     case 'error':
       v = errorState();
       break;
+    // (lane:output-timeouts) trả lời bị cắt + nút «Chạy tiếp phần 2» · buộc dừng vì model treo + nút «Chạy tiếp»
+    case 'cut-continue':
+      v = cutContinueState();
+      break;
+    case 'cut-forced':
+      v = cutContinueState({ forced: true });
+      break;
     case 'settings':
       v = settingsState(true);
       break;
     case 'settings-nokeys':
       v = settingsState(false);
       break;
+    // (lane:sessions-ux) chip ngữ cảnh + chi phí ở tiêu đề, menu ⋯ của tin nhắn, lịch sử có nhóm ngày / ghim
+    case 'sessions-ux':
+      v = { ...longConversation(), context: { usedTokens: 132_000, limitTokens: 200_000 }, meter: { inputTokens: 412_300, outputTokens: 18_900, compactions: 2, clearedResults: 14, costUsd: 0.64 } };
+      break;
+    case 'sessions-ux-history':
+      v = { ...baseState(), screen: 'history', sessions: SESSIONS.map((s, i) => (i === 3 ? { ...s, pinned: true } : s)) };
+      break;
     case 'high-context':
       v = { ...longConversation(), context: { usedTokens: 188_000, limitTokens: 200_000 } };
+      break;
+    case 'bg-tasks': // (lane:bg-tasks)
+      v = {
+        ...longConversation(),
+        bgTasks: [
+          { id: 'bg1', command: 'npm run dev -- --port 5173', cwd: '.', status: 'running', startedAt: Date.now() - 95_000, ready: 'http://localhost:5173/', tail: ['VITE v6.0.1  ready in 412 ms', '  ➜  Local:   http://localhost:5173/', '  ➜  press h + enter to show help', '[vite] hmr update /src/App.tsx', '[vite] hmr update /src/App.css'] },
+          { id: 'bg2', command: 'npm test -- --watch', description: 'Chạy test ở chế độ theo dõi', cwd: 'web', status: 'failed', startedAt: Date.now() - 300_000, endedAt: Date.now() - 120_000, exitCode: 1, tail: ['FAIL src/cart.test.ts', '  expected 3 to equal 4', 'Tests: 1 failed, 12 passed'] },
+        ],
+      };
       break;
     case 'market':
       v = { ...baseState(), screen: 'market' };
@@ -946,6 +1047,13 @@ function initialView(): ViewState {
     case 'parallel-agents':
       v = parallelAgentsState();
       break;
+    // ── (lane:cc-timeline-ui) dòng thời gian gọn kiểu Claude Code (ba ảnh mẫu) ──
+    case 'cc-timeline':
+      v = ccTimelineState();
+      break;
+    case 'cc-working':
+      v = ccTimelineState({ working: true });
+      break;
     case 'parallel-narrow':
       v = parallelAgentsState({ narrow: true });
       break;
@@ -964,9 +1072,33 @@ function initialView(): ViewState {
     case 'taskflow':
       v = taskflowScene();
       break;
+    case 'rewind-bar':
+    case 'rewind-menu':
+    case 'rewind-plan':
+    case 'rewind-done':
+    case 'rewind-recent':
+      v = rewindScene(scenario.slice(7) as 'bar' | 'menu' | 'plan' | 'done' | 'recent');
+      break;
+    case 'before-after':
+      v = beforeAfterScene();
+      break;
+    case 'rating':
+    case 'rating-thanks':
+    case 'rating-queued':
+    case 'rating-thanks-low':
+      v = ratingScene(scenario === 'rating' ? 'ask' : (scenario.slice(7) as 'thanks' | 'queued' | 'thanks-low'));
+      break;
     case 'media':
     case 'media-live':
       v = mediaScene(scenario === 'media-live');
+      break;
+    // (lane:blind-verifier)
+    case 'verify':
+    case 'verify-pass':
+    case 'verify-outstanding':
+    case 'verify-running':
+    case 'verify-skipped':
+      v = verifyScene(scenario === 'verify' ? 'fail' : (scenario.slice(7) as 'pass' | 'outstanding' | 'running' | 'skipped'));
       break;
     case 'history-other':
       v = { ...baseState(), screen: 'history', sessions: [...SESSIONS.slice(0, 2), { id: 's_o1', title: 'Sửa lỗi thanh toán trang bán hàng', updatedAt: Date.now() - 3 * 3600_000, provider: 'anthropic', model: 'claude-sonnet-5', messageCount: 64, other: true, workspaceName: 'web-ban-hang' }, { id: 's_o2', title: 'Viết tài liệu API', updatedAt: Date.now() - 30 * 3600_000, provider: 'deepseek', model: 'deepseek-chat', messageCount: 22, other: true, workspaceName: 'api-docs' }] };
@@ -977,6 +1109,8 @@ function initialView(): ViewState {
   if (langParam === 'en') v = { ...v, settings: { ...v.settings, language: 'en' } };
   if (fontParam) v = { ...v, settings: { ...v.settings, fontFamily: fontParam as ViewState['settings']['fontFamily'] } };
   if (params.get('bypass') === '1') v = { ...v, allowBypass: true };
+  // (lane:cc-timeline-ui) platform=browser: cùng giao diện chạy như bản Chrome/Edge (không nút mở tệp, placeholder tab).
+  if (params.get('platform') === 'browser') v = { ...v, platform: 'browser', canQueue: false, remote: undefined, account: undefined };
   v = {
     ...v,
     orchestration: {

@@ -34,6 +34,7 @@ export type IconName =
   | 'zap'
   | 'layout'
   | 'eye'
+  | 'eye-off'
   | 'external'
   | 'arrow-down'
   | 'arrow-left'
@@ -54,4 +55,8 @@ export type IconName =
   | 'radio'
   | 'film'
   | 'music'
-  | 'play';
+  | 'play'
+  // (lane:sessions-ux)
+  | 'more'
+  | 'branch'
+  | 'pin';

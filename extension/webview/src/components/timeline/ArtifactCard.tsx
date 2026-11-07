@@ -15,7 +15,7 @@ const TYPE_KEYS: Record<string, I18nKey> = {
 };
 
 export function ArtifactCard({ block }: { block: ArtifactBlockT }) {
-  const { t, lang } = useApp();
+  const { t, lang, platform } = useApp();
   const writing = block.state === 'writing';
   const typeLabel = t(TYPE_KEYS[block.artifactType] ?? 'artifact.type.other');
 
@@ -41,10 +41,13 @@ export function ArtifactCard({ block }: { block: ArtifactBlockT }) {
           <Button variant="primary" small icon="eye" onClick={() => post({ type: 'open_artifact', artifactId: block.artifactId })}>
             {t('artifact.open')}
           </Button>
-          {/* Khách báo: HTML hay mở trong tab bên cạnh của VS Code, trong khi họ muốn xem bằng Chrome. */}
-          <Button variant="secondary" small icon="globe" onClick={() => post({ type: 'open_artifact_browser', artifactId: block.artifactId })} title={t('artifact.browserHint')}>
-            {t('artifact.browser')}
-          </Button>
+          {/* Khách báo: HTML hay mở trong tab bên cạnh của VS Code, trong khi họ muốn xem bằng Chrome. Bản trình duyệt: «Mở xem trước» đã mở sẵn trong một tab Chrome/Edge và host
+              không xử lý `open_artifact_browser` — nút này chỉ là nút chết (và lời chú thích của nó nhắc VS Code) nên ẩn đi. */}
+          {platform !== 'browser' && (
+            <Button variant="secondary" small icon="globe" onClick={() => post({ type: 'open_artifact_browser', artifactId: block.artifactId })} title={t('artifact.browserHint')}>
+              {t('artifact.browser')}
+            </Button>
+          )}
           <Button variant="secondary" small icon="download" onClick={() => post({ type: 'save_artifact', artifactId: block.artifactId })}>
             {t('artifact.save')}
           </Button>

@@ -7,6 +7,7 @@ import * as esbuild from 'esbuild';
 import { cp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
+import { artifactsSkillForBrowser } from './scripts/browser-skill-transform.mjs';
 
 const root = path.dirname(fileURLToPath(import.meta.url));
 const at = (...p) => path.join(root, ...p);
@@ -14,7 +15,9 @@ const args = process.argv.slice(2);
 const production = args.includes('--production');
 const watch = args.includes('--watch');
 const testBuild = args.includes('--test');
-const outdir = at(testBuild ? 'dist-browser-test' : 'dist-browser');
+// --out=<thư mục> : dựng ra chỗ khác (test dùng để không đè dist-browser/ của người khác).
+const outArg = args.find((a) => a.startsWith('--out='))?.slice('--out='.length);
+const outdir = outArg ? path.resolve(outArg) : at(testBuild ? 'dist-browser-test' : 'dist-browser');
 
 const pkg = JSON.parse(await readFile(at('package.json'), 'utf8'));
 
@@ -32,12 +35,20 @@ const PROVIDER_HOSTS = [
   'https://www.bing.com/*',
 ];
 
-// Artifact HTML chạy trong trang "sandbox" (origin riêng, không có API extension). CSP này tương đương CSP của bản VS Code.
-const CDN = 'https://cdn.jsdelivr.net https://cdnjs.cloudflare.com https://unpkg.com';
+// Máy chủ của Locaith mà tiện ích gọi: CHỈ nhận đánh giá người dùng tự chạm sao (src/browser/rating.ts, RATING_ENDPOINT). Gói 0.4.4 đã được cửa hàng duyệt cũng khai báo máy chủ này.
+const SERVICE_HOSTS = ['https://studio-api.locaith.com/*'];
+
+// Artifact HTML chạy trong trang "sandbox" (origin riêng, không có API extension).
+// KHÔNG có tên miền CDN nào: Chrome Web Store coi script/style tải từ internet là «mã lưu trữ từ xa» (bản VS Code vẫn cho ba CDN — chỉ khác ở đây).
+// Cờ __ND_NO_REMOTE_CODE__ (xem common.define) làm danh sách CDN của lõi rỗng, nên kiểm tra artifact và CSP của khung xem trước cũng khớp.
 const SANDBOX_CSP =
-  `sandbox allow-scripts allow-modals; script-src 'self' 'unsafe-inline' 'unsafe-eval' ${CDN}; style-src 'self' 'unsafe-inline' ${CDN}; ` +
-  `font-src data: ${CDN}; img-src data: blob:; connect-src 'none'; frame-src 'none'; worker-src 'none'; object-src 'none'; media-src 'none'; ` +
+  `sandbox allow-scripts allow-modals; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; ` +
+  `font-src data:; img-src data: blob:; connect-src 'none'; frame-src 'none'; worker-src 'none'; object-src 'none'; media-src 'none'; ` +
   `manifest-src 'none'; base-uri 'none'; form-action 'none'`;
+
+// Thông báo về dữ liệu + đồng ý trong thanh bên (src/browser/static/store-consent*.js, src/browser/consent.ts). Trang chính sách quyền riêng tư PHẢI tồn tại trước khi nộp cửa hàng.
+const PRIVACY_URL = process.env.STORE_PRIVACY_URL || 'https://www.locaith.ai/chinh-sach-quyen-rieng-tu-chrome/';
+const CONSENT_TAG = '<script src="store-consent.js"></script>\n';
 
 function manifest() {
   const m = {
@@ -53,7 +64,8 @@ function manifest() {
     side_panel: { default_path: 'sidepanel.html' },
     background: { service_worker: 'background.js' },
     permissions: ['sidePanel', 'storage', 'unlimitedStorage', 'scripting', 'activeTab', 'contextMenus', 'tabGroups'],
-    host_permissions: PROVIDER_HOSTS,
+    // PROVIDER_HOSTS: nhà cung cấp AI + tìm web. SERVICE_HOSTS: chỉ để gửi đánh giá một chạm (POST /api/feedback) — không gửi gì khác tới đó.
+    host_permissions: [...PROVIDER_HOSTS, ...SERVICE_HOSTS],
     // Quyền đọc/điều khiển mọi trang xin lúc chạy, khi người dùng bấm nút trong Cài đặt (có thể rút lại bất cứ lúc nào).
     // identity: chỉ xin khi người dùng bấm "Đăng nhập" (OAuth) — cần để mở cửa sổ đăng nhập do trình duyệt quản lý.
     // KHÔNG khai báo `tabs`: mã không bao giờ xin quyền này (URL/tiêu đề tab có được nhờ quyền trang do người dùng cấp),
@@ -82,7 +94,8 @@ const LOCALES = {
     extName: { message: 'Locaith AI — Trợ lý trình duyệt' },
     extDescription: {
       // GIỚI HẠN CỨNG của Chrome Web Store: ≤ 132 ký tự (đếm theo code point). Vượt là cả gói bị từ chối khi tải lên.
-      message: 'Trợ lý AI trong trình duyệt: đọc trang, tra cứu web, thao tác thay bạn khi được phép. Dùng Claude, ChatGPT, Gemini hoặc API riêng.',
+      // KHÔNG liệt kê tên thương hiệu (Claude, ChatGPT, Gemini…): lần nộp đầu bị từ chối mã «Yellow Argon» vì danh sách tên hãng trong mô tả. Xem docs/CHROME-STORE.md.
+      message: 'Trợ lý AI trong thanh bên: đọc trang, tra cứu web, soạn báo cáo. Dùng khoá API của chính bạn.',
     },
     actionTitle: { message: 'Mở Locaith AI' },
     cmdOpen: { message: 'Mở/đóng khung Locaith AI' },
@@ -93,7 +106,7 @@ const LOCALES = {
   en: {
     extName: { message: 'Locaith AI — Browser agent' },
     extDescription: {
-      message: 'AI agent in your browser: reads pages, searches the web and acts for you when allowed. Works with Claude, ChatGPT or Gemini.',
+      message: 'Side-panel AI assistant: reads the page, searches the web, drafts reports. Use your own API key.',
     },
     actionTitle: { message: 'Open Locaith AI' },
     cmdOpen: { message: 'Open/close the Locaith AI panel' },
@@ -130,8 +143,17 @@ const common = {
   assetNames: 'assets/[name]-[hash]',
   jsx: 'automatic',
   jsxImportSource: 'preact',
-  define: { 'process.env.NODE_ENV': production ? '"production"' : '"development"', __ND_TEST__: testBuild ? 'true' : 'false' },
+  define: { 'process.env.NODE_ENV': production ? '"production"' : '"development"', __ND_TEST__: testBuild ? 'true' : 'false', __ND_NO_REMOTE_CODE__: 'true' },
   // MV3 cấm unsafe-eval: Ajv (biên dịch bằng new Function) và node:crypto đồng bộ được thay bằng bản thuần.
+  plugins: [
+    {
+      // Bản trình duyệt: kỹ năng artifacts không được hứa cho tải script/style từ CDN (xem scripts/browser-skill-transform.mjs).
+      name: 'browser-artifacts-skill',
+      setup(b) {
+        b.onLoad({ filter: /[\\/]skills[\\/]artifacts[\\/]SKILL\.md$/ }, async (a) => ({ contents: artifactsSkillForBrowser(await readFile(a.path, 'utf8')), loader: 'text' }));
+      },
+    },
+  ],
   alias: { ajv: at('src/browser/shims/ajv.ts'), 'node:crypto': at('src/browser/shims/crypto.ts') },
 };
 
@@ -148,6 +170,20 @@ async function copyStatic() {
   const s = at('src/browser/static');
   await mkdir(outdir, { recursive: true });
   await cp(s, outdir, { recursive: true });
+  const panelHtml = path.join(outdir, 'sidepanel.html');
+  const html = await readFile(panelHtml, 'utf8');
+  if (!html.includes(CONSENT_TAG)) throw new Error('sidepanel.html (nguồn) thiếu thẻ nạp store-consent.js');
+  if (testBuild) {
+    // Bản --test (e2e): TỰ BỎ QUA cổng đồng ý — không có tệp, không có thẻ nạp, background.js không importScripts (xem __ND_TEST__) — để e2e không kẹt sau lớp phủ.
+    await rm(path.join(outdir, 'store-consent.js'), { force: true });
+    await rm(path.join(outdir, 'store-consent-sw.js'), { force: true });
+    await writeFile(panelHtml, html.replace(CONSENT_TAG, ''));
+  } else {
+    const ui = await readFile(path.join(outdir, 'store-consent.js'), 'utf8');
+    const slot = "'__PRIVACY_URL__'";
+    if (ui.split(slot).length !== 2) throw new Error('store-consent.js (nguồn) cần đúng một chỗ chèn URL chính sách: ' + slot);
+    await writeFile(path.join(outdir, 'store-consent.js'), ui.replace(slot, () => `'${PRIVACY_URL.replace(/['\\]/g, '')}'`));
+  }
   // Font nhúng vào artifact (trang xem trước tự đọc và nhúng dạng data URI).
   await cp(at('media/fonts'), path.join(outdir, 'fonts'), { recursive: true });
   await writeFile(path.join(outdir, 'manifest.json'), JSON.stringify(manifest(), null, 2) + '\n');

@@ -3,7 +3,7 @@
  * Thuần tuý, bất biến (không sửa mảng đầu vào), không phụ thuộc môi trường chạy.
  */
 
-import type { ABlock, AgentProgress, AssistantItem, TItem, ToolBlock, UiEvent, ViewState } from './protocol';
+import type { ABlock, AgentProgress, AssistantItem, NoticeItem, TItem, ToolBlock, UiEvent, ViewState } from './protocol';
 import { UI_TOOL_OUTPUT_LIMIT } from './protocol';
 
 function findLastIndex<T>(arr: readonly T[], pred: (x: T) => boolean): number {
@@ -50,15 +50,56 @@ function blockId(a: AssistantItem, blocks: ABlock[], tag: string): string {
   return `${a.id}:${tag}${blocks.length}`;
 }
 
-function appendStreamText(a: AssistantItem, type: 'text' | 'thinking', delta: string, clearPills: boolean): AssistantItem {
+function appendStreamText(a: AssistantItem, type: 'text' | 'thinking', delta: string, clearPills: boolean, ts?: number): AssistantItem {
   if (!delta) return a;
   const blocks = a.blocks.slice();
   if (clearPills) deactivatePills(blocks);
   const last = blocks[blocks.length - 1];
   if (last && last.type === type) {
-    blocks[blocks.length - 1] = { ...last, text: last.text + delta };
+    blocks[blocks.length - 1] = { ...last, text: last.text + delta, ...thinkingTiming(last, ts) };
   } else {
-    blocks.push({ type, id: blockId(a, blocks, type === 'text' ? 't' : 'k'), text: delta });
+    blocks.push({ type, id: blockId(a, blocks, type === 'text' ? 't' : 'k'), text: delta, ...thinkingTiming(undefined, ts) });
+  }
+  return { ...a, blocks };
+}
+
+/**
+ * (lane:cc-timeline-ui) Thời lượng suy nghĩ từ dấu thời gian của từng delta: khối mới lấy `startedAt` = ts delta đầu; mỗi delta sau
+ * cập nhật `durationMs` = ts − startedAt. Không có ts (phiên cũ, nhà cung cấp không đóng dấu) → không thêm trường nào.
+ */
+function thinkingTiming(prev: ABlock | undefined, ts: number | undefined): { startedAt?: number; durationMs?: number } {
+  if (typeof ts !== 'number' || !Number.isFinite(ts) || ts <= 0) return {};
+  if (!prev || prev.type !== 'thinking') return { startedAt: ts };
+  const start = prev.startedAt;
+  if (typeof start !== 'number' || !Number.isFinite(start) || start <= 0) return { startedAt: ts };
+  return { startedAt: start, durationMs: Math.max(0, ts - start) };
+}
+
+/** (lane:output-timeouts) Bỏ `n` ký tự cuối của khối văn bản cuối (harness lùi câu trả lời bị cắt về ranh giới câu). Không có khối văn bản cuối → giữ nguyên. */
+function trimTailText(a: AssistantItem, n: number | undefined): AssistantItem {
+  if (!n || n <= 0) return a;
+  // Đi ngược từ cuối, BỎ QUA dòng trạng thái / khối suy luận đứng sau chữ (vd. «Đang soạn…» của write_file bị treo), cắt `n` ký tự
+  // từ các khối chữ gần nhất; khối chữ cạn hết thì bỏ khối. Gặp khối khác (công cụ…) là dừng — không bao giờ xoá phần của lượt trước.
+  let remaining = Math.floor(n);
+  const blocks = a.blocks.slice();
+  let changed = false;
+  for (let i = blocks.length - 1; i >= 0 && remaining > 0; i--) {
+    const b = blocks[i];
+    if (b.type === 'pill' || b.type === 'thinking' || b.type === 'notice') continue;
+    if (b.type !== 'text') break;
+    const cut = Math.min(remaining, b.text.length);
+    remaining -= cut;
+    changed = true;
+    // Khối cạn mà còn phải cắt tiếp ở khối trước → bỏ khối; khối cuối cùng được cắt giữ lại (có thể rỗng như trước đây).
+    if (cut >= b.text.length && remaining > 0) blocks.splice(i, 1);
+    else blocks[i] = { ...b, text: b.text.slice(0, b.text.length - cut) };
+  }
+  if (!changed) return a;
+  // Dòng trạng thái đang hoạt động («Đang soạn…», «Đang suy nghĩ…») đứng cuối là của lần stream bị bỏ: gỡ luôn để không treo mãi.
+  while (blocks.length > 0) {
+    const tail = blocks[blocks.length - 1];
+    if (tail.type === 'pill' && tail.active) blocks.pop();
+    else break;
   }
   return { ...a, blocks };
 }
@@ -93,10 +134,10 @@ export function applyEvent(items: readonly TItem[], ev: UiEvent): TItem[] {
       ];
 
     case 'text':
-      return updateAssistant(items, ev.id, (a) => appendStreamText(a, 'text', ev.delta, true));
+      return updateAssistant(items, ev.id, (a) => appendStreamText(trimTailText(a, ev.trimTail), 'text', ev.delta, true));
 
     case 'thinking':
-      return updateAssistant(items, ev.id, (a) => appendStreamText(a, 'thinking', ev.delta, false));
+      return updateAssistant(items, ev.id, (a) => appendStreamText(a, 'thinking', ev.delta, false, ev.ts));
 
     case 'pill':
       return updateAssistant(items, ev.id, (a) => {
@@ -137,11 +178,13 @@ export function applyEvent(items: readonly TItem[], ev: UiEvent): TItem[] {
           args: ev.args,
           state: 'running',
           startedAt: Date.now(),
+          // (lane:perm-rules) luật allow đã cho qua (tuỳ chọn)
+          ...(ev.rule ? { rule: ev.rule } : {}),
         };
         const idx = findLastIndex(blocks, (b) => b.type === 'tool' && b.id === ev.callId);
         // Gửi lại tool_start cho cùng callId (sau khi người dùng duyệt) đưa dòng về trạng thái đang chạy.
         if (idx >= 0) {
-          blocks[idx] = { ...(blocks[idx] as ToolBlock), name: ev.name, args: ev.args, state: 'running', permission: undefined };
+          blocks[idx] = { ...(blocks[idx] as ToolBlock), name: ev.name, args: ev.args, state: 'running', permission: undefined, ...(ev.rule ? { rule: ev.rule } : {}) };
         } else blocks.push(fresh);
         return { ...a, blocks };
       });
@@ -243,14 +286,28 @@ export function applyEvent(items: readonly TItem[], ev: UiEvent): TItem[] {
         if (idx >= 0) {
           return updateAssistant(items, targetId, (a) => {
             const blocks = deactivatePills(a.blocks.slice());
-            blocks.push({ type: 'notice', id: blockId(a, blocks, 'n'), level: ev.level, text: ev.text, ...(ev.compact ? { compact: ev.compact } : {}) });
+            // (lane:blind-verifier) Kiểm tra độc lập: cùng `verify.key` trong cùng lượt → cập nhật TẠI CHỖ (đang chạy → kết quả), không thêm dòng mới.
+            const vk = ev.verify?.key;
+            const prev = vk ? findLastIndex(blocks, (b) => b.type === 'notice' && b.verify?.key === vk) : -1;
+            const block = { type: 'notice' as const, id: prev >= 0 ? blocks[prev].id : blockId(a, blocks, 'n'), level: ev.level, text: ev.text, ...(ev.compact ? { compact: ev.compact } : {}), ...(ev.verify ? { verify: ev.verify } : {}) };
+            if (prev >= 0) blocks[prev] = block;
+            else blocks.push(block);
             return { ...a, blocks };
           });
         }
       }
+      // (lane:blind-verifier) Thông báo độc lập mang `verify` cùng khoá (lệnh /verify): thay tại chỗ.
+      const vk = ev.verify?.key;
+      const prev = vk ? findLastIndex(items, (it) => it.kind === 'notice' && it.verify?.key === vk) : -1;
+      if (prev >= 0) {
+        const old = items[prev] as NoticeItem;
+        const next = items.slice();
+        next[prev] = { ...old, level: ev.level, text: ev.text, verify: ev.verify };
+        return next;
+      }
       return [
         ...items,
-        { kind: 'notice', id: `notice:${items.length}:${Date.now()}`, level: ev.level, text: ev.text, ts: Date.now(), ...(ev.compact ? { compact: ev.compact } : {}) },
+        { kind: 'notice', id: `notice:${items.length}:${Date.now()}`, level: ev.level, text: ev.text, ts: Date.now(), ...(ev.compact ? { compact: ev.compact } : {}), ...(ev.verify ? { verify: ev.verify } : {}) },
       ];
     }
 

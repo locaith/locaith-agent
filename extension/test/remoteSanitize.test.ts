@@ -109,6 +109,18 @@ describe('Remote — rút gọn dữ liệu gửi ra ngoài máy', () => {
   });
 });
 
+describe('Remote — dòng hook (lane:hooks)', () => {
+  it('dòng «Hook …» là loại sự kiện đã có (pill): đi qua nguyên vẹn, chỉ bị cắt khi quá dài', () => {
+    const short = { t: 'pill' as const, id: 'a', pillId: 'a:hook:1', text: 'Hook PreToolUse · fmt ✓ 12 ms', kind: 'working' as const };
+    expect(sanitizeEvent(short)).toBe(short);
+    const long = sanitizeEvent({ ...short, text: 'Hook Stop · ' + 'x'.repeat(5000) }) as any;
+    expect(long.t).toBe('pill');
+    expect(long.text.length).toBeLessThanOrEqual(400);
+    const block = sanitizeItem({ kind: 'assistant', id: 'a', blocks: [{ type: 'pill', id: 'p', text: 'y'.repeat(5000), kind: 'working', active: false }] } as any) as any;
+    expect(block.blocks[0].text.length).toBeLessThanOrEqual(400);
+  });
+});
+
 describe('Remote — parseCommand', () => {
   const ok = (v: unknown, canBypass = false) => parseCommand(v, { canBypass });
   it('send: giữ ảnh hợp lệ (png/jpeg/webp/gif), làm sạch nhãn, bỏ trường lạ', () => {

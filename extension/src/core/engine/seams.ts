@@ -136,7 +136,18 @@ export type FinalizeDecision =
   /** Kết thúc lần chạy ngay, kèm thông báo tuỳ chọn. */
   | { action: 'halt'; notice?: { level: 'info' | 'warn' | 'error'; text: string } };
 
+/**
+ * (lane:perm-rules) Lời khuyên của bộ luật quyền cho MỘT lệnh gọi công cụ: `hit` = luật đã khớp (deny > ask > allow, xét TRƯỚC logic chế độ
+ * trong `decidePermission`); `suggest` = các đặc tả «Luôn cho phép» hợp lý để thẻ xin quyền đề xuất (rỗng = không đề xuất).
+ */
+export interface PermissionAdvice {
+  hit?: { action: 'allow' | 'ask' | 'deny'; rule: string; source: 'user' | 'workspace' };
+  suggest?: string[];
+}
+
 export interface RunHooks {
+  /** (lane:perm-rules) Luật quyền: gọi sau `toolBefore`, trước khi quyết định hỏi/cho/chặn. Extension đầu tiên trả về `hit` thắng; `suggest` gộp lại. */
+  permissionRule?(call: ToolUseBlock, def: ToolDef, ctx: ToolContext): PermissionAdvice | void | Promise<PermissionAdvice | void>;
   /**
    * Trước mỗi lần gọi model. Trả về các khối chữ cần nối vào lịch sử (được LƯU, nằm trong tin người dùng cuối nếu tin
    * cuối là của người dùng — giữ xen kẽ vai trò — hoặc thành tin synthetic mới).

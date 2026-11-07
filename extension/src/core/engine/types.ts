@@ -5,6 +5,7 @@
 
 import type { ChatMessage, ImageBlock, JsonSchema, ThinkingLevel } from '../types';
 import type { DiffInfo, PermissionKind, PermissionMode, PermissionRequest, SuggestionOption, TodoItem, UiEvent } from '../../shared/protocol';
+import type { DiagnosticsQuery, DiagnosticsResult } from '../ide/diagnostics'; // (lane:ide-context)
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Công cụ
@@ -31,6 +32,8 @@ export interface ToolResult {
   content: string;
   isError?: boolean;
   images?: ImageBlock[];
+  /** (lane:customer-bugs) Ảnh CHỈ để người dùng xem trong khung chat (thẻ «Trước | Sau»): không gửi cho model nên không tốn token ảnh. Thiếu → dùng `images`. */
+  displayImages?: ImageBlock[];
   /** Số bước của một thao tác lên trang (bản trình duyệt): hiện trên dấu ở trang lẫn trong khung chat để người dùng nhắc lại "bước 3". */
   step?: number;
   /** Chuỗi ngắn cạnh nhãn trên giao diện: "12 kết quả", "+24 −3". */
@@ -136,6 +139,21 @@ export interface RunCommandResult {
   truncated: boolean;
 }
 
+// (lane:bg-tasks) tiến trình nền — host nào không cài `startProcess` thì không có tác vụ nền.
+export interface StartProcessOptions {
+  command: string;
+  cwd: string;
+  onData(chunk: string): void;
+  /** Gọi đúng một lần khi tiến trình (shell) thoát hoặc không khởi chạy được (`error`). */
+  onExit(info: { exitCode: number | null; signal?: string | null; error?: string }): void;
+}
+
+export interface ProcessHandle {
+  readonly pid: number | undefined;
+  /** Dừng CẢ CÂY tiến trình theo PID (không bao giờ theo tên). Xong khi lệnh giết đã chạy. */
+  kill(): Promise<void>;
+}
+
 export interface PermissionDecision {
   decision: 'allow' | 'allow_session' | 'deny';
   feedback?: string;
@@ -174,6 +192,8 @@ export interface ToolHost {
     signal: AbortSignal;
   }): Promise<GrepResult>;
   runCommand(opts: RunCommandOptions): Promise<RunCommandResult>;
+  /** (lane:bg-tasks) Khởi một tiến trình chạy NỀN (không chờ). Tuỳ chọn: bản trình duyệt không có. */
+  startProcess?(opts: StartProcessOptions): ProcessHandle;
 
   fetch(url: string, init?: RequestInit): Promise<Response>;
   /**
@@ -189,6 +209,10 @@ export interface ToolHost {
   log(level: 'debug' | 'info' | 'warn' | 'error', message: string): void;
   /** Ghi lại nội dung trước/sau của một thay đổi tệp để giao diện mở được diff đầy đủ trong editor (tuỳ chọn). */
   recordFileChange?(callId: string, change: { abs: string; rel: string; before: string | null; after: string }): void;
+  // (lane:ide-context) Chẩn đoán của IDE (language server). Không có = host không có IDE (CLI, Chrome) → không có get_diagnostics.
+  diagnostics?(query: DiagnosticsQuery): Promise<DiagnosticsResult>;
+  /** Chờ language server cập nhật chẩn đoán của tệp sau khi ghi (≥ minMs, ≤ maxMs, ngắt được). Không có → engine tự chờ minMs. */
+  waitForDiagnostics?(abs: string, opts: { minMs: number; maxMs: number; signal: AbortSignal }): Promise<void>;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -238,9 +262,13 @@ export interface SessionState {
    * khi hai thứ này không đổi, nên khi nó đổi (duyệt kế hoạch, nạp kỹ năng, sang ngày mới) engine xoá suy luận cũ.
    */
   promptFingerprint?: string;
+  /** (lane:commands-agents) Phong cách đầu ra do người dùng chọn bằng `/output-style` cho phiên này (vắng = theo cài đặt). */
+  outputStyle?: { name: string; prompt: string };
   /** Kích thước ngữ cảnh thực của lần gọi gần nhất (token). */
   lastContextTokens: number;
   usageTotals: { input: number; output: number };
+  /** (lane:ctx-compaction) Đếm việc giữ ngữ cảnh gọn của phiên — thanh đo ngữ cảnh đọc. Tuỳ chọn: phiên cũ không có. */
+  contextStats?: { clearedResults: number; compactions: number };
 }
 
 export function newSession(partial: Partial<SessionState> & Pick<SessionState, 'id' | 'provider' | 'model'>): SessionState {
@@ -282,12 +310,30 @@ export interface EngineSettings {
    * Khách báo nén ở ~100k là quá sớm với model cửa sổ lớn → nâng lên 0,9 để giữ ngữ cảnh lâu hơn.
    */
   compactAt?: number;
+  // ── (lane:ctx-compaction) tham số giữ ngữ cảnh gọn — xem compactTuning.ts ──
+  /** Bắt đầu lược kết quả công cụ cũ khi ngữ cảnh vượt phần trăm này của cửa sổ (0 = tắt; mặc định 40). */
+  clearToolResultsAtPercent?: number;
+  /** Số tin nhắn gần nhất giữ nguyên khi tóm tắt toàn bộ (mặc định 20; không cắt đôi cặp tool_use/tool_result). */
+  keepRecentMessages?: number;
+  /** Trần tuyệt đối (token) cho ngưỡng nén; 0 = tự động (300k cho cửa sổ > 400k khi người dùng không tự đặt compactAtPercent). */
+  compactAtTokens?: number;
+  /** Người dùng đã tự đặt compactAtPercent (tắt trần tự động). */
+  compactAtUserSet?: boolean;
   /** Tên các tệp hướng dẫn dự án cần nạp, theo thứ tự ưu tiên. */
   instructionFiles: string[];
   /** Gom delta suy nghĩ/mã: số ký tự tối thiểu hoặc khoảng thời gian trước khi tóm tắt. */
   summarizeEveryChars: number;
   summarizeEveryMs: number;
   maxPillsPerReply: number;
+  // ── (lane:output-timeouts) ──
+  /** Trần đầu ra thật của model đang dùng (từ danh mục), nếu biết — trần thích ứng kẹp theo đây. */
+  modelMaxOutputTokens?: number;
+  /** Tự chọn trần đầu ra theo loại việc mỗi lượt (8k cho lượt thường, trần đầy đủ cho tài liệu dài / viết tiếp). Mặc định bật. */
+  adaptiveOutputTokens?: boolean;
+  /** Ngưỡng im lặng của luồng model: 'auto' (theo cỡ ngữ cảnh × mức suy luận, mặc định) · 0 = tắt · số giây cố định. */
+  modelStallSeconds?: 'auto' | number;
+  /** Trần tổng thời gian hoạt động của một lần gọi model (giây; mặc định 600). */
+  modelCallMaxSeconds?: number;
 }
 
 export const DEFAULT_ENGINE_SETTINGS: EngineSettings = {
@@ -299,6 +345,10 @@ export const DEFAULT_ENGINE_SETTINGS: EngineSettings = {
   language: 'vi',
   autoCompact: true,
   contextWindow: 200_000,
+  // (lane:ctx-compaction)
+  clearToolResultsAtPercent: 40,
+  keepRecentMessages: 20,
+  compactAtTokens: 0,
   instructionFiles: ['LOCAITH.md', 'AGENTS.md', 'CLAUDE.md'],
   summarizeEveryChars: 700,
   summarizeEveryMs: 1500,

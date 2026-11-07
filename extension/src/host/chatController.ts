@@ -1,14 +1,27 @@
 import * as vscode from 'vscode';
 import { AgentEngine, type QueuedMessage, type QueueState, type RunResult } from '../core/engine/engine';
 import { coreRunExtensions } from '../core/engine/extensions';
-import { hostRunExtensions } from './hostExtensions';
+import { hostRunExtensions, hostSubAgentExtensions } from './hostExtensions';
+import { registerVerifySlash } from './extensions/verifier'; // (lane:blind-verifier)
 import { SlashRegistry, type SlashContext } from './slashRegistry';
+import { commandsOutputStyle, registerCommandsSlash, type CommandsLaneAccess } from './commandsSlash'; // (lane:commands-agents)
+import { attachPermissionsFeature, type PermissionsFeature } from './permissionsFeature'; // (lane:perm-rules)
+import { handleSessionsUxMessage, registerSessionsSlash, type SessionsUxPort } from './sessionsUx'; // (lane:sessions-ux)
+import { buildMeter, findPricing } from '../shared/sessionMeter'; // (lane:sessions-ux)
+import { hookServiceFor } from './hooks/hostHooks'; // (lane:hooks)
+import { registerHooksSlash } from './hooks/slash'; // (lane:hooks)
+import { hooksSubAgentExtension } from './extensions/hooks'; // (lane:hooks)
+import type { HookService } from '../core/hooks/service'; // (lane:hooks)
+import { handleBgTaskMessage, registerTasksSlash, type BgTasksBridge } from './tasksSlash'; // (lane:bg-tasks)
+import { getTaskManager } from '../core/tasks/backgroundTasks'; // (lane:bg-tasks)
+import { openExternalOnce } from '../core/host/openOnce'; // (lane:customer-bugs)
+import { findToolImage } from '../shared/toolImages'; // (lane:customer-bugs)
 import { loadProjectInstructions } from '../core/engine/instructions';
 import { resumeInstruction } from '../core/engine/resume';
 import { MEMORY_DIR, MEMORY_INDEX, type MemoryScope, type MemorySnapshot } from '../core/engine/memory';
 import { t, type Lang } from '../core/engine/strings';
 import { Summarizer } from '../core/engine/summarizer';
-import { newSession, type ArtifactRecord, type PermissionDecision, type SessionState } from '../core/engine/types';
+import { newSession, NotUtf8Error, type ArtifactRecord, type PermissionDecision, type SessionState } from '../core/engine/types';
 import { isInside, normalizeForCompare, resolveUserPath } from '../core/fsutil/paths';
 import { MEDIA_DATA_URI_MAX, MEDIA_MAX_PATHS, imageMime, mediaCandidates, mediaKindOf, viaLink, type MediaZones } from '../core/fsutil/mediaPaths';
 import * as fs from 'node:fs';
@@ -39,7 +52,8 @@ import { docCharBudget } from '../shared/docKinds';
 import { extractDocument } from '../shared/docExtract';
 import { parseUploadedDocument } from '../shared/docWrap';
 import { backupFileName, makeBackup } from '../shared/sessionBackup';
-import { fold, isBypassSlash, MODE_ALIASES } from '../shared/slashMode';
+import { fold, isBypassSlash, isLocalOnlySlash, MODE_ALIASES } from '../shared/slashMode';
+import { pickCommandModel } from './commandModel'; // (lane:commands-agents)
 import type {
   AttachmentInfo,
   HostMessage,
@@ -61,6 +75,8 @@ import { newId, reduceView } from '../shared/transcript';
 import type { ArtifactPanels } from './artifactPanel';
 import { isAllowedBaseUrl, type ConfigService } from './config';
 import type { DiffPreview } from './diffPreview';
+import { CheckpointFeature, isRewindMessage } from './checkpoints/feature'; // (lane:checkpoints-rewind)
+import { fsRestoreIO, type RestoreIO } from './checkpoints/restore'; // (lane:checkpoints-rewind)
 import type { EditorContextTracker } from './editorContext';
 import type { FileIndex } from './fileIndex';
 import type { Logger } from './logger';
@@ -68,6 +84,7 @@ import type { ProviderService } from './providerService';
 import { SecretsService } from './secrets';
 import type { SessionStore } from './sessionStore';
 import { buildUserContent } from './userContent';
+import { registerIdeSlash } from './ideSlash'; // (lane:ide-context)
 import type { AccountGate } from './account';
 import type { AcceptResult, LocaithGate } from './locaith';
 import type { RemoteGate } from './remote';
@@ -117,7 +134,7 @@ const SLASH: Record<Lang, SlashCommandInfo[]> = {
   vi: [
     { name: 'new', description: 'Bắt đầu cuộc trò chuyện mới' },
     { name: 'clear', description: 'Xoá và bắt đầu lại (giống /new)' },
-    { name: 'compact', description: 'Nén tin nhắn cũ để giải phóng ngữ cảnh' },
+    { name: 'compact', description: 'Nén tin nhắn cũ để giải phóng ngữ cảnh — /compact <giữ lại gì> (tuỳ chọn)' },
     { name: 'model', description: 'Đổi model — /model <tên>' },
     { name: 'mode', description: 'Đổi chế độ quyền — /mode plan' },
     { name: 'thinking', description: 'Đổi mức suy luận — /thinking high' },
@@ -131,7 +148,7 @@ const SLASH: Record<Lang, SlashCommandInfo[]> = {
   en: [
     { name: 'new', description: 'Start a new conversation' },
     { name: 'clear', description: 'Clear and start over (same as /new)' },
-    { name: 'compact', description: 'Compact old messages to free up context' },
+    { name: 'compact', description: 'Compact old messages to free up context — /compact <what to keep> (optional)' },
     { name: 'model', description: 'Change model — /model <name>' },
     { name: 'mode', description: 'Change permission mode — /mode plan' },
     { name: 'thinking', description: 'Change reasoning level — /thinking high' },
@@ -218,6 +235,10 @@ export class ChatController implements vscode.Disposable {
   private readonly registry: ToolRegistry;
   /** Sổ đăng ký lệnh gạch chéo của các tính năng (xem slashRegistry.ts); lệnh dựng sẵn vẫn ở `handleSlash`. */
   private readonly slash = new SlashRegistry();
+  /** (lane:perm-rules) Luật quyền allow/ask/deny: lệnh /permissions, tin «Luôn cho phép», trường `permissions` của ViewState. */
+  private readonly perms: PermissionsFeature;
+  /** Checkpoint & Quay lại (lane:checkpoints-rewind): chụp bản gốc trước khi trợ lý ghi tệp, khôi phục mã/hội thoại. */
+  private readonly checkpoints: CheckpointFeature;
   private readonly detachMcp: () => void;
   private readonly accountSub?: vscode.Disposable;
   private readonly remoteSub?: vscode.Disposable;
@@ -256,7 +277,9 @@ export class ChatController implements vscode.Disposable {
       diffs: d.diffs,
       extraRoots: () => [...d.skillDirs(), ...(this.host.homeDir ? [path.join(this.host.homeDir, '.locaith', 'memory')] : [])],
       askPermission: (req, signal) => this.askPermission(req, signal),
+      onFileWrite: (abs, before, after) => this.checkpoints.onWrite(abs, before, after), // (lane:checkpoints-rewind)
     });
+    this.checkpoints = this.makeCheckpoints(); // (lane:checkpoints-rewind)
     this.registry = createToolRegistry({
       skills: d.skills,
       host: this.host,
@@ -272,6 +295,7 @@ export class ChatController implements vscode.Disposable {
         limiter: new Semaphore(d.config.agentsMaxConcurrent()),
         writeLock: new Semaphore(1),
         onSwitch: (i) => this.announceSwitch(i, false),
+        extensions: () => hostSubAgentExtensions({ deps: this.d, host: this.host, registry: this.registry, session: () => this.session }, hooksSubAgentExtension(() => this.hookService())), // (lane:hooks) hook PreToolUse/PostToolUse + (lane:perm-rules) luật quyền cũng áp cho agent con
       },
       market: { search: (q, n, skip) => d.market.search(q, n, skip) },
       chrome: d.chrome,
@@ -280,14 +304,28 @@ export class ChatController implements vscode.Disposable {
     this.detachMcp = d.mcp.attach(this.registry);
     // ── Lệnh gạch chéo của từng tính năng: MỖI LANE MỘT DÒNG RIÊNG (bỏ dấu // ở dòng của mình + thêm import). Xem slashRegistry.ts. ──
     // registerCompactSlash(this.slash, this); // (lane:ctx-compaction)  /compact <hướng dẫn>
-    // registerVerifySlash(this.slash, this); // (lane:blind-verifier)  /verify
-    // registerRewindSlash(this.slash, this); // (lane:checkpoints-rewind)  /rewind
-    // registerPermissionsSlash(this.slash, this); // (lane:perm-rules)  /permissions
-    // registerHooksSlash(this.slash, this); // (lane:hooks)  /hooks
-    // registerCommandsSlash(this.slash, this); // (lane:commands-agents)  lệnh tuỳ chỉnh + /review /simplify /status /doctor /agents /output-style /mcp
-    // registerTasksSlash(this.slash, this); // (lane:bg-tasks)  /tasks
-    // registerIdeSlash(this.slash, this); // (lane:ide-context)  /problems
-    // registerSessionsSlash(this.slash, this); // (lane:sessions-ux)  /fork /cost /context
+    registerVerifySlash(this.slash, { host: this.host, registry: this.registry, deps: this.d, session: () => this.session, emit: (ev) => this.emit(ev), runTurn: (fn) => this.runVerifyTurn(fn) }); // (lane:blind-verifier)  /verify
+    this.checkpoints.registerSlash(this.slash); // (lane:checkpoints-rewind)  /rewind
+    // (lane:perm-rules) /permissions + tin «Luôn cho phép» / thêm-xoá luật + trường `permissions` của ViewState.
+    this.perms = attachPermissionsFeature(this.slash, {
+      config: d.config,
+      lang: () => this.lang,
+      patch: (p) => this.patch(p),
+      notice: (level, text) => this.emit({ t: 'notice', level, text }),
+      resolvePermission: (id, decision) => {
+        const w = this.waiters.get(id);
+        if (!w) return false;
+        w(decision);
+        return true;
+      },
+      showScreen: (screen) => this.showScreen(screen),
+    });
+    registerHooksSlash(this.slash, this); // (lane:hooks)  /hooks
+    this.hookService().setNotifier((level, text) => this.emit({ t: 'notice', level, text })); // (lane:hooks)
+    registerCommandsSlash(this.slash, this); // (lane:commands-agents)  lệnh tuỳ chỉnh + /review /simplify /status /doctor /agents /output-style /mcp
+    registerTasksSlash(this.slash, this); // (lane:bg-tasks)  /tasks
+    registerIdeSlash(this.slash, { diagnostics: (q) => this.host.diagnostics(q) }); // (lane:ide-context)  /problems
+    registerSessionsSlash(this.slash, this); // (lane:sessions-ux)  /fork /cost /context
     // registerMcpSlash(this.slash, this); // (lane:mcp-parity)  /mcp__<server>__<prompt>
     // registerMemorySlash(this.slash, this); // (lane:instructions-memory)  /memory /remember
     this.session = this.freshSession();
@@ -384,11 +422,41 @@ export class ChatController implements vscode.Disposable {
       lang: this.lang,
       info: (text) => this.emit({ t: 'notice', level: 'info', text }),
       warn: (text) => this.emit({ t: 'notice', level: 'warn', text }),
-      runPrompt: (text) => this.runAgentTurn(() => this.sendUnlocked(text, text, [])),
+      runPrompt: (text, opts) => this.runAgentTurn(() => this.sendWithModel(text, opts?.model)),
       get busy() {
         return self.busy;
       },
     };
+  }
+
+  // ── (lane:sessions-ux) cổng cho rẽ nhánh / tìm kiếm / ghim / đồng hồ (logic ở sessionsUx.ts) ──
+  sessionsUxPort(): SessionsUxPort {
+    // eslint-disable-next-line @typescript-eslint/no-this-alias
+    const self = this;
+    return {
+      get lang() {
+        return self.lang;
+      },
+      get busy() {
+        return self.busy;
+      },
+      store: this.d.store,
+      session: () => this.session,
+      transcript: () => this.view?.transcript ?? [],
+      context: () => this.contextInfo(),
+      pricing: () => this.view?.providers?.find((p) => p.id === this.session.provider)?.models.find((m) => m.id === this.session.model)?.pricing,
+      saveNow: () => this.saveNow(),
+      open: (id) => this.loadSession(id),
+      refreshListings: async () => this.patch(await this.listings()),
+      post: (msg) => this.post(msg),
+      notice: (level, text) => this.emit({ t: 'notice', level, text }),
+      toast: (level, text) => this.toast(level, text),
+    };
+  }
+
+  /** Đồng hồ cho (transcript, phiên) chỉ định; mặc định là cuộc đang mở. Khi dựng view MỚI phải truyền transcript mới, vì this.view lúc đó còn là view cũ. */
+  private meterPatch(transcript?: readonly TItem[], session: SessionState = this.session): Pick<ViewState, 'meter'> {
+    return { meter: buildMeter(session, transcript ?? this.view?.transcript ?? [], findPricing(this.view?.providers, session.provider, session.model)) };
   }
 
   private async orchestrationInfo(): Promise<OrchestrationInfo> {
@@ -404,6 +472,30 @@ export class ChatController implements vscode.Disposable {
   /** MCP đổi trạng thái (khởi động xong, lỗi, dừng): làm mới danh sách nếu Chợ đang mở. */
   async refreshMarketIfOpen(): Promise<void> {
     if (this.marketOpen && !this.disposed && this.webview) await this.sendMarket(true);
+  }
+
+  // ── (lane:commands-agents) cửa cho host/commandsSlash.ts: phụ thuộc + phiên + làm mới menu `/` ──
+  private readonly laneDisposers: (() => void)[] = [];
+  commandsLaneAccess(): CommandsLaneAccess {
+    return {
+      deps: this.d,
+      host: this.host,
+      registry: this.registry,
+      session: () => this.session,
+      refreshMenu: () => {
+        if (this.view && !this.disposed) this.patch({ slashCommands: this.slashList() });
+      },
+      notice: (level, text) => {
+        if (this.view && !this.disposed) this.emit({ t: 'notice', level, text });
+      },
+      onDispose: (fn) => void this.laneDisposers.push(fn),
+      showScreen: (screen) => this.showScreen(screen),
+    };
+  }
+
+  /** (lane:bg-tasks) Cầu nối cho tasksSlash.ts: host + vá ViewState từ ngoài controller. */
+  bgTasksBridge(): BgTasksBridge {
+    return { host: this.host, sessionId: () => this.session.id, patch: (p) => this.patch(p), lang: () => this.lang, disposed: () => this.disposed, addMirror: (m) => this.addMirror(m) };
   }
 
   /** Ảnh chụp trạng thái — chỉ dùng cho kiểm thử tích hợp. */
@@ -478,6 +570,12 @@ export class ChatController implements vscode.Disposable {
       this.notifyLocal('warn', this.lang === 'vi' ? 'Một thiết bị từ xa vừa thử đổi sang chế độ «Bỏ qua mọi xác nhận» — bị chặn (cài đặt locaithAgent.remote.allowBypass đang tắt).' : 'A remote device just tried to switch to “Bypass all prompts” — blocked (locaithAgent.remote.allowBypass is off).');
       return Promise.reject(new Error('bypass_not_allowed'));
     }
+    // (xlane) `/permissions allow|trust…`, `/hooks trust|open`, `/agents new` đổi quyền/thực thi: chỉ ở VS Code, không đi đường vòng bằng nội dung tin `send` từ xa.
+    if (m.type === 'send' && isLocalOnlySlash(m.text)) {
+      this.notifyLocal('warn', this.lang === 'vi' ? 'Một thiết bị từ xa vừa thử chạy lệnh đổi quyền/hook (/permissions, /hooks, /agents) — bị chặn, chỉ dùng được trong VS Code.' : 'A remote device just tried a permission/hook command (/permissions, /hooks, /agents) — blocked; use it in VS Code.');
+      return Promise.reject(new Error('slash_local_only'));
+    }
+    if (m.type === 'bg_task' && m.action !== 'stop') return Promise.reject(new Error('bad_action')); // (lane:bg-tasks) từ xa chỉ được Dừng
     if (via && (m.type === 'send' || m.type === 'permission_response' || m.type === 'stop' || m.type === 'set_mode' || m.type === 'new_session' || m.type === 'load_session')) {
       const what: Record<string, [string, string]> = {
         send: ['gửi tin nhắn', 'sent a message'],
@@ -491,6 +589,7 @@ export class ChatController implements vscode.Disposable {
       // Chỉ báo cho khung chat trong VS Code (không phát lại cho máy khách từ xa — họ vừa tự bấm nên không cần thông báo).
       void this.webview?.postMessage({ type: 'toast', level: 'info', text: this.lang === 'vi' ? `Từ xa · ${via}: ${w[0]}` : `Remote · ${via}: ${w[1]}` } satisfies HostMessage);
     }
+    if (isRewindMessage(m)) return this.checkpoints.handle(m, { remote: via ?? 'remote' }); // (lane:checkpoints-rewind)
     return this.onMessage(m);
   }
 
@@ -545,7 +644,17 @@ export class ChatController implements vscode.Disposable {
   }
 
   private contextInfo(): ViewState['context'] {
-    return { usedTokens: this.session.lastContextTokens, limitTokens: this.d.providers.contextWindow(this.session.provider, this.session.model) };
+    const usedTokens = this.session.lastContextTokens;
+    const limitTokens = this.d.providers.contextWindow(this.session.provider, this.session.model);
+    // (lane:ctx-compaction) số liệu giữ ngữ cảnh gọn cho thanh đo (percent, clearedResults, compactions)
+    const stats = this.session.contextStats;
+    return {
+      usedTokens,
+      limitTokens,
+      percent: limitTokens > 0 ? Math.round((usedTokens / limitTokens) * 100) : 0,
+      clearedResults: stats?.clearedResults ?? 0,
+      compactions: stats?.compactions ?? 0,
+    };
   }
 
   private baseView(): ViewState {
@@ -572,13 +681,16 @@ export class ChatController implements vscode.Disposable {
       skills: this.skillSummaries(),
       slashCommands: this.slashList(),
       allowBypass: this.d.config.allowBypass(),
+      permissions: this.perms.view(), // (lane:perm-rules)
       screen: 'chat',
       orchestration: { mode: this.d.config.orchestrationMode(), pool: [] },
       canQueue: true,
       queued: [],
+      ...this.checkpoints.baseField(), // (lane:checkpoints-rewind)
       ...(this.d.account ? { account: this.d.account.view() } : {}),
       ...(this.d.remote ? { remote: this.d.remote.view() } : {}),
       ...(this.d.locaith ? { locaith: this.locaithView() } : {}),
+      ...this.meterPatch(), // (lane:sessions-ux)
     };
   }
 
@@ -719,6 +831,7 @@ export class ChatController implements vscode.Disposable {
 
   private emit(ev: UiEvent): void {
     this.view = reduceView(this.view, ev);
+    if (ev.t === 'user' && !ev.steer) this.checkpoints.beginTurn(ev.id); // (lane:checkpoints-rewind) tin mở lượt = điểm quay lại
     this.pending.push(ev);
     if (!this.flushTimer) this.flushTimer = setTimeout(() => this.flush(), 33);
   }
@@ -759,6 +872,9 @@ export class ChatController implements vscode.Disposable {
         if (b.type === 'tool_result') for (const im of b.images ?? []) if (imageKey(im.data) === key) return this.post({ type: 'image_data', key, mediaType: im.mediaType, data: im.data });
       }
     }
+    // (lane:customer-bugs) Ảnh do công cụ gửi lên (thẻ «Trước | Sau») chỉ nằm trong transcript đang mở, không nằm trong lịch sử gửi model.
+    const shot = findToolImage(this.view.transcript, key);
+    if (shot) return this.post({ type: 'image_data', key, mediaType: shot.mediaType, data: shot.data });
     this.toast('info', vi ? 'Ảnh gốc không còn trong lịch sử (đã nén ngữ cảnh) nên chỉ xem được bản thu nhỏ.' : 'The original image is no longer in the history (context was compacted); showing the thumbnail.');
   }
 
@@ -851,7 +967,7 @@ export class ChatController implements vscode.Disposable {
         this.patch({ skills: this.skillSummaries() });
         break;
       case 'usage':
-        this.patch({ context: this.contextInfo() });
+        this.patch({ context: this.contextInfo(), ...this.meterPatch() }); // (lane:sessions-ux) + đồng hồ chi phí
         break;
       case 'mode':
         this.patch({ mode: ev.mode });
@@ -899,6 +1015,7 @@ export class ChatController implements vscode.Disposable {
       this.requireAccount();
       return;
     }
+    if (this.perms.handle(m)) return; // (lane:perm-rules)
     switch (m.type) {
       case 'ready':
         this.stats.ready++;
@@ -965,8 +1082,16 @@ export class ChatController implements vscode.Disposable {
         return this.deleteSession(m.id);
       case 'restore_session':
         return this.restoreSession(String(m.id ?? ''));
+      case 'rewind_open': // (lane:checkpoints-rewind)
+      case 'rewind_plan':
+      case 'rewind_apply':
+      case 'rewind_cancel':
+      case 'rewind_redo':
+      case 'checkpoint_diff':
+        return this.checkpoints.handle(m);
       case 'purge_session':
         await this.d.store.purge(String(m.id ?? ''));
+        void this.checkpoints.removeSession(String(m.id ?? '')); // (lane:checkpoints-rewind)
         this.patch(await this.listings());
         return;
       case 'empty_trash':
@@ -994,6 +1119,8 @@ export class ChatController implements vscode.Disposable {
         return this.setMode(m.mode);
       case 'enable_full_access':
         return this.enableFullAccess(m.remember === true);
+      case 'set_editor_context': // (lane:ide-context) chip «Đang xem» bật/tắt việc gửi kèm tệp/vùng chọn của editor
+        return this.d.editor.setEnabled(m.on === true);
       case 'set_swarm':
         this.session.swarm = m.on === true;
         this.patch({ swarm: this.session.swarm });
@@ -1078,7 +1205,7 @@ export class ChatController implements vscode.Disposable {
         return;
       case 'open_external': {
         const u = String(m.url ?? '');
-        if (/^https?:\/\//i.test(u)) await vscode.env.openExternal(vscode.Uri.parse(u));
+        if (/^https?:\/\//i.test(u)) await openExternalOnce(u, (x) => vscode.env.openExternal(vscode.Uri.parse(x))); // (lane:customer-bugs) chống nảy đúp
         return;
       }
       case 'slash':
@@ -1207,6 +1334,14 @@ export class ChatController implements vscode.Disposable {
         return;
       case 'apply_code':
         return this.applyCode(m.code, m.lang, m.mode);
+      // (lane:sessions-ux) rẽ nhánh · tìm toàn văn · ghim · xoá hàng loạt
+      case 'fork_session':
+      case 'search_sessions':
+      case 'pin_session':
+      case 'delete_sessions':
+        return handleSessionsUxMessage(this.sessionsUxPort(), m);
+      case 'bg_task': // (lane:bg-tasks) Dừng / Sao chép / Xem đầy đủ một tác vụ nền
+        return handleBgTaskMessage(this, m);
     }
   }
 
@@ -1407,6 +1542,25 @@ export class ChatController implements vscode.Disposable {
     }
   }
 
+  /** (lane:commands-agents) Chạy một lượt với model riêng của lệnh tuỳ chỉnh (`model:` trong frontmatter), rồi trả model phiên về như cũ. */
+  private async sendWithModel(text: string, want: string | undefined): Promise<void> {
+    const r = pickCommandModel(want, await this.d.providers.summaries());
+    if (r && !r.ok) {
+      const vi = this.lang === 'vi';
+      this.emit({ t: 'notice', level: 'warn', text: vi ? `Lệnh yêu cầu model "${want}" nhưng ${r.reason === 'none' ? 'không có model nào khớp' : 'có nhiều model khớp'} — chạy bằng model hiện tại.` : `The command asks for model "${want}" but ${r.reason === 'none' ? 'no model matches' : 'several models match'} — running on the current model.` });
+    }
+    if (!r || !r.ok) return this.sendUnlocked(text, text, []);
+    const prev = { provider: this.session.provider, model: this.session.model };
+    this.session.provider = r.pick.provider;
+    this.session.model = r.pick.model;
+    try {
+      await this.sendUnlocked(text, text, []);
+    } finally {
+      this.session.provider = prev.provider;
+      this.session.model = prev.model;
+    }
+  }
+
   private async sendUnlocked(text: string, rawText: string, attachments: AttachmentInfo[]): Promise<void> {
     // "Tiếp tục" trần trụi sau khi Dừng: ý người dùng là làm tiếp ĐÚNG chỗ đã dừng và dọn hết việc còn tồn,
     // không phải một yêu cầu mới. Gắn chỉ dẫn rõ để model không mở lại việc cũ từ đầu (trước đây nó phát lại
@@ -1444,6 +1598,13 @@ export class ChatController implements vscode.Disposable {
         this.session.mode = 'plan';
         this.emit({ t: 'mode', mode: 'plan' });
         this.emit({ t: 'notice', level: 'warn', text: this.lang === 'vi' ? 'Workspace chưa được tin cậy: trợ lý chỉ được đọc, không sửa tệp hay chạy lệnh.' : 'Workspace is not trusted: the assistant is read-only.' });
+      }
+      // (lane:hooks) SessionStart + UserPromptSubmit: hook có thể chặn tin nhắn (nội dung trả lại ô nhập) hoặc thêm ngữ cảnh cho model.
+      const hookGate = await this.hookService().beforeSend(text, abort.signal);
+      if (hookGate.blocked) {
+        this.emit({ t: 'notice', level: 'warn', text: t(this.lang, 'hookPromptBlocked', { reason: hookGate.reason ?? '' }) });
+        this.post({ type: 'draft', text: String(rawText ?? ''), attachments: attachments.filter((a) => a.kind !== 'image') });
+        return;
       }
       const built = await buildUserContent({
         text,
@@ -1490,7 +1651,12 @@ export class ChatController implements vscode.Disposable {
   private async createEngine(): Promise<AgentEngine> {
     const s = this.session;
     const provider = this.d.providers.get(s.provider);
-    const settings = { ...this.d.config.engine(), contextWindow: this.d.providers.contextWindow(s.provider, s.model) };
+    const settings = {
+      ...this.d.config.engine(),
+      contextWindow: this.d.providers.contextWindow(s.provider, s.model),
+      // (lane:output-timeouts) trần đầu ra thật của model (danh mục) để trần thích ứng kẹp theo
+      modelMaxOutputTokens: this.d.providers.maxOutputTokens(s.provider, s.model),
+    };
     const fast = this.d.config.summarizerEnabled() ? await this.d.providers.fastTarget(s.provider) : null;
     const summarizer = fast
       ? new Summarizer({ provider: fast.provider, model: fast.model, language: settings.language, log: (l, m) => this.d.logger.log(l, m) })
@@ -1506,7 +1672,9 @@ export class ChatController implements vscode.Disposable {
       emit: (ev) => this.onEngineEvent(ev),
       takeQueued: () => this.takeForEngine(),
       mcpInstructions: () => this.d.mcp.instructions(),
+      outputStyle: () => commandsOutputStyle(this), // (lane:commands-agents)
       onCompacted: (info) => this.saveCompactionToMemory(info.session, info.summary),
+      beforeCompact: (info) => this.hookService().preCompact(info.trigger, info.signal), // (lane:hooks)
       onQueue: (q) => this.setModelQueue(q),
       onConsentRequired: () => this.onConsentRequired(),
       onAccountInvalid: () => void this.d.account?.recheck?.(),
@@ -1537,6 +1705,24 @@ export class ChatController implements vscode.Disposable {
     return new FailoverProvider([own, ...others], this.d.pool, { onSwitch: (i) => this.announceSwitch(i, false), log: (l, m) => this.d.logger.log(l, m) });
   }
 
+  // ── (lane:blind-verifier) Lượt "kiểm tra độc lập" chạy tay (/verify): dùng khoá lượt, cờ đang chạy và nút Dừng y như một lượt agent, không ghi gì vào lịch sử. ──
+  private runVerifyTurn(fn: (signal: AbortSignal) => Promise<void>): Promise<void> {
+    return this.runAgentTurn(async () => {
+      this.setRunning(true);
+      const abort = new AbortController();
+      this.abort = abort;
+      try {
+        await fn(abort.signal);
+        this.lastStop = 'end_turn';
+      } catch (err) {
+        this.emit({ t: 'notice', level: 'error', text: err instanceof Error ? err.message : String(err) });
+      } finally {
+        this.abort = null;
+        this.setRunning(false);
+      }
+    });
+  }
+
   private async execute(content: ContentBlock[], abort: AbortController): Promise<void> {
     const engine = await this.createEngine();
     const res = await engine.run({ session: this.session, content, signal: abort.signal });
@@ -1550,7 +1736,7 @@ export class ChatController implements vscode.Disposable {
       this.setModelQueue(null);
       this.flushNow();
       void this.saveNow().then(async () => {
-        const extra = { ...(await this.listings()), context: this.contextInfo() };
+        const extra = { ...(await this.listings()), context: this.contextInfo(), ...this.meterPatch() }; // (lane:sessions-ux) + meter
         this.patch(extra);
         // Đang xem cuộc khác: patch() bị chặn, nhưng danh sách phiên vẫn phải cập nhật để thấy "vừa xong".
         if (this.viewing) this.post({ type: 'patch', patch: extra });
@@ -1574,9 +1760,10 @@ export class ChatController implements vscode.Disposable {
       return;
     }
     await this.saveNow();
+    void this.hookService().sessionEnd(this.session.id, 'clear'); // (lane:hooks)
     this.session = this.freshSession();
     this.seenArtifacts.clear();
-    this.view = { ...this.baseView(), providers: this.view.providers, ...this.carryStrips(), ...(await this.listings()), screen: 'chat' };
+    this.view = { ...this.baseView(), ...this.meterPatch([]), providers: this.view.providers, ...this.carryStrips(), ...(await this.listings()), screen: 'chat' };
     this.post({ type: 'init', state: this.view });
   }
 
@@ -1594,6 +1781,7 @@ export class ChatController implements vscode.Disposable {
         type: 'init',
         state: {
           ...this.baseView(),
+          ...this.meterPatch(rec.items, p.session), // (lane:sessions-ux)
           sessionId: p.session.id,
           title: p.session.title,
           provider: p.session.provider,
@@ -1641,7 +1829,7 @@ export class ChatController implements vscode.Disposable {
     // Phiên cũ có thể thiếu transcript (chỉ còn vài lượt cuối): dựng lại từ messages, giữ bản gốc, rồi ghi bản đã hàn gắn.
     const rec = reconcileTranscript(p.session.messages, p.transcript);
     if (rec.rebuilt) await this.d.store.backupRaw(p.session.id);
-    this.view = { ...this.baseView(), transcript: rec.items, providers: this.view.providers, ...this.carryStrips(), ...(await this.listings()), screen: 'chat' };
+    this.view = { ...this.baseView(), ...this.meterPatch(rec.items), transcript: rec.items, providers: this.view.providers, ...this.carryStrips(), ...(await this.listings()), screen: 'chat' };
     this.post({ type: 'init', state: this.view });
     if (p.migrated) {
       const n = rec.rebuilt ? '' : this.lang === 'vi' ? ' Cuộc trò chuyện này đã được nâng cấp theo bản mới — dùng tiếp bình thường.' : ' This conversation was upgraded to the current version — just continue it.';
@@ -1656,13 +1844,15 @@ export class ChatController implements vscode.Disposable {
 
   /** Xoá = chuyển vào Thùng rác (khôi phục được trong 30 ngày), không mất nội dung nào, kể cả tệp bối cảnh đã tải lên. */
   private async deleteSession(id: string): Promise<void> {
+    if (id !== this.session.id || !this.busy) void getTaskManager(this.host).disposeSession(id); // (lane:bg-tasks) xoá cuộc trò chuyện = dừng tác vụ nền của nó
     const trashedMsg = this.lang === 'vi' ? 'Đã chuyển vào Thùng rác — khôi phục được trong 30 ngày.' : 'Moved to the Trash — you can restore it for 30 days.';
     if (id === this.session.id) {
       if (this.busy) return this.toast('info', this.lang === 'vi' ? 'Hãy dừng tác vụ đang chạy trước.' : 'Stop the running task first.');
       await this.saveNow(); // bản trong Thùng rác phải là bản mới nhất
       await this.d.store.moveToTrash(id);
+      void this.hookService().sessionEnd(this.session.id, 'delete'); // (lane:hooks)
       this.session = this.freshSession();
-      this.view = { ...this.baseView(), providers: this.view.providers, ...this.carryStrips(), ...(await this.listings()), screen: 'history' };
+      this.view = { ...this.baseView(), ...this.meterPatch([]), providers: this.view.providers, ...this.carryStrips(), ...(await this.listings()), screen: 'history' };
       this.post({ type: 'init', state: this.view });
       this.toast('info', trashedMsg);
       return;
@@ -2029,7 +2219,7 @@ export class ChatController implements vscode.Disposable {
         await this.startNewSession();
         return true;
       case 'compact':
-        await this.compact();
+        await this.compact(args); // (lane:ctx-compaction) /compact <hướng dẫn giữ lại gì>
         return true;
       case 'retry':
         await this.retryLast(false);
@@ -2126,7 +2316,8 @@ export class ChatController implements vscode.Disposable {
     }
   }
 
-  private async compact(): Promise<void> {
+  /** `/compact [hướng dẫn]` — (lane:ctx-compaction) chỉ dẫn tuỳ chọn đi vào prompt tóm tắt; thông báo mang số liệu `compact` cho dòng thời gian + Remote. */
+  private async compact(instructions = ''): Promise<void> {
     if (this.busy) return this.toast('info', this.lang === 'vi' ? 'Hãy dừng tác vụ đang chạy trước.' : 'Stop the running task first.');
     if (this.session.messages.length < 4) {
       this.emit({ t: 'notice', level: 'info', text: this.lang === 'vi' ? 'Cuộc trò chuyện còn ngắn, chưa cần nén.' : 'The conversation is short; nothing to compact.' });
@@ -2137,14 +2328,65 @@ export class ChatController implements vscode.Disposable {
     this.abort = abort;
     try {
       const engine = await this.createEngine();
-      const msg = await engine.compactNow(this.session, abort.signal);
-      this.emit({ t: 'notice', level: 'info', text: msg ?? (this.lang === 'vi' ? 'Không có gì để nén.' : 'Nothing to compact.') });
+      const r = await engine.compactWith(this.session, abort.signal, { instructions: instructions.trim() || undefined });
+      if (r) this.emit({ t: 'notice', level: 'info', text: r.text, compact: r.compact });
+      else this.emit({ t: 'notice', level: 'info', text: this.lang === 'vi' ? 'Không có gì để nén.' : 'Nothing to compact.' });
+      this.patch({ context: this.contextInfo() });
     } catch (err) {
       this.emit({ t: 'notice', level: 'error', text: err instanceof Error ? err.message : String(err) });
     } finally {
       this.abort = null;
       this.setRunning(false);
     }
+  }
+
+  /** (lane:checkpoints-rewind) Dựng phần Checkpoint & Quay lại: chỗ lưu = globalStorage/checkpoints; ghi/đọc tệp đi qua ToolHost để editor đang mở cập nhật tại chỗ. */
+  private makeCheckpoints(): CheckpointFeature {
+    const d = this.d;
+    const io: RestoreIO = {
+      read: async (abs) => {
+        try {
+          return await this.host.readText(abs);
+        } catch (e) {
+          return e instanceof NotUtf8Error ? { skipped: 'binary' as const } : { skipped: 'unreadable' as const };
+        }
+      },
+      write: (abs, text) => this.host.writeText(abs, text),
+      remove: (abs) => fsRestoreIO.remove(abs),
+    };
+    const gs = (d.context as { globalStorageUri?: { fsPath: string } }).globalStorageUri;
+    const feature = new CheckpointFeature({
+      storageRoot: gs?.fsPath ? path.join(gs.fsPath, 'checkpoints') : undefined,
+      enabled: () => d.config.get<boolean>('checkpoints.enabled', true) !== false,
+      lang: () => this.lang,
+      roots: () => this.host.workspaceRoots(),
+      io,
+      session: () => this.session,
+      view: () => this.view,
+      patch: (p) => this.patch(p),
+      busy: () => this.busy,
+      trusted: () => vscode.workspace.isTrusted,
+      toast: (level, text) => this.toast(level, text),
+      draft: (item) => {
+        const stash = this.docStash?.id === item.id ? this.docStash.docs : [];
+        this.post({ type: 'draft', text: item.text, attachments: [...item.attachments.filter((a) => a.kind !== 'image' && a.kind !== 'doc'), ...stash] });
+        if (stash.length === 0 && item.attachments.some((a) => a.kind === 'doc')) this.toast('info', this.lang === 'vi' ? 'Tệp tải lên không được giữ lại — hãy đính kèm lại.' : 'Uploaded files aren’t kept — please attach them again.');
+      },
+      save: () => this.saveNow(),
+      // Khôi phục mã từ XA (Remote) khi chế độ quyền chưa tự nhận sửa tệp: người ngồi ở máy phải xác nhận bằng hộp thoại của VS Code.
+      askApproval: async (title, detail) => {
+        const yes = this.lang === 'vi' ? 'Khôi phục' : 'Restore';
+        try {
+          return (await vscode.window.showWarningMessage(title, { modal: true, detail }, yes)) === yes;
+        } catch {
+          return false;
+        }
+      },
+      openDiff: (rel, abs, before) => d.diffs.openAgainstFile(rel, abs, before),
+      log: (level, msg) => d.logger.log(level, msg),
+    });
+    feature.gc();
+    return feature;
   }
 
   /** Quay lại trước tin nhắn người dùng cuối cùng; chạy lại hoặc đưa vào ô nhập để sửa. */
@@ -2173,6 +2415,7 @@ export class ChatController implements vscode.Disposable {
     // Cắt đuôi chỉ để lại một TIỀN TỐ nguyên vẹn của hội thoại cũ nên khối suy luận còn lại vẫn hợp lệ — không đặt
     // `historyEdited` (cờ đó chỉ bỏ suy luận ở một lần gọi rồi tự xoá, lượt sau lại phát lại bản cũ và API trả 400).
     this.session.messages = msgs.slice(0, idx);
+    this.session.lastContextTokens = 0; // xem rewind: số đo cũ không còn đúng với lịch sử đã cắt (xlane)
     this.patch({ transcript: this.view.transcript.slice(0, ti) });
     if (editOnly) {
       // Tệp tải lên: bản hiển thị không còn phần chữ → lấy lại từ bản lưu của tin cuối (nếu còn); phiên mới khôi phục từ kho thì phải đính kèm lại.
@@ -2326,15 +2569,25 @@ export class ChatController implements vscode.Disposable {
     return Promise.resolve(vscode.workspace.openTextDocument({ content: lines.join('\n'), language: 'markdown' }).then((d) => void vscode.window.showTextDocument(d, { preview: false })));
   }
 
+  /** (lane:hooks) Dịch vụ hook của cuộc trò chuyện này (dùng chung với extension chạy trong vòng lặp và lệnh /hooks). */
+  hookService(): HookService {
+    return hookServiceFor({ deps: this.d, host: this.host, session: () => this.session });
+  }
+
   dispose(): void {
+    void this.hookService().sessionEnd(this.session.id, 'close', 2000); // (lane:hooks)
     this.disposed = true;
+    for (const fn of this.laneDisposers.splice(0)) fn(); // (lane:commands-agents)
+    this.checkpoints.dispose(); // (lane:checkpoints-rewind)
     this.queue = [];
+    this.perms.dispose(); // (lane:perm-rules)
     this.detachMcp();
     this.accountSub?.dispose();
     this.remoteSub?.dispose();
     this.chromeUnsub?.();
     this.locaithSub?.dispose();
     this.stop();
+    void getTaskManager(this.host).disposeAll(); // (lane:bg-tasks) đóng khung chat / tắt extension = không để tiến trình nền mồ côi
     if (this.flushTimer) clearTimeout(this.flushTimer);
     void this.saveNow();
   }

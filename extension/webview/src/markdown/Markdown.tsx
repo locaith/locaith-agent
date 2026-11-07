@@ -12,6 +12,7 @@ import { Icon } from '../components/Icons';
 import { parseFileRef } from '../text';
 import { cx, copyText, memo, useDismiss } from '../util';
 import { post } from '../vscode';
+import { externalLinkProps, openExternalLink } from '../externalLink'; // (lane:customer-bugs)
 import { decodeEntities } from './entities';
 import { prepareStreamingMarkdown } from './fence';
 import { highlight, isApplicable, langLabel } from './highlight';
@@ -45,16 +46,9 @@ function InlineCode({ text }: { text: string }) {
 function MdLink({ href, title, children }: { href: string; title?: string | null; children: ComponentChildren }) {
   const { platform } = useApp();
   if (/^(https?:|mailto:)/i.test(href)) {
+    // (lane:customer-bugs) không đặt `href` thật: bộ xử lý liên kết có sẵn của webview VS Code sẽ mở thêm một tab nữa — xem externalLink.ts.
     return (
-      <a
-        href={href}
-        class="md-link"
-        title={title || href}
-        onClick={(e) => {
-          e.preventDefault();
-          post({ type: 'open_external', url: href });
-        }}
-      >
+      <a class="md-link" title={title || href} {...externalLinkProps(href)}>
         {children}
       </a>
     );
@@ -94,7 +88,7 @@ function BlockedImage({ href, alt }: { href: string; alt: string }) {
           type="button"
           class="md-image-open"
           aria-label={t('md.image')}
-          onClick={() => post({ type: 'open_external', url: href })}
+          onClick={(e) => openExternalLink(href, e)}
         >
           <Icon name="external" size={12} />
         </button>

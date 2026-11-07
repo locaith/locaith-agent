@@ -17,6 +17,9 @@ const SECTION = 'locaithAgent';
 const SECURE_KEYS = new Set([
   'agent.permissionMode',
   'agent.allowBypassPermissions',
+  // (lane:perm-rules) luật «cho phép» làm LỎNG bảo mật → chỉ từ cài đặt người dùng (luật allow của workspace đi đường xác nhận riêng, xem permissionRulesService.ts).
+  'permissions.allow',
+  'permissions.trustedWorkspaceAllow',
   'agent.instructionFiles',
   'fetch.allowPrivateNetwork',
   'search.searxngUrl',
@@ -41,6 +44,13 @@ const SECURE_KEYS = new Set([
   'remote.allowBypass',
   // Khoá của việc «đúng tài khoản là vào được»: một kho mã lạ không được tự bật/tắt hộ chủ máy.
   'remote.trustAccount',
+  // (lane:blind-verifier) Model của agent kiểm tra quyết định mã nguồn được gửi tới hãng nào → chỉ từ cài đặt người dùng.
+  'agent.verifyModel',
+  // (lane:hooks) Hook là lệnh shell chạy với quyền người dùng: danh sách hook, công tắc, đọc .claude và biến môi trường cho đi qua chỉ từ cài đặt NGƯỜI DÙNG.
+  'hooks',
+  'hooksEnabled',
+  'hooksReadClaudeSettings',
+  'hooksPassEnv',
 ]);
 
 const UI_KEYS: Record<keyof UiSettings, string> = {
@@ -109,6 +119,25 @@ export class ConfigService {
       autoCompact: c.get<boolean>('agent.autoCompact', d.autoCompact),
       compactAt: Math.min(95, Math.max(50, c.get<number>('agent.compactAtPercent', 80))) / 100,
       instructionFiles: cleanNameList(this.get<unknown>('agent.instructionFiles', d.instructionFiles), d.instructionFiles),
+      ...this.compactTuningSettings(), // (lane:ctx-compaction)
+      // (lane:output-timeouts) trần đầu ra thích ứng + watchdog im lặng theo bậc
+      adaptiveOutputTokens: c.get<boolean>('agent.adaptiveOutputTokens', true) !== false,
+      modelStallSeconds: stallSetting(c.get<unknown>('agent.modelStallSeconds', 'auto')),
+      modelCallMaxSeconds: clamp(Number(c.get<number>('agent.modelCallMaxSeconds', 600)), 30, 3600),
+    };
+  }
+
+  /** (lane:ctx-compaction) Tham số giữ ngữ cảnh gọn; `compactAtUserSet` = người dùng tự đặt compactAtPercent ở cấp nào đó (tắt trần tự động 300k). */
+  private compactTuningSettings(): Pick<EngineSettings, 'clearToolResultsAtPercent' | 'keepRecentMessages' | 'compactAtTokens' | 'compactAtUserSet'> {
+    const c = this.cfg();
+    const d = DEFAULT_ENGINE_SETTINGS;
+    const info = c.inspect<number>('agent.compactAtPercent');
+    const userSet = !!info && (info.globalValue !== undefined || info.workspaceValue !== undefined || info.workspaceFolderValue !== undefined);
+    return {
+      clearToolResultsAtPercent: clamp(c.get<number>('agent.clearToolResultsAtPercent', d.clearToolResultsAtPercent ?? 40), 0, 90),
+      keepRecentMessages: clamp(c.get<number>('agent.keepRecentMessages', d.keepRecentMessages ?? 20), 4, 200),
+      compactAtTokens: Math.max(0, c.get<number>('agent.compactAtTokens', d.compactAtTokens ?? 0)),
+      compactAtUserSet: userSet,
     };
   }
 
@@ -312,6 +341,14 @@ export class ConfigService {
 
 function clamp(n: number, lo: number, hi: number): number {
   return Number.isFinite(n) ? Math.min(hi, Math.max(lo, n)) : lo;
+}
+
+/** (lane:output-timeouts) `agent.modelStallSeconds`: 'auto' | 0 (tắt) | số giây (5–600). Chuỗi số cũng nhận; thứ khác → 'auto'. */
+export function stallSetting(raw: unknown): 'auto' | number {
+  const n = typeof raw === 'number' ? raw : typeof raw === 'string' && raw.trim() !== '' && raw.trim() !== 'auto' ? Number(raw) : NaN;
+  if (!Number.isFinite(n)) return 'auto';
+  if (n <= 0) return 0;
+  return Math.min(600, Math.max(5, Math.round(n)));
 }
 
 /** Danh sách chuỗi ngắn, không rỗng, tối đa 20 mục; sai kiểu thì dùng mặc định. */

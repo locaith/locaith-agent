@@ -3,9 +3,12 @@
  * (kết quả công cụ, đối số, diff, suy luận). Thuần tuý, không import `vscode`.
  */
 
-import type { ABlock, AgentProgress, AttachmentInfo, CompactInfo, DiffInfo, PermissionRequest, QueuedInfo, TItem, ToolBlock, UiEvent, ViewState } from '../../shared/protocol';
+import type { ABlock, AgentProgress, AttachmentInfo, CompactInfo, ContextInfo, DiffInfo, PermissionRequest, QueuedInfo, SessionMeterView, SuggestionOption, TItem, TodoItem, ToolBlock, UiEvent, VerifyInfo, ViewState } from '../../shared/protocol';
+import type { CheckpointTurn, RewindView } from '../../shared/checkpoints'; // (lane:checkpoints-rewind)
 import type { RemoteHostInfo, RemoteProvider, RemoteState } from './protocol';
 import { REMOTE_API_VERSION } from './protocol';
+import { capBgTasks } from '../../shared/bgTasks'; // (lane:bg-tasks)
+import { toolImageKeys } from '../../shared/toolImages'; // (lane:customer-bugs)
 
 /** Số mục transcript gửi trong snapshot (mục cũ hơn bị cắt, kèm `omitted`). */
 export const MAX_ITEMS = 150;
@@ -61,21 +64,38 @@ export function capDiff(d: DiffInfo): DiffInfo {
   return { ...d, hunks, ...(truncated ? { truncated: true } : {}) };
 }
 
+/** (lane:perm-rules) Chữ một luật quyền gửi ra ngoài: một dòng, tối đa 200 ký tự. */
+const RULE_CAP = 200;
+export function sanitizeRule(r: unknown): string | undefined {
+  if (typeof r !== 'string' || !r) return undefined;
+  // eslint-disable-next-line no-control-regex
+  const s = r.replace(/[\u0000-\u001f\u007f]/g, ' ').trim();
+  return s ? cap(s, RULE_CAP) : undefined;
+}
+
 function sanitizePermission(p: PermissionRequest): PermissionRequest {
+  const { rule, suggest, ...rest } = p;
+  const cleanRule = sanitizeRule(rule);
+  const cleanSuggest = Array.isArray(suggest) ? suggest.map(sanitizeRule).filter((s): s is string => !!s).slice(0, 3) : [];
   return {
-    ...p,
+    ...rest,
     title: cap(p.title, 300),
     ...(p.detail ? { detail: cap(p.detail, 1000) } : {}),
     ...(p.command ? { command: cap(p.command, 2000) } : {}),
     ...(p.planMarkdown ? { planMarkdown: cap(p.planMarkdown, 20_000) } : {}),
     ...(p.diff ? { diff: capDiff(p.diff) } : {}),
+    ...(cleanRule ? { rule: cleanRule } : {}),
+    ...(cleanSuggest.length ? { suggest: cleanSuggest } : {}),
   };
 }
 
-export type RemoteToolBlock = Omit<ToolBlock, 'images'> & { imageCount?: number };
+/** `imageKeys` (lane:customer-bugs): khoá để xin ảnh đầy đủ bằng lệnh `get_image` (thẻ «Trước | Sau»); bản cũ bỏ qua trường này. */
+export type RemoteToolBlock = Omit<ToolBlock, 'images'> & { imageCount?: number; imageKeys?: string[] };
 
 const AGENT_ACTIVITY_CAP = 120;
 const wholeNumber = (v: unknown): number => (typeof v === 'number' && Number.isFinite(v) ? Math.min(1e12, Math.max(0, Math.floor(v))) : 0);
+/** (lane:cc-timeline-ui) Số nguyên không âm hợp lệ, hoặc undefined để bỏ trường (không bịa 0 cho dấu thời gian). */
+const whole = (v: unknown): number | undefined => (typeof v === 'number' && Number.isFinite(v) && v >= 0 ? Math.min(1e13, Math.floor(v)) : undefined);
 
 /** Tiến độ agent con: chỉ số nguyên không âm và một dòng chữ ngắn (dữ liệu từ máy khách/tệp sao lưu không được tin). */
 export function sanitizeAgent(a: AgentProgress): AgentProgress {
@@ -107,16 +127,63 @@ export function sanitizeCompact(c: CompactInfo): CompactInfo {
   return out;
 }
 
+/** (lane:ctx-compaction) Thanh đo ngữ cảnh gửi ra Remote: chỉ các trường đã liệt kê, số nguyên không âm; trường tuỳ chọn chỉ gửi khi có. */
+export function sanitizeContext(c: ContextInfo | null | undefined): ContextInfo | null {
+  if (!c || typeof c !== 'object') return null;
+  const out: ContextInfo = { usedTokens: wholeNumber(c.usedTokens), limitTokens: wholeNumber(c.limitTokens) };
+  const opt = (v: unknown): number | undefined => (typeof v === 'number' && Number.isFinite(v) ? wholeNumber(v) : undefined);
+  const percent = opt(c.percent);
+  const cleared = opt(c.clearedResults);
+  const compactions = opt(c.compactions);
+  if (percent !== undefined) out.percent = Math.min(999, percent);
+  if (cleared !== undefined) out.clearedResults = cleared;
+  if (compactions !== undefined) out.compactions = compactions;
+  return out;
+}
+
+// ── (lane:blind-verifier) kết quả kiểm tra độc lập: chỉ trạng thái hợp lệ, số nguyên, danh sách và chữ đã cắt ──
+const VERIFY_LIST_CAP = 12;
+const VERIFY_ITEM_CAP = 400;
+const VERIFY_STATES = new Set<VerifyInfo['state']>(['running', 'pass', 'fail', 'uncertain', 'skipped']);
+
+export function sanitizeVerify(v: VerifyInfo): VerifyInfo {
+  const list = (x: unknown): string[] | undefined => {
+    if (!Array.isArray(x)) return undefined;
+    const out = x.filter((s): s is string => typeof s === 'string' && s.trim().length > 0).slice(0, VERIFY_LIST_CAP).map((s) => cap(s.replace(/\s+/g, ' ').trim(), VERIFY_ITEM_CAP));
+    return out.length ? out : undefined;
+  };
+  const out: VerifyInfo = {
+    key: typeof v?.key === 'string' ? v.key.slice(0, 40) : 'v',
+    state: v && VERIFY_STATES.has(v.state) ? v.state : 'skipped',
+    round: Math.max(1, wholeNumber(v?.round) || 1),
+    maxRounds: Math.max(1, wholeNumber(v?.maxRounds) || 1),
+  };
+  const missing = list(v?.missing);
+  const defects = list(v?.defects);
+  const unverified = list(v?.unverifiedClaims);
+  if (missing) out.missing = missing;
+  if (defects) out.defects = defects;
+  if (unverified) out.unverifiedClaims = unverified;
+  if (v?.outstanding === true) out.outstanding = true;
+  if (typeof v?.reason === 'string' && v.reason) out.reason = cap(v.reason, VERIFY_ITEM_CAP);
+  if (typeof v?.durationMs === 'number' && Number.isFinite(v.durationMs)) out.durationMs = wholeNumber(v.durationMs);
+  if (typeof v?.model === 'string' && v.model) out.model = cap(v.model, 80);
+  if (typeof v?.tokens === 'number' && Number.isFinite(v.tokens)) out.tokens = wholeNumber(v.tokens);
+  return out;
+}
+
 function sanitizeTool(b: ToolBlock): RemoteToolBlock {
-  const { images, agent, ...rest } = b;
+  const { images, agent, rule, ...rest } = b;
+  const cleanRule = sanitizeRule(rule);
   return {
     ...rest,
+    ...(cleanRule ? { rule: cleanRule } : {}),
     ...(agent && typeof agent === 'object' ? { agent: sanitizeAgent(agent) } : {}),
     args: capArgs(b.args),
     ...(b.output !== undefined ? { output: capTail(b.output, OUT_CAP) } : {}),
     ...(b.diff ? { diff: capDiff(b.diff) } : {}),
     ...(b.permission ? { permission: sanitizePermission(b.permission) } : {}),
-    ...(images && images.length ? { imageCount: images.length } : {}),
+    ...(images && images.length ? { imageCount: images.length, imageKeys: toolImageKeys(images) } : {}),
   };
 }
 
@@ -130,23 +197,54 @@ export function sanitizeAttachment(a: AttachmentInfo): AttachmentInfo {
   };
 }
 
+/** (lane:hooks) Dòng trạng thái gộp (vd. «Hook PreToolUse · a ✓ 12 ms · b ✗ 40 ms»). */
+const PILL_CAP = 400;
+
 function sanitizeBlock(b: ABlock): ABlock {
   switch (b.type) {
     case 'tool':
       return sanitizeTool(b) as unknown as ABlock;
-    case 'thinking':
-      return b.text.length > THINK_CAP ? { ...b, text: capTail(b.text, THINK_CAP) } : b;
+    case 'thinking': {
+      // (lane:cc-timeline-ui) mốc/thời lượng suy nghĩ là số nguyên không âm; giá trị lạ bị bỏ (trang Remote cũ không có trường này vẫn chạy).
+      const { startedAt, durationMs, ...rest } = b;
+      const timing = { ...(whole(startedAt) !== undefined ? { startedAt: whole(startedAt) } : {}), ...(whole(durationMs) !== undefined ? { durationMs: whole(durationMs) } : {}) };
+      return { ...rest, ...timing, text: b.text.length > THINK_CAP ? capTail(b.text, THINK_CAP) : b.text };
+    }
     case 'notice':
-      return b.compact ? { ...b, compact: sanitizeCompact(b.compact) } : b;
+      return b.compact || b.verify ? { ...b, ...(b.compact ? { compact: sanitizeCompact(b.compact) } : {}), ...(b.verify ? { verify: sanitizeVerify(b.verify) } : {}) } : b;
+    case 'pill': // (lane:hooks) dòng «Hook …» gộp nhiều hook: cắt độ dài
+      return b.text.length > PILL_CAP ? { ...b, text: b.text.slice(0, PILL_CAP) } : b;
     default:
       return b;
   }
 }
 
+/** (lane:sessions-ux) Đồng hồ ngữ cảnh/chi phí: chỉ số hữu hạn không âm (chi phí thiếu thì giữ thiếu — không bịa). */
+export function sanitizeMeter(m: SessionMeterView): SessionMeterView {
+  const out: SessionMeterView = { inputTokens: wholeNumber(m?.inputTokens), outputTokens: wholeNumber(m?.outputTokens), compactions: wholeNumber(m?.compactions), clearedResults: wholeNumber(m?.clearedResults) };
+  if (typeof m?.costUsd === 'number' && Number.isFinite(m.costUsd) && m.costUsd >= 0) out.costUsd = Math.min(1e6, m.costUsd);
+  return out;
+}
+
+/** (lane:sessions-ux) Liên kết ngược của cuộc nhánh: mã an toàn + tiêu đề đã cắt; sai dạng thì bỏ (dòng chữ của notice vẫn đủ nghĩa). */
+export function sanitizeFork(f: { fromId: string; fromTitle: string } | undefined): { fromId: string; fromTitle: string } | undefined {
+  if (!f || typeof f.fromId !== 'string' || !/^[\w-]{1,200}$/.test(f.fromId)) return undefined;
+  return { fromId: f.fromId, fromTitle: cap(String(f.fromTitle ?? ''), 120) };
+}
+
 export function sanitizeItem(it: TItem): TItem {
   if (it.kind === 'user') return { ...it, attachments: it.attachments.map(sanitizeAttachment) };
   if (it.kind === 'assistant') return { ...it, blocks: it.blocks.map(sanitizeBlock) };
-  if (it.kind === 'notice' && it.compact) return { ...it, compact: sanitizeCompact(it.compact) };
+  if (it.kind === 'notice' && (it.compact || it.verify || it.fork)) {
+    const { fork, ...rest } = it; // (lane:sessions-ux)
+    const f = sanitizeFork(fork);
+    return {
+      ...rest,
+      ...(it.compact ? { compact: sanitizeCompact(it.compact) } : {}),
+      ...(it.verify ? { verify: sanitizeVerify(it.verify) } : {}),
+      ...(f ? { fork: f } : {}),
+    };
+  }
   return it;
 }
 
@@ -155,8 +253,39 @@ export function sanitizeTranscript(items: readonly TItem[]): { transcript: TItem
   return { transcript: items.slice(omitted).map(sanitizeItem), omitted };
 }
 
+/**
+ * (lane:loop-guards) Danh sách việc gửi ra Remote: trạng thái 'blocked' là MỚI — trang locaith.ai (có thể là bản cũ đã lưu đệm) chỉ biết
+ * pending / in_progress / completed, nên hạ cấp về 'pending' và đưa lý do vào tiêu đề để người dùng vẫn thấy; `note` được cắt.
+ */
+export function sanitizeTodos(todos: readonly TodoItem[] | undefined): TodoItem[] {
+  return (todos ?? []).slice(0, 200).map((x) => {
+    if (x.status !== 'blocked') return { id: x.id, title: cap(x.title, 500), status: x.status };
+    const note = typeof x.note === 'string' && x.note ? cap(x.note, 200) : '';
+    return { id: x.id, title: cap(`${x.title}${note ? ` — ${note}` : ''}`, 500), status: 'pending' };
+  });
+}
+
 function sanitizeQueued(q: readonly QueuedInfo[] | undefined): QueuedInfo[] {
   return (q ?? []).map((m) => ({ ...m, attachments: m.attachments.map(sanitizeAttachment) }));
+}
+
+const MAX_OPTIONS = 6;
+const OPTION_LABEL_CAP = 60;
+const OPTION_PROMPT_CAP = 2000;
+const OPTION_DETAIL_CAP = 160;
+
+/** (lane:output-timeouts) Nút lựa chọn gửi ra Remote: tối đa 6 nút, chuỗi cắt gọn, chỉ giữ `kind` hợp lệ. */
+export function sanitizeOptions(list: readonly SuggestionOption[] | undefined): SuggestionOption[] {
+  return (list ?? [])
+    .filter((o) => o && typeof o.id === 'string' && typeof o.label === 'string' && typeof o.prompt === 'string')
+    .slice(0, MAX_OPTIONS)
+    .map((o) => ({
+      id: o.id.slice(0, 80),
+      label: cap(o.label, OPTION_LABEL_CAP),
+      prompt: cap(o.prompt, OPTION_PROMPT_CAP),
+      ...(o.detail ? { detail: cap(o.detail, OPTION_DETAIL_CAP) } : {}),
+      ...(o.kind === 'continue' ? { kind: 'continue' as const } : {}),
+    }));
 }
 
 export function remoteProviders(list: ViewState['providers'] | undefined, currentId: string): RemoteProvider[] {
@@ -169,6 +298,28 @@ export function remoteProviders(list: ViewState['providers'] | undefined, curren
     }));
 }
 
+/** (lane:checkpoints-rewind) Rút gọn danh sách checkpoint cho đường truyền: tối đa 30 lượt × 60 tệp, đường dẫn/chữ bị cắt. */
+export function sanitizeCheckpoints(list: ViewState['checkpoints']): CheckpointTurn[] | undefined {
+  if (!list) return undefined;
+  return list.slice(-30).map((t) => ({
+    promptId: String(t.promptId).slice(0, 200),
+    files: t.files.slice(0, 60).map((f) => ({ rel: String(f.rel).slice(0, 300), kind: f.kind, added: f.added | 0, removed: f.removed | 0, ...(f.skipped ? { skipped: f.skipped } : {}) })),
+    ...(t.undone ? { undone: true } : {}),
+  }));
+}
+
+/** (lane:checkpoints-rewind) Thẻ «Quay lại» cho Remote: danh sách tệp/tin gần đây bị cắt, chữ lỗi bị cắt. */
+export function sanitizeRewind(r: ViewState['rewind']): RewindView | null | undefined {
+  if (r === undefined) return undefined;
+  if (r === null) return null;
+  return {
+    ...r,
+    ...(r.files ? { files: r.files.slice(0, 100).map((f) => ({ ...f, rel: String(f.rel).slice(0, 300) })) } : {}),
+    ...(r.recent ? { recent: r.recent.slice(0, 8).map((x) => ({ ...x, text: String(x.text).slice(0, 80) })) } : {}),
+    ...(r.error ? { error: String(r.error).slice(0, 300) } : {}),
+  };
+}
+
 export function toRemoteState(view: ViewState, host: RemoteHostInfo, opts: { canBypass: boolean }): RemoteState {
   const { transcript, omitted } = sanitizeTranscript(view.transcript);
   return {
@@ -178,7 +329,7 @@ export function toRemoteState(view: ViewState, host: RemoteHostInfo, opts: { can
     title: view.title,
     transcript,
     omitted,
-    todos: view.todos,
+    todos: sanitizeTodos(view.todos),
     running: view.running,
     queued: sanitizeQueued(view.queued),
     provider: view.provider,
@@ -188,9 +339,14 @@ export function toRemoteState(view: ViewState, host: RemoteHostInfo, opts: { can
     swarm: view.swarm === true || view.thinkingLevel === 'swarm',
     providers: remoteProviders(view.providers, view.provider),
     sessions: (view.sessions ?? []).slice(0, MAX_SESSIONS),
-    context: view.context,
+    context: sanitizeContext(view.context),
+    ...(view.meter ? { meter: sanitizeMeter(view.meter) } : {}), // (lane:sessions-ux)
     allowBypass: view.allowBypass,
     remoteCanBypass: opts.canBypass,
+    ...(view.options?.length ? { options: sanitizeOptions(view.options) } : {}),
+    ...(view.checkpoints ? { checkpoints: sanitizeCheckpoints(view.checkpoints) } : {}),
+    ...(view.rewind ? { rewind: sanitizeRewind(view.rewind) } : {}),
+    ...(view.bgTasks?.length ? { bgTasks: capBgTasks(view.bgTasks) } : {}), // (lane:bg-tasks)
   };
 }
 
@@ -199,7 +355,7 @@ export function sanitizePatch(p: Partial<ViewState>): Partial<Omit<RemoteState, 
   const out: Partial<Omit<RemoteState, 'v' | 'host'>> = {};
   if (p.sessionId !== undefined) out.sessionId = p.sessionId;
   if (p.title !== undefined) out.title = p.title;
-  if (p.todos !== undefined) out.todos = p.todos;
+  if (p.todos !== undefined) out.todos = sanitizeTodos(p.todos);
   if (p.running !== undefined) out.running = p.running;
   if (p.queued !== undefined) out.queued = sanitizeQueued(p.queued);
   if (p.provider !== undefined) out.provider = p.provider;
@@ -209,9 +365,14 @@ export function sanitizePatch(p: Partial<ViewState>): Partial<Omit<RemoteState, 
   if (p.swarm !== undefined) out.swarm = p.swarm;
   if (p.providers !== undefined) out.providers = remoteProviders(p.providers, p.provider ?? '');
   if (p.sessions !== undefined) out.sessions = p.sessions.slice(0, MAX_SESSIONS);
-  if (p.context !== undefined) out.context = p.context;
+  if (p.context !== undefined) out.context = sanitizeContext(p.context);
+  if (p.meter !== undefined) out.meter = sanitizeMeter(p.meter); // (lane:sessions-ux)
   if (p.allowBypass !== undefined) out.allowBypass = p.allowBypass;
   if (p.transcript !== undefined) Object.assign(out, sanitizeTranscript(p.transcript));
+  if (p.options !== undefined) out.options = sanitizeOptions(p.options); // (lane:output-timeouts) rỗng = thu hồi nút
+  if (p.checkpoints !== undefined) out.checkpoints = sanitizeCheckpoints(p.checkpoints);
+  if (p.rewind !== undefined) out.rewind = sanitizeRewind(p.rewind);
+  if ('bgTasks' in p) out.bgTasks = capBgTasks(p.bgTasks); // (lane:bg-tasks) vắng/undefined = hết tác vụ → []
   return Object.keys(out).length ? out : null;
 }
 
@@ -219,23 +380,47 @@ export function sanitizeEvent(ev: UiEvent): UiEvent {
   switch (ev.t) {
     case 'user':
       return { ...ev, attachments: ev.attachments.map(sanitizeAttachment) };
-    case 'tool_start':
-      return { ...ev, args: capArgs(ev.args) };
+    case 'tool_start': {
+      const { rule, ...rest } = ev;
+      const cleanRule = sanitizeRule(rule);
+      return { ...rest, args: capArgs(ev.args), ...(cleanRule ? { rule: cleanRule } : {}) };
+    }
     case 'tool_progress':
       return ev.output.length > 4000 ? { ...ev, output: capTail(ev.output, 4000) } : ev;
+    case 'thinking': {
+      // (lane:cc-timeline-ui) giữ `ts` nếu là số hợp lệ, bỏ nếu lạ; không có ts thì trả nguyên sự kiện.
+      if (ev.ts === undefined) return ev;
+      const ts = whole(ev.ts);
+      if (ts === ev.ts) return ev;
+      const { ts: _drop, ...rest } = ev;
+      void _drop;
+      return ts === undefined ? rest : { ...rest, ts };
+    }
     case 'agent_progress':
       return { ...ev, ...sanitizeAgent(ev) };
     case 'tool_permission':
       return { ...ev, request: sanitizePermission(ev.request) };
     case 'notice':
-      return ev.compact ? { ...ev, compact: sanitizeCompact(ev.compact) } : ev;
+      return ev.compact || ev.verify ? { ...ev, ...(ev.compact ? { compact: sanitizeCompact(ev.compact) } : {}), ...(ev.verify ? { verify: sanitizeVerify(ev.verify) } : {}) } : ev;
+    case 'options':
+      return { ...ev, options: sanitizeOptions(ev.options) }; // (lane:output-timeouts)
+    case 'text':
+      // (lane:output-timeouts) `trimTail` phải là số nguyên không âm (bản cũ bỏ qua trường này).
+      return ev.trimTail !== undefined ? { ...ev, trimTail: wholeNumber(ev.trimTail) } : ev;
+    // (lane:loop-guards) trạng thái 'blocked' hạ cấp cho máy khách cũ
+    case 'tasks':
+      return { ...ev, todos: sanitizeTodos(ev.todos) };
+    case 'todos':
+      return { ...ev, todos: sanitizeTodos(ev.todos) };
+    case 'pill': // (lane:hooks)
+      return ev.text.length > PILL_CAP ? { ...ev, text: ev.text.slice(0, PILL_CAP) } : ev;
     case 'tool_end': {
       const { images, ...rest } = ev;
       return {
         ...rest,
         ...(ev.output !== undefined ? { output: capTail(ev.output, OUT_CAP) } : {}),
         ...(ev.diff ? { diff: capDiff(ev.diff) } : {}),
-        ...(images && images.length ? { imageCount: images.length } : {}),
+        ...(images && images.length ? { imageCount: images.length, imageKeys: toolImageKeys(images) } : {}),
       } as UiEvent;
     }
     default:

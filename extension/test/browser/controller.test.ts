@@ -1,6 +1,8 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import type { RatingPayload } from '../../src/browser/rating';
+import type { RatingSendResult } from '../../src/browser/ratingSend';
 import { ProviderService } from '../../src/core/providers/service';
 import { SkillRegistry } from '../../src/core/skills/registry';
 import type { ArtifactRecord } from '../../src/core/engine/types';
@@ -75,7 +77,7 @@ function fakeOAuth(kv: MemoryKv, secrets: BrowserSecrets, over: Partial<Construc
 
 async function make(
   script: Step[] = [],
-  opts: { io?: StoreIO; kv?: MemoryKv; last?: { id?: string }; start?: boolean; oauth?: Partial<ConstructorParameters<typeof OAuthManager>[0]>; extractDocument?: DocExtractor | null } = {},
+  opts: { io?: StoreIO; kv?: MemoryKv; last?: { id?: string }; start?: boolean; oauth?: Partial<ConstructorParameters<typeof OAuthManager>[0]>; extractDocument?: DocExtractor | null; sendFeedback?: (p: RatingPayload) => Promise<RatingSendResult> } = {},
 ): Promise<Rig> {
   const kv = opts.kv ?? new MemoryKv();
   const config = new BrowserConfig(kv);
@@ -117,6 +119,7 @@ async function make(
     version: '9.9.9',
     lastSession: { get: async () => last.id, set: async (id) => void (last.id = id) },
     extractDocument: opts.extractDocument === null ? undefined : opts.extractDocument ?? extractDocument, // mặc định: bộ đọc thật (chạy được trong Node)
+    sendFeedback: opts.sendFeedback,
   });
   if (opts.start !== false) await ctl.start();
   void tab;
@@ -1132,5 +1135,108 @@ describe('lời mời đánh giá Chrome Web Store', () => {
     expect(r.view().rating).toBeUndefined();
     expect(r.api.calls.filter((c) => c.method === 'openExternal').length).toBe(opened.length + 1);
     expect(String((r.api.calls.filter((c) => c.method === 'openExternal').at(-1) as { arg?: string }).arg)).toContain('chromewebstore.google.com');
+  });
+
+  // ── Đánh giá MỘT CHẠM: chạm sao = gửi ngay về Locaith, không mở trang nào (người dùng đã chê bản cũ mở trang bắt viết đánh giá) ──
+  const threeSends = async (r: Rig) => {
+    for (const m of ['một', 'hai', 'ba']) {
+      await r.ctl.send(m, []);
+      await settle(r);
+    }
+  };
+  const openedCount = (r: Rig) => r.api.calls.filter((c) => c.method === 'openExternal').length;
+
+  it('chạm một sao: GỬI NGAY, không mở trang nào; dải chuyển sang cảm ơn «đã gửi», đóng thì không hỏi lại', async () => {
+    const sent: RatingPayload[] = [];
+    const r = await make([() => textTurn('ok'), () => textTurn('ok'), () => textTurn('ok')], { sendFeedback: async (p) => (sent.push(p), 'sent') });
+    await threeSends(r);
+    expect(r.view().rating).toEqual({ sends: 3 });
+    const opened = openedCount(r);
+
+    await r.ctl.onMessage({ type: 'rating_submit', stars: 5 });
+    expect(openedCount(r)).toBe(opened); // KHÔNG mở trang đánh giá
+    expect(sent).toHaveLength(1);
+    expect(sent[0]).toMatchObject({ rating: 5, message: 'Đánh giá tiện ích Chrome: 5★' });
+    expect(sent[0].page).toContain('v9.9.9');
+    expect(r.view().rating).toEqual({ sends: 3, picked: 5, sent: true });
+    const saved = await r.config.rating();
+    expect(saved).toMatchObject({ stars: 5 });
+    expect(saved.ratedAt).toBeGreaterThan(0);
+    expect(saved.sentAt).toBeGreaterThan(0);
+    expect(saved.pending).toBeUndefined();
+
+    await r.ctl.onMessage({ type: 'rating_close' });
+    expect(r.view().rating).toBeUndefined();
+    await r.ctl.send('bốn', []).catch(() => undefined);
+    expect(r.view().rating).toBeUndefined(); // đã chấm: không mời lại
+  });
+
+  it('mất mạng: vẫn ghi nhận ngay, báo «sẽ gửi khi có mạng», gửi bù ở lần mở khung sau; bị từ chối hẳn thì bỏ, không lặp mãi', async () => {
+    let mode: RatingSendResult = 'retry';
+    const sent: RatingPayload[] = [];
+    const r = await make([() => textTurn('ok'), () => textTurn('ok'), () => textTurn('ok')], { sendFeedback: async (p) => (sent.push(p), mode) });
+    await threeSends(r);
+    await r.ctl.onMessage({ type: 'rating_submit', stars: 4 });
+    expect(r.view().rating).toEqual({ sends: 3, picked: 4, sent: false });
+    expect((await r.config.rating()).pending).toHaveLength(1);
+    expect(sent).toHaveLength(1);
+
+    await r.ctl.onMessage({ type: 'rating_close' });
+    mode = 'sent';
+    await r.ctl.sendInit(); // mở lại khung chat → gửi bù (chạy ngầm, không chặn việc hiện giao diện)
+    for (let i = 0; i < 100 && (await r.config.rating()).pending; i++) await new Promise((res) => setTimeout(res, 10));
+    expect(sent).toHaveLength(2);
+    expect((await r.config.rating()).pending).toBeUndefined();
+    expect((await r.config.rating()).sentAt).toBeGreaterThan(0);
+
+    const r2 = await make([() => textTurn('ok'), () => textTurn('ok'), () => textTurn('ok')], { sendFeedback: async () => 'drop' });
+    await threeSends(r2);
+    await r2.ctl.onMessage({ type: 'rating_submit', stars: 1 });
+    expect((await r2.config.rating()).pending).toBeUndefined(); // máy chủ từ chối hẳn: không giữ lại
+  });
+
+  it('nhận xét chữ là tuỳ chọn: chỉ sau khi chấm sao, gửi thành mục riêng; rỗng hoặc chưa chấm sao thì bỏ qua; số sao bậy thì bỏ qua', async () => {
+    const sent: RatingPayload[] = [];
+    const r = await make([() => textTurn('ok'), () => textTurn('ok'), () => textTurn('ok')], { sendFeedback: async (p) => (sent.push(p), 'sent') });
+    await threeSends(r);
+    await r.ctl.onMessage({ type: 'rating_comment', text: 'nhận xét khi chưa chấm sao' });
+    for (const bad of [0, 6, 2.5, '3', null, undefined]) await r.ctl.onMessage({ type: 'rating_submit', stars: bad as unknown as number });
+    expect(sent).toHaveLength(0);
+    expect(r.view().rating).toEqual({ sends: 3 });
+
+    await r.ctl.onMessage({ type: 'rating_submit', stars: 2 });
+    await r.ctl.onMessage({ type: 'rating_comment', text: '   ' });
+    await r.ctl.onMessage({ type: 'rating_comment', text: '  Chưa đọc được tệp PDF  ' });
+    expect(sent.map((p) => p.message)).toEqual(['Đánh giá tiện ích Chrome: 2★', 'Nhận xét kèm đánh giá 2★ (tiện ích Chrome): Chưa đọc được tệp PDF']);
+    expect(sent.every((p) => p.rating === 2)).toBe(true);
+  });
+
+  it('«Đánh giá cả trên Chrome Web Store» là lựa chọn THÊM: mở đúng mục cửa hàng và không đổi số sao đã gửi', async () => {
+    const r = await make([() => textTurn('ok'), () => textTurn('ok'), () => textTurn('ok')], { sendFeedback: async () => 'sent' });
+    await threeSends(r);
+    await r.ctl.onMessage({ type: 'rating_submit', stars: 5 });
+    const opened = openedCount(r);
+    await r.ctl.onMessage({ type: 'rating_rate' });
+    expect(openedCount(r)).toBe(opened + 1);
+    const url = String((r.api.calls.filter((c) => c.method === 'openExternal').at(-1) as { arg?: string }).arg);
+    expect(url).toContain('amngiccgboohakecgdiadjkdfcablkjc'); // mã mục ĐÚNG (bản 0.6.27 mang mã sai)
+    expect((await r.config.rating()).stars).toBe(5);
+    expect(r.view().rating).toBeUndefined();
+  });
+
+  // (lane:customer-bugs) Chống nảy đúp: hai lệnh open_external cùng URL liên tiếp chỉ mở một tab.
+  it('open_external gửi đúp cùng URL chỉ mở một lần; URL khác vẫn mở; chặn giao thức lạ', async () => {
+    const { openExternalOnce } = await import('../../src/core/host/openOnce');
+    openExternalOnce.reset();
+    const r = await make();
+    const n = () => r.api.calls.filter((c) => c.method === 'openExternal').length;
+    const before = n();
+    await r.ctl.onMessage({ type: 'open_external', url: 'https://example.com/dup' });
+    await r.ctl.onMessage({ type: 'open_external', url: 'https://example.com/dup' });
+    expect(n()).toBe(before + 1);
+    await r.ctl.onMessage({ type: 'open_external', url: 'https://example.com/other' });
+    expect(n()).toBe(before + 2);
+    await r.ctl.onMessage({ type: 'open_external', url: 'javascript:alert(1)' });
+    expect(n()).toBe(before + 2);
   });
 });

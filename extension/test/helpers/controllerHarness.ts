@@ -6,6 +6,8 @@
  * được giả có chủ đích bên dưới. Nhà cung cấp là FakeProvider: test điều khiển được thời điểm model "nghĩ xong".
  */
 import * as fs from 'node:fs';
+import * as os from 'node:os';
+import * as path from 'node:path';
 import { DEFAULT_ENGINE_SETTINGS, type SessionState } from '../../src/core/engine/types';
 import { builtinSkills } from '../../src/core/skills/builtin';
 import { SkillRegistry } from '../../src/core/skills/registry';
@@ -32,12 +34,20 @@ export interface ControllerHarnessOptions {
   settings?: Partial<typeof DEFAULT_ENGINE_SETTINGS>;
   /** Tệp có sẵn trong workspace tạm. */
   files?: Record<string, string>;
+  /** Cấp globalStorage (thư mục tạm) cho controller — bật Checkpoint & Quay lại (lane:checkpoints-rewind). */
+  storage?: boolean;
+  /** Giá trị trả về của config.get(khoá) (mặc định: giá trị mặc định do nơi gọi truyền). */
+  configValues?: Record<string, unknown>;
+  /** Kho globalState có nhớ (mặc định: không nhớ gì). */
+  globalState?: Map<string, unknown>;
 }
 
 export interface ControllerHarness {
   ctl: ChatController;
   provider: FakeProvider;
   dir: string;
+  /** Thư mục globalStorage tạm (khi `storage`). */
+  storageDir?: string;
   /** Mọi tin host → webview, theo thứ tự (chỉ đọc). */
   posted: HostMessage[];
   /** Sự kiện UI ("user", "assistant_start", "notice"…) đã đi qua controller, theo thứ tự. */
@@ -60,14 +70,22 @@ export function makeControllerHarness(opts: ControllerHarnessOptions): Controlle
   workspace.workspaceFolders = [{ uri: { fsPath: dir, scheme: 'file' }, name: 'ws' }];
   workspace.isTrusted = true;
   const logs: string[] = [];
+  const storageDir = opts.storage ? fs.mkdtempSync(path.join(os.tmpdir(), 'nd-agent-gs-')) : undefined;
   const provider = new FakeProvider(opts.script);
   const settings = { ...DEFAULT_ENGINE_SETTINGS, language: 'vi' as const, maxTurns: 8, ...opts.settings };
 
   const deps = {
-    context: { globalState: { get: () => undefined, update: async () => undefined }, extension: { packageJSON: { version: '0.0.0-test' } }, subscriptions: [] },
+    context: {
+      ...(storageDir ? { globalStorageUri: { fsPath: storageDir } } : {}),
+      globalState: opts.globalState
+        ? { get: (k: string, d?: unknown) => (opts.globalState!.has(k) ? opts.globalState!.get(k) : d), update: async (k: string, v: unknown) => void opts.globalState!.set(k, v) }
+        : { get: () => undefined, update: async () => undefined },
+      extension: { packageJSON: { version: '0.0.0-test' } },
+      subscriptions: [],
+    },
     logger: { log: (level: string, msg: string) => void logs.push(`${level}: ${msg}`) },
     config: autoFake({
-      get: (_k: string, def: unknown) => def,
+      get: (k: string, def: unknown) => (opts.configValues && k in opts.configValues ? opts.configValues[k] : def),
       language: () => 'vi',
       engine: () => settings,
       defaultModelSetting: () => ({ provider: 'fake', model: 'fake-1' }),
@@ -124,6 +142,7 @@ export function makeControllerHarness(opts: ControllerHarnessOptions): Controlle
     ctl,
     provider,
     dir,
+    storageDir,
     posted,
     events,
     logs,
@@ -146,6 +165,7 @@ export function makeControllerHarness(opts: ControllerHarnessOptions): Controlle
     dispose() {
       ctl.dispose();
       workspace.workspaceFolders = undefined;
+      if (storageDir) fs.rmSync(storageDir, { recursive: true, force: true });
       try {
         fs.rmSync(dir, { recursive: true, force: true });
       } catch {

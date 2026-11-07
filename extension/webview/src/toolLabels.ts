@@ -37,6 +37,7 @@ const KNOWN = new Set([
   'update_artifact',
   'list_artifact_types',
   'exit_plan_mode',
+  'show_before_after', // (lane:customer-bugs)
   // bản trình duyệt
   'tabs_list',
   'page_read',
@@ -87,6 +88,7 @@ const ICONS: Record<string, IconName> = {
   update_artifact: 'layout',
   list_artifact_types: 'layout',
   exit_plan_mode: 'list-checks',
+  show_before_after: 'image', // (lane:customer-bugs)
   tabs_list: 'globe',
   page_read: 'eye',
   page_snapshot: 'layout',

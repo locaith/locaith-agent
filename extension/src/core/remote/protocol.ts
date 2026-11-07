@@ -9,8 +9,9 @@
  * webview trong VS Code dùng, nên áp bằng cùng một reducer (shared/transcript.ts). Mất kết nối thì xin lại từ `seq` đã nhận; quá cũ thì nhận snapshot mới.
  */
 
-import type { AttachmentInfo, PermissionMode, QueuedInfo, SessionSummary, ThinkingLevel, TItem, TodoItem, UiEvent, WebviewMessage } from '../../shared/protocol';
+import type { AttachmentInfo, ContextInfo, PermissionMode, QueuedInfo, SessionMeterView, SessionSummary, SuggestionOption, ThinkingLevel, TItem, TodoItem, UiEvent, WebviewMessage } from '../../shared/protocol';
 import { PERMISSION_MODES, THINKING_LEVELS } from '../../shared/protocol';
+import type { CheckpointTurn, RewindView } from '../../shared/checkpoints'; // (lane:checkpoints-rewind)
 
 export const REMOTE_API_VERSION = 1;
 /** Cổng thử lần lượt (cửa sổ VS Code thứ hai tự lấy cổng kế tiếp). Trang web dò đúng dải này. */
@@ -57,11 +58,22 @@ export interface RemoteState {
   swarm?: boolean;
   providers: RemoteProvider[];
   sessions: SessionSummary[];
-  context: { usedTokens: number; limitTokens: number } | null;
+  /** Thanh đo ngữ cảnh; các trường ngoài usedTokens/limitTokens là tuỳ chọn (bản web cũ bỏ qua). */
+  context: ContextInfo | null;
+  /** (lane:sessions-ux) Đồng hồ chi phí/nén cho chip ở tiêu đề. Tuỳ chọn: trang cũ bỏ qua. */
+  meter?: SessionMeterView;
   /** Người dùng đã bật chế độ "bỏ qua mọi xác nhận" trong cài đặt VS Code (chỉ để hiển thị cảnh báo). */
   allowBypass: boolean;
   /** Trang từ xa có được phép tự chuyển sang chế độ bypass không (mặc định không). */
   remoteCanBypass: boolean;
+  /** (lane:output-timeouts) Nút lựa chọn đang chờ («Chạy tiếp phần N», cách hiểu…) — tuỳ chọn, trang cũ bỏ qua; luôn đi kèm sự kiện `options`. */
+  options?: SuggestionOption[];
+  /** (lane:checkpoints-rewind) Tệp trợ lý đã sửa theo từng lượt — thanh «N tệp đã đổi». Vắng = host cũ / tính năng tắt. */
+  checkpoints?: CheckpointTurn[];
+  /** (lane:checkpoints-rewind) Thẻ «Quay lại» đang mở (null = đóng). */
+  rewind?: RewindView | null;
+  /** (lane:bg-tasks) Tác vụ nền của cuộc trò chuyện (tuỳ chọn — trang cũ bỏ qua). */
+  bgTasks?: import('../../shared/bgTasks').BgTaskView[];
 }
 
 export type RemoteStreamMsg =
@@ -77,7 +89,7 @@ export type RemoteStreamMsg =
 /** Các lệnh trang từ xa được phép gửi — tập con của WebviewMessage. Mọi thứ khác (xoá lịch sử, khoá API, MCP, mở tệp…) chỉ làm được trong VS Code. */
 export type RemoteCommand = Extract<
   WebviewMessage,
-  { type: 'send' | 'stop' | 'retry' | 'compact' | 'new_session' | 'load_session' | 'rename_session' | 'queue_remove' | 'set_model' | 'set_mode' | 'set_thinking' | 'set_swarm' | 'permission_response' | 'get_image' }
+  { type: 'send' | 'stop' | 'retry' | 'compact' | 'new_session' | 'load_session' | 'rename_session' | 'queue_remove' | 'set_model' | 'set_mode' | 'set_thinking' | 'set_swarm' | 'permission_response' | 'get_image' | 'fork_session' | 'pin_session' | 'rewind_open' | 'rewind_plan' | 'rewind_apply' | 'rewind_cancel' | 'rewind_redo' | 'bg_task' }
 >;
 
 export const MAX_TEXT_CHARS = 50_000;
@@ -156,9 +168,48 @@ export function parseCommand(raw: unknown, opts: { canBypass: boolean }): ParseR
       const feedback = typeof o.feedback === 'string' && o.feedback.trim() ? o.feedback.slice(0, 2000) : undefined;
       return { ok: true, cmd: { type: 'permission_response', id: o.id, decision: o.decision, ...(feedback ? { feedback } : {}) } };
     }
+    // (lane:sessions-ux) rẽ nhánh / ghim từ trang Remote (tìm toàn văn cần kênh trả lời riêng nên chưa mở ở Remote)
+    case 'fork_session': {
+      if (o.itemId !== undefined && (typeof o.itemId !== 'string' || !ID.test(o.itemId))) return bad('bad_id');
+      return { ok: true, cmd: o.itemId === undefined ? { type: 'fork_session' } : { type: 'fork_session', itemId: o.itemId as string } };
+    }
+    case 'pin_session': {
+      if (typeof o.id !== 'string' || !ID.test(o.id) || typeof o.pinned !== 'boolean') return bad('bad_id');
+      return { ok: true, cmd: { type: 'pin_session', id: o.id, pinned: o.pinned } };
+    }
+    // (lane:checkpoints-rewind) Quay lại điểm trước. Ghi tệp từ xa được host chặn bằng xác nhận tại máy (xem CheckpointFeature.apply).
+    case 'rewind_open': {
+      if (typeof o.promptId !== 'string' || !ID.test(o.promptId)) return bad('bad_id');
+      return { ok: true, cmd: { type: 'rewind_open', promptId: o.promptId, ...(o.list === true ? { list: true } : {}) } };
+    }
+    case 'rewind_plan': {
+      if (typeof o.promptId !== 'string' || !ID.test(o.promptId)) return bad('bad_id');
+      if (o.what !== 'code' && o.what !== 'conversation' && o.what !== 'both') return bad('bad_rewind');
+      const scope = o.scope === 'turn' ? 'turn' : 'from';
+      let files: string[] | undefined;
+      if (o.files !== undefined) {
+        if (!Array.isArray(o.files) || o.files.length > 200) return bad('bad_files');
+        files = [];
+        for (const f of o.files) {
+          if (typeof f !== 'string' || f.length === 0 || f.length > 500 || /[\u0000-\u001f]/.test(f)) return bad('bad_files');
+          files.push(f);
+        }
+      }
+      return { ok: true, cmd: { type: 'rewind_plan', promptId: o.promptId, what: o.what, scope, ...(files ? { files } : {}) } };
+    }
+    case 'rewind_apply':
+    case 'rewind_cancel':
+    case 'rewind_redo':
+      return { ok: true, cmd: { type: o.type } };
     case 'get_image': {
       if (typeof o.key !== 'string' || o.key.length === 0 || o.key.length > 200) return bad('bad_key');
       return { ok: true, cmd: { type: 'get_image', key: o.key } };
+    }
+    // (lane:bg-tasks) từ xa chỉ được DỪNG tác vụ nền (sao chép / mở editor là thao tác trên máy VS Code).
+    case 'bg_task': {
+      if (typeof o.id !== 'string' || !/^bg\d{1,6}$/.test(o.id)) return bad('bad_id');
+      if (o.action !== 'stop') return bad('bad_action');
+      return { ok: true, cmd: { type: 'bg_task', id: o.id, action: 'stop' } };
     }
     default:
       return bad('unknown_command');

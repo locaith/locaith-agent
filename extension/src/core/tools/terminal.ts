@@ -8,6 +8,7 @@
 import { resolveUserPathReal } from '../fsutil/paths';
 import type { PermissionNeed, ToolContext, ToolDef, ToolHost } from '../engine/types';
 import { clip } from './textUtil';
+import { startBackgroundCommand } from './backgroundTools'; // (lane:bg-tasks)
 
 /**
  * Ký tự điều khiển shell, dấu nháy (thường và Unicode) và ký tự xuống dòng/ngắt dòng Unicode. Dấu nháy bị cấm vì chúng
@@ -60,6 +61,8 @@ interface RunInput {
   cwd?: string;
   timeout_seconds?: number;
   description?: string;
+  /** (lane:bg-tasks) Chạy nền, trả về id ngay. */
+  background?: boolean;
 }
 
 export function createTerminalTool(host: ToolHost): ToolDef<RunInput> {
@@ -79,8 +82,13 @@ export function createTerminalTool(host: ToolHost): ToolDef<RunInput> {
     description:
       'Run a shell command in the workspace and return its output and exit code. ' +
       shellNote +
-      'Each call is independent (no persistent cd/variables): use the cwd parameter. Do not run interactive commands or never-ending servers. ' +
-      'Output is truncated if huge. Use it for tests, builds, git, package managers, scripts — prefer the dedicated file tools for reading/editing files.',
+      'Each call is independent (no persistent cd/variables): use the cwd parameter. Do not run interactive commands. ' +
+      'Output is truncated if huge. Use it for tests, builds, git, package managers, scripts — prefer the dedicated file tools for reading/editing files.' +
+      // (lane:bg-tasks)
+      (host.startProcess
+        ? ' For commands that never end or run very long (dev servers like "npm run dev", watchers, long builds/test suites) set background:true: it returns a task id (bg1…) at once with the first output; ' +
+          'then use command_output to read new output, command_stop to stop it, command_list to see tasks. You are told automatically when a background task ends. Never start a dev server without background:true.'
+        : ' Do not run never-ending servers.'),
     inputSchema: {
       type: 'object',
       properties: {
@@ -88,6 +96,10 @@ export function createTerminalTool(host: ToolHost): ToolDef<RunInput> {
         cwd: { type: 'string', description: 'Working directory (default: workspace root).' },
         timeout_seconds: { type: 'integer', minimum: 1, maximum: 1800, description: 'Kill the command after this many seconds.' },
         description: { type: 'string', description: 'One short sentence (user\'s language) saying what the command does.' },
+        // (lane:bg-tasks)
+        ...(host.startProcess
+          ? { background: { type: 'boolean', description: 'Run in the background and return a task id immediately (dev servers, watchers, very long jobs).' } }
+          : {}),
       },
       required: ['command'],
     },
@@ -103,7 +115,7 @@ export function createTerminalTool(host: ToolHost): ToolDef<RunInput> {
       return {
         kind: 'command',
         title: input.description?.trim() ? clip(input.description.trim(), 120) : 'Chạy lệnh này?',
-        detail: [outside ? `Thư mục chạy nằm ngoài workspace: ${cwd.abs}` : '', dangerous ? 'Lệnh này có thể xoá dữ liệu hoặc khó hoàn tác — kiểm tra kỹ trước khi cho phép.' : '']
+        detail: [outside ? `Thư mục chạy nằm ngoài workspace: ${cwd.abs}` : '', dangerous ? 'Lệnh này có thể xoá dữ liệu hoặc khó hoàn tác — kiểm tra kỹ trước khi cho phép.' : '', input.background ? 'Chạy nền: lệnh tiếp tục chạy sau lượt này, dừng được ở mục «tác vụ nền» phía trên ô nhập.' : ''] // (lane:bg-tasks)
           .filter(Boolean)
           .join('\n') || undefined,
         command: input.command,
@@ -116,6 +128,7 @@ export function createTerminalTool(host: ToolHost): ToolDef<RunInput> {
       const cwd = await resolveUserPathReal(ctx.host, input.cwd ?? '.');
       const st = await ctx.host.stat(cwd.abs);
       if (!st?.isDirectory) return { content: `Thư mục chạy không tồn tại: ${input.cwd ?? '(workspace)'}`, isError: true };
+      if (input.background && ctx.host.startProcess) return startBackgroundCommand(input, { abs: cwd.abs, rel: cwd.rel }, ctx); // (lane:bg-tasks)
 
       const configured = ctx.host.setting<number>('terminal.timeoutSeconds', 120);
       const seconds = Math.min(1800, Math.max(1, input.timeout_seconds ?? configured));
@@ -154,7 +167,11 @@ export function createTerminalTool(host: ToolHost): ToolDef<RunInput> {
         const hint = output.trim()
           ? ''
           : '\nGợi ý: chưa nhận được đầu ra nào — có thể shell khởi động chậm, hoặc lệnh không in gì cho tới khi xong. Hãy thử lại MỘT lần với timeout_seconds lớn hơn (≥ 120) trước khi kết luận lệnh bị treo; nếu vẫn lặp lại thì báo người dùng (cài đặt locaithAgent.terminal.shell cho phép đổi shell).';
-        return { content: `${content}${hint}`, isError: true, summary: 'hết giờ' };
+        // (lane:bg-tasks) lệnh chạy lâu/không bao giờ dừng → chỉ đường sang chạy nền.
+        const bgHint = ctx.host.startProcess
+          ? '\nNếu đây là lệnh chạy rất lâu hoặc không tự dừng (server dev, watcher, bộ test dài): hãy chạy lại với background:true rồi đọc tiến độ bằng command_output.'
+          : '';
+        return { content: `${content}${hint}${bgHint}`, isError: true, summary: 'hết giờ' };
       }
       const ok = res.exitCode === 0;
       const header = `Mã thoát: ${res.exitCode ?? 'không rõ'}`;

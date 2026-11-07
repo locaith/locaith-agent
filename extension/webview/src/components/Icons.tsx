@@ -244,6 +244,12 @@ const SHAPES: Record<IconName, VNode> = {
       <circle cx="12" cy="12" r="2.8" />
     </>
   ),
+  'eye-off': (
+    <>
+      <path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12z" />
+      <path d="M4 4l16 16" />
+    </>
+  ),
   external: (
     <>
       <path d="M14 4h6v6" />
@@ -302,6 +308,29 @@ const SHAPES: Record<IconName, VNode> = {
       <path d="M12 16V5" />
       <path d="M7 9l5-5 5 5" />
       <path d="M5 20h14" />
+    </>
+  ),
+  // (lane:sessions-ux)
+  more: (
+    <>
+      <circle cx="5" cy="12" r="1.2" fill="currentColor" />
+      <circle cx="12" cy="12" r="1.2" fill="currentColor" />
+      <circle cx="19" cy="12" r="1.2" fill="currentColor" />
+    </>
+  ),
+  branch: (
+    <>
+      <circle cx="6" cy="5" r="2" />
+      <circle cx="6" cy="19" r="2" />
+      <circle cx="18" cy="8" r="2" />
+      <path d="M6 7v10" />
+      <path d="M18 10c0 4-6 3-12 7" />
+    </>
+  ),
+  pin: (
+    <>
+      <path d="M9 4h6l-1 5 3 3v2H7v-2l3-3z" />
+      <path d="M12 14v6" />
     </>
   ),
 };

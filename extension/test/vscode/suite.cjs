@@ -285,7 +285,7 @@ async function testMediaPreview(api) {
           for (const f of page.frames()) {
             try {
               // Lượt CUỐI (lượt vừa phát) — các lượt trước trong phiên (vd. luồng sửa tệp ở bước 9) cũng có dòng gấp riêng.
-              if (await f.evaluate(() => !!document.querySelector('.app') && !![...document.querySelectorAll('.turn-assistant')].pop()?.querySelector('.work-head'))) frame = f;
+              if (await f.evaluate(() => !!document.querySelector('.app') && !![...document.querySelectorAll('.turn-assistant')].pop()?.querySelector('.work-row .cc-head'))) frame = f;
             } catch {
               /* khung chưa sẵn sàng / khác nguồn */
             }
@@ -295,7 +295,7 @@ async function testMediaPreview(api) {
         }
         if (!frame) await sleep(400);
       }
-      assert.ok(frame, 'Không thấy khung chat (webview) có dòng «Đã làm việc» trong VS Code thật');
+      assert.ok(frame, 'Không thấy khung chat (webview) có dòng nhóm «N lệnh gọi công cụ» của lượt đã xong trong VS Code thật');
       await frame.waitForFunction(
         () => {
           const last = [...document.querySelectorAll('.turn-assistant')].pop();
@@ -309,11 +309,12 @@ async function testMediaPreview(api) {
       const info = await frame.evaluate(() => {
         const last = [...document.querySelectorAll('.turn-assistant')].pop();
         const v = last.querySelector('video.media-player');
-        return { w: v.videoWidth, h: v.videoHeight, dur: v.duration, work: last.querySelector('.work-head').closest('.work-line').textContent, folded: !last.querySelector('.work-body') };
+        return { w: v.videoWidth, h: v.videoHeight, dur: v.duration, work: last.querySelector('.work-row .cc-head').textContent, folded: !last.querySelector('.work-body') };
       });
       assert.strictEqual(info.w, 1280, `Video phải giải mã được (H.264): ${JSON.stringify(info)}`);
       assert.ok(info.dur > 3.5 && info.dur < 4.5, `Thời lượng video ~4 giây: ${info.dur}`);
-      assert.match(info.work, /Đã làm việc|Worked for/);
+      // (lane:cc-timeline-ui) dòng nhóm của lượt đã xong: «[chấm] 2 lệnh gọi công cụ   1 phút 15 giây ⌄» (không còn «Đã làm việc …»).
+      assert.match(info.work, /lệnh gọi công cụ|tool calls?/);
       assert.ok(info.folded, 'Lượt đã xong phải gấp quá trình làm việc');
       await sleep(400);
       await shot('09-media-preview');
@@ -608,7 +609,8 @@ async function testQueueFlow(api) {
   assert.ok(r4.users.some((t) => t.includes('[nhắc lần 1]') && t.includes('việc chưa xong')), 'Lần gọi thứ 4 phải là lời nhắc [nhắc lần 1] còn việc dở');
   assert.ok(r5.users.some((t) => t.includes('[nhắc lần 2]')), 'Lần gọi thứ 5 phải là lời nhắc [nhắc lần 2]');
   assert.ok(api.sidebar.snapshot().view.transcript.some((i) => i.kind === 'assistant' && i.blocks.some((b) => b.type === 'notice' && b.level === 'warn' && b.text.includes('Tin thêm 2'))), 'Lần thứ 3 phải báo người dùng việc còn dở (Tin thêm 2) thay vì nhắc tiếp');
-  assert.ok(api.sidebar.snapshot().session.todos.some((x) => x.title === 'Tin thêm 2' && x.status === 'pending'), 'Tin gửi giữa chừng phải nằm trong danh sách tác vụ');
+  // (lane:loop-guards) lần can thiệp thứ 3: engine TỰ ĐÓNG danh sách theo vết chạy — việc không có bằng chứng → «blocked» kèm ghi chú (trước đây vẫn «pending» mãi).
+  assert.ok(api.sidebar.snapshot().session.todos.some((x) => x.title === 'Tin thêm 2' && x.status === 'blocked'), 'Tin gửi giữa chừng phải nằm trong danh sách tác vụ và được đóng ở trạng thái blocked sau 3 lần nhắc');
   assert.deepStrictEqual(r2.roles, ['user', 'assistant', 'user'], 'Vai trò phải xen kẽ');
   assert.deepStrictEqual(r2.lastTypes.slice(0, 1), ['tool_result'], 'Tin chèn giữa chừng đi chung tin kết quả công cụ (tool_result đứng trước)');
   assert.ok(r2.users.some((t) => t.includes('trong lúc bạn đang làm việc')), 'Model phải được báo đây là tin gửi thêm');
@@ -955,7 +957,12 @@ async function deliverUri(api, uri) {
   return 'direct';
 }
 
+// (lane:customer-bugs) `signIn()` bỏ qua lần gọi thứ hai trong 1,5 s (chống bấm đúp «Đăng nhập» → hai tab, ghi đè state): các luồng của bộ kiểm chạy liên tiếp nên phải đợi hết cửa sổ đó.
+let lastSignInAt = -Infinity;
 async function signInFlow(api) {
+  const wait = 1700 - (Date.now() - lastSignInAt);
+  if (wait > 0) await sleep(wait);
+  lastSignInAt = Date.now();
   await api.account.signIn();
   assert.strictEqual(api.account.session.state.status, 'signingIn');
   const { redirect, code, state } = await browserApproves(api);

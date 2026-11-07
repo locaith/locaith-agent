@@ -25,7 +25,7 @@ export interface SlashContext {
   info(text: string): void;
   warn(text: string): void;
   /** Chạy MỘT lượt agent với nội dung này như thể người dùng gõ (không lưu dòng lệnh gạch chéo). */
-  runPrompt(text: string): Promise<void>;
+  runPrompt(text: string, opts?: { model?: string }): Promise<void>; // (lane:commands-agents) opts.model = đổi model CHỈ cho lượt này
   /** Trợ lý đang bận (đang chạy hoặc chuẩn bị chạy). */
   readonly busy: boolean;
 }
@@ -120,6 +120,7 @@ function normalize(name: string): string {
 function describe(d: SlashCommandDef, lang: Lang): string {
   const base = lang === 'en' ? d.description.en || d.description.vi : d.description.vi || d.description.en;
   const hint = d.argHint ? ` ${d.argHint}` : '';
-  const tag = d.source === 'project' ? (lang === 'en' ? ' (project)' : ' (dự án)') : d.source === 'user' ? (lang === 'en' ? ' (user)' : ' (cá nhân)') : '';
+  const tag =
+    d.source === 'project' ? (lang === 'en' ? ' (project)' : ' (dự án)') : d.source === 'user' ? (lang === 'en' ? ' (user)' : ' (cá nhân)') : d.source === 'plugin' ? ' (plugin)' : '';
   return `${base}${hint ? ' —' + hint : ''}${tag}`;
 }
