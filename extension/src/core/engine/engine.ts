@@ -501,6 +501,7 @@ export class AgentEngine {
         }
         await interceptor.finish();
         stallRetried = false;
+        erasedPartial = '';
 
         if (!done) {
           notice('error', t(lang, 'providerError', { provider: providerLabel, detail: 'luồng kết thúc đột ngột' }));
