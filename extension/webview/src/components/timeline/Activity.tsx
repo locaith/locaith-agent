@@ -173,7 +173,10 @@ function ThinkingGroupView({ blocks, live }: { blocks: ThinkingBlockT[]; live: b
 
 function TaskGroupView({ row, live, expanded }: { row: Extract<ActivityRow, { kind: 'taskgroup' }>; live: boolean; expanded?: boolean }) {
   const { t, lang } = useApp();
-  const [open, setOpen] = useState(false);
+  // Trong nhóm người dùng vừa mở: việc cũng mở sẵn (một lần bấm là thấy từng bước); vẫn thu lại được bằng chevron.
+  const [userOpen, setUserOpen] = useState<boolean | null>(null);
+  const open = userOpen ?? !!expanded;
+  const setOpen = (v: boolean | ((prev: boolean) => boolean)) => setUserOpen(typeof v === 'function' ? v(open) : v);
   const s = row.stats;
   const meta = [t('act.taskgroup.calls', { n: formatInt(s.calls, lang) }), s.edits > 0 ? t('act.taskgroup.edits', { n: formatInt(s.edits, lang) }) : '', s.failed > 0 ? t('par.failed', { n: formatInt(s.failed, lang) }) : ''].filter(Boolean).join(' · ');
   return (
