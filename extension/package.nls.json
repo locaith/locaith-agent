@@ -53,6 +53,8 @@
   "cfg.mcpServers": "Server MCP (Model Context Protocol) cho trợ lý dùng công cụ ngoài. Mỗi mục là `{ \"command\": \"npx\", \"args\": [\"-y\", \"gói\"], \"env\": {…} }` hoặc `{ \"url\": \"https://…\" }`. Server khai báo ở đây tự chạy; server trong `.mcp.json` của workspace chỉ chạy sau khi bạn bật trong Chợ. Chỉ đọc từ cài đặt người dùng.",
   "cfg.pluginPaths": "Thư mục chứa các plugin (mỗi thư mục con là một plugin gồm kỹ năng, agent, lệnh, MCP). Luôn quét thêm `~/.locaith/plugins` và `.locaith/plugins` trong workspace. Plugin mới tìm thấy mặc định đang tắt cho tới khi bạn bật.",
   "cfg.agentsMaxConcurrent": "Số agent con chạy đồng thời tối đa trong một cuộc trò chuyện (1–16). Mỗi hãng còn có giới hạn riêng để tránh bị giới hạn tốc độ.",
+  "cfg.commandsReadClaudeDir": "Đọc thêm lệnh gạch chéo tuỳ chỉnh trong thư mục `.claude/commands` (tương thích Claude Code). Thư mục `.claude` của dự án chỉ được đọc khi workspace đã tin cậy; `.locaith/commands` luôn được đọc.",
+  "cfg.agentOutputStyle": "Phong cách trả lời mặc định cho cuộc trò chuyện mới: `default`, `explanatory` (kèm phần «Vì sao»), `learning` (để bạn tự viết vài đoạn nhỏ), `concise` (ngắn gọn) hoặc tên một tệp trong `.locaith/output-styles`. Đổi theo từng phiên bằng `/output-style`. Phong cách chỉ đổi giọng văn, không nới lỏng quy tắc an toàn.",
   "cmd.openMarket": "Mở Chợ (kỹ năng, plugin, MCP, agent)",
   "cmd.remotePair": "Remote: ghép đôi thiết bị mới (mã + liên kết)",
   "cmd.remoteManage": "Remote: thiết bị đã ghép / dừng điều khiển từ xa",

@@ -238,6 +238,8 @@ export interface SessionState {
    * khi hai thứ này không đổi, nên khi nó đổi (duyệt kế hoạch, nạp kỹ năng, sang ngày mới) engine xoá suy luận cũ.
    */
   promptFingerprint?: string;
+  /** (lane:commands-agents) Phong cách đầu ra do người dùng chọn bằng `/output-style` cho phiên này (vắng = theo cài đặt). */
+  outputStyle?: { name: string; prompt: string };
   /** Kích thước ngữ cảnh thực của lần gọi gần nhất (token). */
   lastContextTokens: number;
   usageTotals: { input: number; output: number };

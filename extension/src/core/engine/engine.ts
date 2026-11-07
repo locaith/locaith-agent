@@ -82,6 +82,8 @@ export interface EngineDeps {
   takeQueued?(): QueuedMessage[];
   /** Chỉ dẫn do các server MCP đang chạy cung cấp (đưa vào system prompt kèm nhãn nguồn). */
   mcpInstructions?(): { server: string; text: string }[];
+  /** (lane:commands-agents) Phong cách đầu ra mặc định (cài đặt `agent.outputStyle`) khi phiên chưa tự chọn — xem core/commands/outputStyles.ts. */
+  outputStyle?(): import('../commands/outputStyles').SessionOutputStyle | null;
   /** Gọi sau khi một lần nén ngữ cảnh thành công, kèm bản tóm tắt (ví dụ để lưu vào bộ nhớ dài hạn). Lỗi của hook không làm hỏng lượt chạy. */
   onCompacted?(info: { session: SessionState; summary: string }): void | Promise<void>;
   /**
@@ -338,6 +340,7 @@ export class AgentEngine {
           profile: this.d.profile,
           mcpInstructions: this.d.mcpInstructions?.(),
           providerId: session.provider,
+          outputStyle: session.outputStyle ?? this.d.outputStyle?.() ?? null, // (lane:commands-agents)
         });
 
         const interceptor = new StreamInterceptor({

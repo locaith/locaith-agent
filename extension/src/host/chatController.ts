@@ -3,6 +3,7 @@ import { AgentEngine, type QueuedMessage, type QueueState, type RunResult } from
 import { coreRunExtensions } from '../core/engine/extensions';
 import { hostRunExtensions } from './hostExtensions';
 import { SlashRegistry, type SlashContext } from './slashRegistry';
+import { commandsOutputStyle, registerCommandsSlash, type CommandsLaneAccess } from './commandsSlash'; // (lane:commands-agents)
 import { loadProjectInstructions } from '../core/engine/instructions';
 import { resumeInstruction } from '../core/engine/resume';
 import { MEMORY_DIR, MEMORY_INDEX, type MemoryScope, type MemorySnapshot } from '../core/engine/memory';
@@ -284,7 +285,7 @@ export class ChatController implements vscode.Disposable {
     // registerRewindSlash(this.slash, this); // (lane:checkpoints-rewind)  /rewind
     // registerPermissionsSlash(this.slash, this); // (lane:perm-rules)  /permissions
     // registerHooksSlash(this.slash, this); // (lane:hooks)  /hooks
-    // registerCommandsSlash(this.slash, this); // (lane:commands-agents)  lệnh tuỳ chỉnh + /review /simplify /status /doctor /agents /output-style /mcp
+    registerCommandsSlash(this.slash, this); // (lane:commands-agents)  lệnh tuỳ chỉnh + /review /simplify /status /doctor /agents /output-style /mcp
     // registerTasksSlash(this.slash, this); // (lane:bg-tasks)  /tasks
     // registerIdeSlash(this.slash, this); // (lane:ide-context)  /problems
     // registerSessionsSlash(this.slash, this); // (lane:sessions-ux)  /fork /cost /context
@@ -404,6 +405,25 @@ export class ChatController implements vscode.Disposable {
   /** MCP đổi trạng thái (khởi động xong, lỗi, dừng): làm mới danh sách nếu Chợ đang mở. */
   async refreshMarketIfOpen(): Promise<void> {
     if (this.marketOpen && !this.disposed && this.webview) await this.sendMarket(true);
+  }
+
+  // ── (lane:commands-agents) cửa cho host/commandsSlash.ts: phụ thuộc + phiên + làm mới menu `/` ──
+  private readonly laneDisposers: (() => void)[] = [];
+  commandsLaneAccess(): CommandsLaneAccess {
+    return {
+      deps: this.d,
+      host: this.host,
+      registry: this.registry,
+      session: () => this.session,
+      refreshMenu: () => {
+        if (this.view && !this.disposed) this.patch({ slashCommands: this.slashList() });
+      },
+      notice: (level, text) => {
+        if (this.view && !this.disposed) this.emit({ t: 'notice', level, text });
+      },
+      onDispose: (fn) => void this.laneDisposers.push(fn),
+      showScreen: (screen) => this.showScreen(screen),
+    };
   }
 
   /** Ảnh chụp trạng thái — chỉ dùng cho kiểm thử tích hợp. */
@@ -1506,6 +1526,7 @@ export class ChatController implements vscode.Disposable {
       emit: (ev) => this.onEngineEvent(ev),
       takeQueued: () => this.takeForEngine(),
       mcpInstructions: () => this.d.mcp.instructions(),
+      outputStyle: () => commandsOutputStyle(this), // (lane:commands-agents)
       onCompacted: (info) => this.saveCompactionToMemory(info.session, info.summary),
       onQueue: (q) => this.setModelQueue(q),
       onConsentRequired: () => this.onConsentRequired(),
@@ -2328,6 +2349,7 @@ export class ChatController implements vscode.Disposable {
 
   dispose(): void {
     this.disposed = true;
+    for (const fn of this.laneDisposers.splice(0)) fn(); // (lane:commands-agents)
     this.queue = [];
     this.detachMcp();
     this.accountSub?.dispose();

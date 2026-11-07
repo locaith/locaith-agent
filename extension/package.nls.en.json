@@ -53,6 +53,8 @@
   "cfg.mcpServers": "MCP (Model Context Protocol) servers that give the assistant external tools. Each entry is `{ \"command\": \"npx\", \"args\": [\"-y\", \"package\"], \"env\": {…} }` or `{ \"url\": \"https://…\" }`. Servers declared here start automatically; servers from a workspace `.mcp.json` only run after you enable them in the Market. Read from user settings only.",
   "cfg.pluginPaths": "Folders containing plugins (each subfolder is a plugin bundling skills, agents, commands, MCP). `~/.locaith/plugins` and the workspace `.locaith/plugins` are always scanned. Newly found plugins stay disabled until you enable them.",
   "cfg.agentsMaxConcurrent": "Maximum number of sub-agents running at once in one conversation (1–16). Each provider also has its own cap to avoid rate limits.",
+  "cfg.commandsReadClaudeDir": "Also read custom slash commands from `.claude/commands` (Claude Code compatible). A project's `.claude` folder is only read when the workspace is trusted; `.locaith/commands` is always read.",
+  "cfg.agentOutputStyle": "Default reply style for new conversations: `default`, `explanatory` (adds short “why” insights), `learning` (leaves small pieces for you to write), `concise`, or the name of a file in `.locaith/output-styles`. Change per conversation with `/output-style`. A style only changes tone; it never relaxes safety rules.",
   "cmd.openMarket": "Open the Market (skills, plugins, MCP, agents)",
   "cmd.remotePair": "Remote: pair a new device (code + link)",
   "cmd.remoteManage": "Remote: paired devices / stop remote control",
