@@ -699,13 +699,20 @@ export function createVerifierExtension(deps: VerifierDeps): RunExtension {
     id: 'verifier',
     begin(scope: RunScope) {
       if (running || deps.busy?.()) return null;
-      const startIdx = scope.session.messages.length - 1;
+      // Mốc đầu lần chạy giữ theo ĐỐI TƯỢNG tin nhắn, không theo chỉ số: nén ngữ cảnh giữa chừng làm ngắn `messages` và đổi chỉ số (xlane).
+      const startMsg = scope.session.messages[scope.session.messages.length - 1];
+      const startIdxOf = (): number => {
+        const ms = scope.session.messages;
+        let i = startMsg ? ms.indexOf(startMsg) : -1;
+        if (i < 0 && startMsg) i = ms.findIndex((m) => m.role === 'user' && m.ts === startMsg.ts && !m.synthetic);
+        return i; // -1 = tin khởi động đã bị nén đi: mọi tin còn lại đều thuộc lần chạy này
+      };
       const outputs = new Map<string, string>();
       let rounds = 0;
       const decide = async (ctx: FinalizeContext): Promise<FinalizeDecision> => {
         const s = deps.settings();
         const maxRounds = Math.max(1, Math.min(4, s.maxRounds ?? VERIFY_MAX_ROUNDS));
-        const bundle = buildBundle({ session: scope.session, input: scope.input, startIdx, trace: scope.trace, outputs, finalAnswer: ctx.text });
+        const bundle = buildBundle({ session: scope.session, input: scope.input, startIdx: startIdxOf(), trace: scope.trace, outputs, finalAnswer: ctx.text });
         if (s.mode !== 'off' && !ctx.aborted) deps.onLastRun?.({ sessionId: scope.session.id, bundle, lang: scope.lang, at: Date.now() });
         if (rounds >= maxRounds) return { action: 'accept' };
         const trigger: TriggerInput = { mode: s.mode, trace: scope.trace, thinkingLevel: scope.session.thinkingLevel, sessionMode: scope.session.mode, stop: ctx.stop, aborted: ctx.aborted, wrapUp: ctx.turn.wrapUp };
@@ -767,7 +774,7 @@ export function createVerifierExtension(deps: VerifierDeps): RunExtension {
         // Mọi đường thoát (Dừng / lỗi / hết vòng / từ chối) cũng ghi gói dữ liệu → `/verify` không kiểm tra nhầm lần chạy TRƯỚC (lane:blind-verifier).
         end(info) {
           if (deps.settings().mode === 'off') return;
-          const bundle = buildBundle({ session: scope.session, input: scope.input, startIdx, trace: scope.trace, outputs, finalAnswer: lastAssistantText(scope.session.messages, startIdx) });
+          const bundle = buildBundle({ session: scope.session, input: scope.input, startIdx: startIdxOf(), trace: scope.trace, outputs, finalAnswer: lastAssistantText(scope.session.messages, startIdxOf()) });
           deps.onLastRun?.({ sessionId: scope.session.id, bundle, lang: scope.lang, at: Date.now(), stopReason: info.stopReason });
         },
       };

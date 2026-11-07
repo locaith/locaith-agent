@@ -43,3 +43,32 @@ describe('xlane: Quay lại hội thoại × số đo ngữ cảnh', () => {
     expect(h.session().lastContextTokens).toBe(0);
   });
 });
+
+describe('xlane: kiểm tra độc lập × nén ngữ cảnh giữa lần chạy', () => {
+  it('yêu cầu bổ sung (tin chen giữa) vẫn nằm trong gói sau khi lịch sử bị nén làm đổi chỉ số', async () => {
+    const { createVerifierExtension } = await import('../src/core/engine/verifier');
+    const { newTrace } = await import('../src/core/engine/seams');
+    const { t } = await import('../src/core/engine/strings');
+    const u = (text: string, extra: Record<string, unknown> = {}) => ({ role: 'user' as const, content: [{ type: 'text' as const, text }], ts: 1, ...extra });
+    const a = (text: string) => ({ role: 'assistant' as const, content: [{ type: 'text' as const, text }], ts: 1 });
+    const old = Array.from({ length: 10 }, (_, i) => (i % 2 ? a(`cũ ${i}`) : u(`cũ ${i}`)));
+    const input = [{ type: 'text' as const, text: 'YEU-CAU-GOC' }];
+    const session = { id: 's1', mode: 'default', todos: [], thinkingLevel: 'off', messages: [...old, { role: 'user' as const, content: input, ts: 2 }] } as never as { messages: unknown[]; id: string };
+    let bundle: { requests: string[] } | undefined;
+    const ext = createVerifierExtension({
+      settings: () => ({ mode: 'auto', maxRounds: 2 }),
+      registry: () => undefined as never,
+      run: (async () => { throw new Error('không chạy'); }) as never,
+      onLastRun: (l) => { bundle = l.bundle as never; },
+    });
+    const scope = { session, input, trace: newTrace(), lang: 'vi', emit: () => undefined, assistantId: () => 'a1', host: {}, signal: new AbortController().signal } as never;
+    const hooks = ext.begin(scope)!;
+    // Giữa lần chạy: tin chen giữa của người dùng (đi cùng kết quả công cụ) rồi lịch sử bị nén (ngắn lại, chỉ số đổi).
+    const steer = { role: 'user' as const, content: [{ type: 'tool_result' as const, toolUseId: 'x', name: 'read_file', content: 'ok' }, { type: 'text' as const, text: t('vi', 'steerHeader', { n: 1 }) }, { type: 'text' as const, text: 'YEU-CAU-CHEN-GIUA' }], ts: 3 };
+    session.messages.push(a('đang làm'), steer, a('làm tiếp'));
+    session.messages = [u('<tom_tat>', { synthetic: true }), a('Đã nắm'), ...session.messages.slice(-3)];
+    await hooks.finalize!({ turn: { turn: 5, maxTurns: 30, turnsLeft: 25, wrapUp: false }, message: a('xong'), text: 'xong', stop: 'end_turn', pendingTodos: [], aborted: false } as never);
+    expect(bundle!.requests).toContain('YEU-CAU-GOC');
+    expect(bundle!.requests).toContain('YEU-CAU-CHEN-GIUA');
+  });
+});
