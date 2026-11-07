@@ -73,7 +73,9 @@ describe('run_command: hết giờ mà không có đầu ra → gợi ý «có t
   it('đã có đầu ra (lệnh chạy lâu thật): giữ nguyên thông báo cũ, KHÔNG có gợi ý', async () => {
     const { tool, host } = timedOut('zip : đã nén 1,2 GB');
     const r = await tool.execute({ command: 'Compress-Archive …', timeout_seconds: 180 }, ctxFor(host));
-    expect(r.content).toBe('Lệnh bị dừng sau 180 giây (hết thời gian).\nzip : đã nén 1,2 GB');
+    expect(r.content).toContain('Lệnh bị dừng sau 180 giây (hết thời gian).\nzip : đã nén 1,2 GB');
+    expect(r.content).not.toContain('khởi động chậm'); // không có gợi ý «shell chậm»
+    expect(r.content).toContain('background:true'); // (lane:bg-tasks) chỉ đường sang chạy nền
     expect(r.isError).toBe(true);
   });
 
