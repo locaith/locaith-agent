@@ -98,7 +98,7 @@ export function truncate(s: string, max: number): string {
 const FILE_EXT =
   'ts|tsx|js|jsx|mjs|cjs|json|jsonc|md|mdx|py|css|scss|less|html|htm|vue|svelte|go|rs|java|kt|c|h|cpp|hpp|cs|php|rb|sh|ps1|bat|cmd|yml|yaml|toml|ini|txt|sql|xml|svg|csv|env|lock|gradle|swift|dart|lua|ipynb|dockerfile';
 const FILE_RE = new RegExp(
-  `^(?:\\./|\\.\\./|/|[A-Za-z]:[\\\\/])?(?:[\\p{L}\\p{N}_@.+~-]+[\\\\/])*[\\p{L}\\p{N}_@.+~-]+\\.(?:${FILE_EXT})(?::(\\d+)(?::(\\d+))?|#L(\\d+)(?:-L?(\\d+))?)?$`,
+  `^(?:\\./|\\.\\./|/|[A-Za-z]:[\\\\/])?(?:[\\p{L}\\p{N}_@.+~-]+[\\\\/])*[\\p{L}\\p{N}_@.+~-]+\\.(?:${FILE_EXT})(?::(\\d+)(?:[:\\-–](\\d+))?|#L(\\d+)(?:-L?(\\d+))?)?$`,
   'iu',
 );
 /**
@@ -106,7 +106,7 @@ const FILE_RE = new RegExp(
  * thư mục — nhờ vậy câu văn trong backtick ("xem file này .md") không bị biến thành liên kết oan.
  */
 const FILE_SPACED_RE = new RegExp(
-  `^(?:\\./|\\.\\./|/|[A-Za-z]:[\\\\/])?(?:[^\\\\/:*?"<>|\\n]+[\\\\/])+[^\\\\/:*?"<>|\\n]+\\.(?:${FILE_EXT})(?::(\\d+)(?::(\\d+))?|#L(\\d+)(?:-L?(\\d+))?)?$`,
+  `^(?:\\./|\\.\\./|/|[A-Za-z]:[\\\\/])?(?:[^\\\\/:*?"<>|\\n]+[\\\\/])+[^\\\\/:*?"<>|\\n]+\\.(?:${FILE_EXT})(?::(\\d+)(?:[:\\-–](\\d+))?|#L(\\d+)(?:-L?(\\d+))?)?$`,
   'iu',
 );
 
@@ -124,7 +124,7 @@ export function parseFileRef(text: string): { path: string; line?: number } | nu
   // Đường dẫn có dấu cách: đoạn cuối không được kết thúc bằng dấu cách (tránh nuốt cả câu vào "tên tệp").
   if (spaced && /[\\/]\s|\s\.\w+$/.test(s)) return null;
   const line = m[1] ?? m[3];
-  const path = s.replace(/(?::\d+(?::\d+)?|#L\d+(?:-L?\d+)?)$/, '');
+  const path = s.replace(/(?::\d+(?:[:\-–]\d+)?|#L\d+(?:-L?\d+)?)$/, '');
   return line ? { path, line: Number(line) } : { path };
 }
 

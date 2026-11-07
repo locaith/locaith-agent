@@ -5,6 +5,7 @@
 
 import type { ChatMessage, ImageBlock, JsonSchema, ThinkingLevel } from '../types';
 import type { DiffInfo, PermissionKind, PermissionMode, PermissionRequest, SuggestionOption, TodoItem, UiEvent } from '../../shared/protocol';
+import type { DiagnosticsQuery, DiagnosticsResult } from '../ide/diagnostics'; // (lane:ide-context)
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Công cụ
@@ -189,6 +190,10 @@ export interface ToolHost {
   log(level: 'debug' | 'info' | 'warn' | 'error', message: string): void;
   /** Ghi lại nội dung trước/sau của một thay đổi tệp để giao diện mở được diff đầy đủ trong editor (tuỳ chọn). */
   recordFileChange?(callId: string, change: { abs: string; rel: string; before: string | null; after: string }): void;
+  // (lane:ide-context) Chẩn đoán của IDE (language server). Không có = host không có IDE (CLI, Chrome) → không có get_diagnostics.
+  diagnostics?(query: DiagnosticsQuery): Promise<DiagnosticsResult>;
+  /** Chờ language server cập nhật chẩn đoán của tệp sau khi ghi (≥ minMs, ≤ maxMs, ngắt được). Không có → engine tự chờ minMs. */
+  waitForDiagnostics?(abs: string, opts: { minMs: number; maxMs: number; signal: AbortSignal }): Promise<void>;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

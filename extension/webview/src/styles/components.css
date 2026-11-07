@@ -1363,6 +1363,14 @@ button.chip-main:hover {
   border-style: dashed;
   background: transparent;
 }
+/* (lane:ide-context) chip «Đang xem» đã tắt: mờ đi, chữ gạch ngang nhẹ để biết tệp này không được gửi. */
+.chip-editor.is-off .chip-text {
+  text-decoration: line-through;
+  text-decoration-thickness: 1px;
+}
+.chip-editor.is-off {
+  opacity: 0.7;
+}
 .chip-plain {
   background: var(--surface-2);
 }

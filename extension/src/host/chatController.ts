@@ -72,6 +72,7 @@ import type { ProviderService } from './providerService';
 import { SecretsService } from './secrets';
 import type { SessionStore } from './sessionStore';
 import { buildUserContent } from './userContent';
+import { registerIdeSlash } from './ideSlash'; // (lane:ide-context)
 import type { AccountGate } from './account';
 import type { AcceptResult, LocaithGate } from './locaith';
 import type { RemoteGate } from './remote';
@@ -305,7 +306,7 @@ export class ChatController implements vscode.Disposable {
     // registerHooksSlash(this.slash, this); // (lane:hooks)  /hooks
     registerCommandsSlash(this.slash, this); // (lane:commands-agents)  lệnh tuỳ chỉnh + /review /simplify /status /doctor /agents /output-style /mcp
     // registerTasksSlash(this.slash, this); // (lane:bg-tasks)  /tasks
-    // registerIdeSlash(this.slash, this); // (lane:ide-context)  /problems
+    registerIdeSlash(this.slash, { diagnostics: (q) => this.host.diagnostics(q) }); // (lane:ide-context)  /problems
     // registerSessionsSlash(this.slash, this); // (lane:sessions-ux)  /fork /cost /context
     // registerMcpSlash(this.slash, this); // (lane:mcp-parity)  /mcp__<server>__<prompt>
     // registerMemorySlash(this.slash, this); // (lane:instructions-memory)  /memory /remember
@@ -1044,6 +1045,8 @@ export class ChatController implements vscode.Disposable {
         return this.setMode(m.mode);
       case 'enable_full_access':
         return this.enableFullAccess(m.remember === true);
+      case 'set_editor_context': // (lane:ide-context) chip «Đang xem» bật/tắt việc gửi kèm tệp/vùng chọn của editor
+        return this.d.editor.setEnabled(m.on === true);
       case 'set_swarm':
         this.session.swarm = m.on === true;
         this.patch({ swarm: this.session.swarm });

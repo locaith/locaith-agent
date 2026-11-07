@@ -34,6 +34,7 @@ export type IconName =
   | 'zap'
   | 'layout'
   | 'eye'
+  | 'eye-off'
   | 'external'
   | 'arrow-down'
   | 'arrow-left'

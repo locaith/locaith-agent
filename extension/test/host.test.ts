@@ -74,7 +74,8 @@ describe('buildUserContent', () => {
     expect(text).toContain('<ide_context>');
     expect(text).toContain('Active file in the editor: src/a.ts (typescript)');
     expect(text).toContain('<attached_file path="src/a.ts">');
-    expect(text).toContain('<attached_selection path="src/a.ts" lines="2-3">\ndòng 2\ndòng 3\n</attached_selection>');
+    // (lane:ide-context) vùng chọn có số dòng kiểu `cat -n`
+    expect(text).toMatch(/<attached_selection path="src\/a.ts" lines="2-3">\n\s+2\tdòng 2\n\s+3\tdòng 3\n<\/attached_selection>/);
     expect(text).toContain('<attached_folder path="docs">');
     expect(text).toContain('x.md');
     expect(text.trimEnd().endsWith('Giải thích giúp tôi')).toBe(true);

@@ -146,6 +146,28 @@ const vi = {
   // ── (lane:commands-agents) ──
   // ── (lane:bg-tasks) ──
   // ── (lane:ide-context) ──
+  diagUnavailable: 'Không khả dụng: môi trường này không có IDE nên không đọc được chẩn đoán (lỗi/cảnh báo của language server).',
+  diagOutside: 'Chỉ đọc được chẩn đoán của tệp trong workspace: {path}',
+  diagNone: 'VS Code không báo {what} nào{scope}. (Chẩn đoán chỉ có cho tệp mà language server đã phân tích — thường là tệp đang mở hoặc vừa sửa.)',
+  diagNoneErrors: 'lỗi',
+  diagNoneWarnings: 'lỗi hay cảnh báo',
+  diagNoneAny: 'chẩn đoán',
+  diagScope: ' cho {paths}',
+  diagHeader: 'VS Code đang báo {counts}{shown}:',
+  diagShown: ' (hiện {n} mục đầu)',
+  diagMore: '… còn {n} mục nữa — thu hẹp bằng `paths` hoặc `severity`.',
+  diagError: '{n} lỗi',
+  diagWarning: '{n} cảnh báo',
+  diagInfo: '{n} thông tin',
+  diagHint: '{n} gợi ý',
+  diagAfterEdit: 'Sau khi sửa, VS Code báo {counts} mới ở {file}:',
+  diagAfterEditFix: 'Hãy sửa các lỗi này (hoặc giải thích vì sao bỏ qua) trước khi báo xong.',
+  diagSummaryNew: '{counts} mới',
+  problemsTitle: 'Chẩn đoán hiện tại của VS Code (@problems)',
+  problemsUnavailable: '@problems chỉ dùng được trong VS Code (cần language server).',
+  mentionOutOfRange: '«{ref}»: dòng {start} nằm ngoài tệp ({total} dòng) nên không đính kèm.',
+  mentionSecret: '«{ref}»: tệp có thể chứa bí mật nên không tự đính kèm từ chữ; hãy chọn tệp bằng nút @ nếu thật sự cần.',
+  mentionTruncated: '[… đã cắt ở {max} dòng; dùng read_file với offset={next} để đọc tiếp]',
   // ── (lane:sessions-ux) ──
   // ── (lane:customer-bugs) ──
   // ── (lane:gateway-client) ──
@@ -290,6 +312,28 @@ const en: typeof vi = {
   // ── (lane:commands-agents) ──
   // ── (lane:bg-tasks) ──
   // ── (lane:ide-context) ──
+  diagUnavailable: 'Not available: this environment has no IDE, so diagnostics (language-server errors/warnings) cannot be read.',
+  diagOutside: 'Diagnostics can only be read for files inside the workspace: {path}',
+  diagNone: 'VS Code reports no {what}{scope}. (Diagnostics exist only for files the language server has analysed — usually open or just-edited files.)',
+  diagNoneErrors: 'errors',
+  diagNoneWarnings: 'errors or warnings',
+  diagNoneAny: 'diagnostics',
+  diagScope: ' for {paths}',
+  diagHeader: 'VS Code reports {counts}{shown}:',
+  diagShown: ' (showing the first {n})',
+  diagMore: '… {n} more — narrow it down with `paths` or `severity`.',
+  diagError: '{n} error(s)',
+  diagWarning: '{n} warning(s)',
+  diagInfo: '{n} info',
+  diagHint: '{n} hint(s)',
+  diagAfterEdit: 'After this edit, VS Code reports {counts} new in {file}:',
+  diagAfterEditFix: 'Fix these (or explain why they can be ignored) before reporting done.',
+  diagSummaryNew: '{counts} new',
+  problemsTitle: 'Current VS Code diagnostics (@problems)',
+  problemsUnavailable: '@problems only works in VS Code (it needs a language server).',
+  mentionOutOfRange: '“{ref}”: line {start} is past the end of the file ({total} lines), so it was not attached.',
+  mentionSecret: '“{ref}”: the file may contain secrets, so it is not attached from text; pick it with the @ button if you really need it.',
+  mentionTruncated: '[… cut at {max} lines; use read_file with offset={next} to read on]',
   // ── (lane:sessions-ux) ──
   // ── (lane:customer-bugs) ──
   // ── (lane:gateway-client) ──
