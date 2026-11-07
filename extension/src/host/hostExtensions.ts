@@ -15,7 +15,7 @@ import type { ControllerDeps } from './chatController';
 // import { verifierExtension } from './extensions/verifier'; // (lane:blind-verifier)
 // import { hooksExtension } from './extensions/hooks'; // (lane:hooks)
 // import { backgroundTasksExtension } from './extensions/backgroundTasks'; // (lane:bg-tasks)
-// import { ideDiagnosticsExtension } from './extensions/ideDiagnostics'; // (lane:ide-context)
+import { ideDiagnosticsExtension } from './extensions/ideDiagnostics'; // (lane:ide-context)
 // import { instructionsExtension } from './extensions/instructions'; // (lane:instructions-memory)
 // import { permissionRulesExtension } from './extensions/permissionRules'; // (lane:perm-rules)
 // import { checkpointsExtension } from './extensions/checkpoints'; // (lane:checkpoints-rewind)
@@ -34,7 +34,7 @@ export function hostRunExtensions(ctx: HostExtensionContext): RunExtension[] {
   return [
     // permissionRulesExtension(ctx), // (lane:perm-rules)
     // hooksExtension(ctx), // (lane:hooks)
-    // ideDiagnosticsExtension(ctx), // (lane:ide-context)
+    ideDiagnosticsExtension(ctx), // (lane:ide-context)
     // instructionsExtension(ctx), // (lane:instructions-memory)
     // checkpointsExtension(ctx), // (lane:checkpoints-rewind)
     // backgroundTasksExtension(ctx), // (lane:bg-tasks)

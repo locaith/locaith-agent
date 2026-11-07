@@ -5,6 +5,7 @@ import type { SkillRegistry } from '../skills/registry';
 import { ToolRegistry } from '../engine/toolRegistry';
 import type { ToolHost } from '../engine/types';
 import { createArtifactTool, listArtifactTypesTool, updateArtifactTool } from './artifact';
+import { getDiagnosticsTool } from './diagnostics'; // (lane:ide-context)
 import { editFileTool, globTool, grepTool, listDirTool, readFileTool, writeFileTool } from './fs';
 import { createSkillTools, exitPlanModeTool, offerOptionsTool, rememberTool, scratchpadTool, todoWriteTool, type MarketSearch } from './meta';
 import { createTerminalTool } from './terminal';
@@ -46,12 +47,15 @@ export function createToolRegistry(opts: ToolRegistryOptions): ToolRegistry {
   // Agent con: `agent` luôn có; `workflow_run` ẩn cho tới khi kỹ năng `multi-agent` được nạp.
   if (opts.agents) for (const t of createAgentTools({ ...opts.agents, registry: () => r })) r.register(t);
   if (opts.chrome) r.register(createChromeTool(opts.chrome) as never);
+  // (lane:ide-context) Chẩn đoán IDE: chỉ khi host có language server (VS Code). CLI/Chrome không có → công cụ không xuất hiện.
+  if (opts.host.diagnostics) r.register(getDiagnosticsTool);
   // Công cụ ẩn: chỉ mở khi kỹ năng `artifacts` được nạp.
   r.register(listArtifactTypesTool).register(createArtifactTool).register(updateArtifactTool);
   return r;
 }
 
 export * from './artifact';
+export * from './diagnostics'; // (lane:ide-context)
 export * from './fs';
 export * from './meta';
 export * from './terminal';

@@ -497,6 +497,26 @@
           "scope": "machine",
           "markdownDescription": "%cfg.summarizerModel%"
         },
+        "locaithAgent.agent.editDiagnostics": {
+          "type": "string",
+          "enum": [
+            "errors",
+            "all",
+            "off"
+          ],
+          "enumDescriptions": [
+            "%cfg.editDiagnostics.errors%",
+            "%cfg.editDiagnostics.all%",
+            "%cfg.editDiagnostics.off%"
+          ],
+          "default": "errors",
+          "markdownDescription": "%cfg.editDiagnostics%"
+        },
+        "locaithAgent.context.editor": {
+          "type": "boolean",
+          "default": true,
+          "markdownDescription": "%cfg.contextEditor%"
+        },
         "locaithAgent.search.backend": {
           "type": "string",
           "enum": [

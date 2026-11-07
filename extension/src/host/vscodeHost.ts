@@ -7,6 +7,8 @@ import type { ConfigService } from './config';
 import type { DiffPreview } from './diffPreview';
 import type { Logger } from './logger';
 import type { SecretsService } from './secrets';
+import type { DiagnosticsQuery, DiagnosticsResult } from '../core/ide/diagnostics'; // (lane:ide-context)
+import { readDiagnostics, waitForDiagnostics } from './diagnosticsSource'; // (lane:ide-context)
 
 export interface VsCodeHostDeps {
   config: ConfigService;
@@ -80,5 +82,14 @@ export class VsCodeToolHost extends NodeToolHost {
 
   recordFileChange(callId: string, change: { abs: string; rel: string; before: string | null; after: string }): void {
     this.deps.diffs.record(callId, change);
+  }
+
+  // (lane:ide-context) Chẩn đoán của language server (Problems) — cho get_diagnostics, @problems và ghi chú sau khi sửa tệp.
+  async diagnostics(query: DiagnosticsQuery): Promise<DiagnosticsResult> {
+    return readDiagnostics(vscode.languages, this.workspaceRoots(), query);
+  }
+
+  waitForDiagnostics(abs: string, opts: { minMs: number; maxMs: number; signal: AbortSignal }): Promise<void> {
+    return waitForDiagnostics(vscode.languages, abs, opts);
   }
 }
