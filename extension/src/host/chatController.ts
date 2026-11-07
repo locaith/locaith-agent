@@ -3,6 +3,7 @@ import { AgentEngine, type QueuedMessage, type QueueState, type RunResult } from
 import { coreRunExtensions } from '../core/engine/extensions';
 import { hostRunExtensions } from './hostExtensions';
 import { SlashRegistry, type SlashContext } from './slashRegistry';
+import { openExternalOnce } from '../core/host/openOnce'; // (lane:customer-bugs)
 import { loadProjectInstructions } from '../core/engine/instructions';
 import { resumeInstruction } from '../core/engine/resume';
 import { MEMORY_DIR, MEMORY_INDEX, type MemoryScope, type MemorySnapshot } from '../core/engine/memory';
@@ -1078,7 +1079,7 @@ export class ChatController implements vscode.Disposable {
         return;
       case 'open_external': {
         const u = String(m.url ?? '');
-        if (/^https?:\/\//i.test(u)) await vscode.env.openExternal(vscode.Uri.parse(u));
+        if (/^https?:\/\//i.test(u)) await openExternalOnce(u, (x) => vscode.env.openExternal(vscode.Uri.parse(x))); // (lane:customer-bugs) chống nảy đúp
         return;
       }
       case 'slash':

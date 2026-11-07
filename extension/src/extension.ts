@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import { openExternalOnce } from './core/host/openOnce'; // (lane:customer-bugs)
 import { readFile, writeFile } from 'node:fs/promises';
 import * as os from 'node:os';
 import * as path from 'node:path';
@@ -110,7 +111,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<TestAp
         await writeFile(sink, url, 'utf8');
         return;
       }
-      await vscode.env.openExternal(vscode.Uri.parse(url));
+      await openExternalOnce(url, (x) => vscode.env.openExternal(vscode.Uri.parse(x))); // (lane:customer-bugs)
     },
     githubToken: async (create) => {
       try {

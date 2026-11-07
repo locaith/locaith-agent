@@ -51,6 +51,7 @@ import { hasRedactions, redactForStorage, redactTranscript, settleForExit } from
 import { createBrowserToolRegistry } from './tools';
 import { hostOf, TabScope } from './tools/policy';
 import { Presence } from './presence';
+import { openExternalOnce } from '../core/host/openOnce'; // (lane:customer-bugs)
 
 export interface ArtifactHost {
   open(rec: ArtifactRecord): Promise<void> | void;
@@ -743,7 +744,7 @@ export class BrowserController {
         return;
       case 'open_external': {
         const u = String(m.url ?? '');
-        if (/^https?:\/\//i.test(u)) await this.d.api.openExternal(u);
+        if (/^https?:\/\//i.test(u)) await openExternalOnce(u, (x) => this.d.api.openExternal(x)); // (lane:customer-bugs) chống nảy đúp
         return;
       }
       case 'rating_rate':
