@@ -98,7 +98,7 @@ export function completionGate(i: GateInput, lang: Lang): GateDecision | null {
   const max = i.maxNudges ?? GATE_MAX_NUDGES;
   if (i.nudges >= max) return null;
 
-  const pending = i.pendingTodos.filter((x) => x.status !== 'completed');
+  const pending = i.pendingTodos.filter((x) => x.status !== 'completed' && x.status !== 'blocked'); // (lane:loop-guards)
   // (lane:loop-guards) Lần đầu: kèm trạng thái THẬT từng việc. Lần sau: yêu cầu làm KHÁC (todo_write / giải thích / hỏi một câu) — không lặp câu cũ.
   const todosFirst = (): GateDecision => ({
     reason: 'todos',

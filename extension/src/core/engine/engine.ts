@@ -256,7 +256,7 @@ export class AgentEngine {
       for (const q of queued) {
         const title = (q.text || t(lang, 'queuedImageTask')).replace(/\s+/g, ' ').trim().slice(0, 80);
         if (!title) continue;
-        if (next.some((x) => x.status !== 'completed' && x.title === title)) continue;
+        if (next.some((x) => x.status !== 'completed' && x.status !== 'blocked' && x.title === title)) continue;
         let n = next.length + 1;
         while (used.has(`t${n}`)) n++;
         used.add(`t${n}`);
@@ -522,7 +522,7 @@ export class AgentEngine {
         }
         // Chế độ lập kế hoạch: các bước trong danh sách là KẾ HOẠCH chờ người dùng duyệt (chưa được phép làm) — chưa xong là điều đương nhiên,
         // không nhắc và không báo "còn việc dở". Duyệt kế hoạch (`exit_plan_mode`) đổi chế độ, từ đó cổng làm việc bình thường.
-        const pendingTodos = session.mode === 'plan' ? [] : session.todos.filter((x) => x.status !== 'completed');
+        const pendingTodos = session.mode === 'plan' ? [] : session.todos.filter((x) => x.status !== 'completed' && x.status !== 'blocked'); // (lane:loop-guards) 'blocked' chỉ để hiển thị, không kích hoạt cổng nhắc
         // Cổng hoàn thành, kiểm tra độc lập, hook Stop… đều là extension (xem seams.ts) — engine chỉ hỏi: chấp nhận, buộc làm tiếp, hay dừng.
         const verdict = await this.runFinalize(active, { turn: turnInfo, message, text, stop, pendingTodos, aborted: signal.aborted }, hostLog);
         if (verdict.action === 'continue') {

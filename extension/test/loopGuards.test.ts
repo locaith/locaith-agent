@@ -186,7 +186,7 @@ describe('B03/B10 — nhắc todo tối đa 3 lần, lần 3 tự đóng theo v�
     expect(warns[0].text).toContain('Viết báo cáo report.md');
   });
 
-  it('model đặt blocked kèm note qua todo_write: cổng chấp nhận "blocked" là trạng thái thật, lần nhắc kế nêu lý do', async () => {
+  it('model đặt blocked kèm note qua todo_write: "blocked" là trạng thái thật, cổng KHÔNG nhắc thêm', async () => {
     const h = makeHarness([
       () => todo([{ id: 't1', title: 'Đẩy lên server', status: 'pending' }]),
       () => textTurn('Không đẩy được.'),
@@ -197,7 +197,8 @@ describe('B03/B10 — nhắc todo tối đa 3 lần, lần 3 tự đóng theo v�
     ]);
     await h.run('deploy');
     const nudges = synthetic(h.session.messages);
-    expect(nudges[1]).toContain('[!] Đẩy lên server (thiếu khoá SSH)');
+    expect(nudges).toHaveLength(1); // chỉ lần nhắc đầu (lúc còn pending); sau khi blocked thì cổng im
+    expect(h.provider.requests).toHaveLength(4);
     expect(h.session.todos[0]).toMatchObject({ status: 'blocked', note: 'thiếu khoá SSH' });
     expect(results(h, 3)[0].content).toContain('1 bị chặn');
   });

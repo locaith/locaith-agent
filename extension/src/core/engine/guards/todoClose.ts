@@ -13,18 +13,21 @@ import { t, type Lang } from '../strings';
 
 const STOP = new Set(['việc', 'viec', 'cho', 'của', 'cua', 'với', 'voi', 'các', 'cac', 'một', 'mot', 'file', 'tệp', 'tep', 'the', 'and', 'for', 'with', 'into', 'from', 'this', 'that']);
 
-/** Nhóm từ đồng nghĩa việc ↔ lệnh (tiếng Việt không dấu ↔ tiếng Anh): một từ của việc khớp một từ trong vết là đủ. */
+/**
+ * Động từ chung (chạy/run, sửa/fix, viết/ghi/tạo, git, npm...) KHÔNG phải bằng chứng: `git status` không phải commit, `npm run build` không phải chạy test.
+ * Bỏ chúng khỏi cả tên việc lẫn vết lệnh; chỉ khớp từ ĐẶC TRƯNG của việc (test, build, lint, commit...).
+ */
+const GENERIC = new Set(['chay', 'run', 'thu', 'sua', 'fix', 'edit', 'chinh', 'viet', 'write', 'ghi', 'tao', 'create', 'them', 'add', 'git', 'npm', 'npx', 'pnpm', 'yarn', 'pip', 'node', 'doc', 'dung', 'status', 'diff', 'log']);
+
+/** Nhóm từ đồng nghĩa ĐẶC TRƯNG việc ↔ lệnh (tiếng Việt không dấu ↔ tiếng Anh). Không có nhóm động từ chung. */
 const SYNONYMS: string[][] = [
   ['test', 'kiem thu', 'kiemthu', 'vitest', 'jest', 'pytest', 'spec'],
-  ['build', 'dung', 'bien dich', 'compile', 'esbuild', 'tsc', 'webpack', 'vite'],
+  ['build', 'bien dich', 'compile', 'esbuild', 'webpack', 'vite'],
   ['typecheck', 'kieu', 'tsc'],
-  ['lint', 'eslint', 'format', 'prettier'],
-  ['commit', 'git'],
-  ['cai', 'install', 'npm', 'pip', 'pnpm', 'yarn'],
-  ['chay', 'run', 'thu'],
-  ['sua', 'fix', 'edit', 'chinh'],
-  ['viet', 'write', 'ghi', 'tao', 'create', 'them', 'add'],
-  ['doc', 'docs', 'readme', 'tai lieu', 'huong dan', 'changelog'],
+  ['lint', 'eslint'],
+  ['format', 'prettier'],
+  ['cai', 'install'],
+  ['readme', 'changelog', 'docs', 'tai lieu', 'huong dan'],
   ['kiem tra', 'verify', 'check'],
 ];
 
@@ -33,11 +36,13 @@ function tokens(s: string): string[] {
     .toLowerCase()
     .split(/[^a-z0-9_./-]+/)
     .flatMap((w) => w.split(/[./-]/))
-    .filter((w) => w.length >= 3 && !STOP.has(w));
+    .filter((w) => w.length >= 3 && !STOP.has(w) && !GENERIC.has(w));
 }
 
-function expand(words: string[]): Set<string> {
+function expand(words: string[], phrase = ''): Set<string> {
   const out = new Set(words);
+  // cụm nhiều từ ("kiểm thử", "tài liệu") không tách được thành từ đơn → khớp trên cả câu đã bỏ dấu
+  if (phrase) for (const group of SYNONYMS) if (group.some((g) => g.includes(' ') && phrase.includes(g))) for (const g of group) out.add(g.replace(/\s+/g, ''));
   for (const w of words) for (const group of SYNONYMS) if (group.some((g) => g.replace(/\s+/g, '') === w || g === w)) for (const g of group) out.add(g.replace(/\s+/g, ''));
   return out;
 }
@@ -52,9 +57,15 @@ export function evidenceTokens(trace: RunTrace): Set<string> {
       if (typeof p === 'string') words.push(...tokens(p));
     } else if (c.risk === 'exec') {
       const cmd = c.input?.command;
-      if (typeof cmd === 'string') words.push(...tokens(cmd.slice(0, 300)));
+      if (typeof cmd === 'string') {
+        const head = cmd.slice(0, 300);
+        // 'commit' chỉ là bằng chứng khi lệnh thật sự là `git commit` (không phải chữ "commit" nằm trong lệnh khác).
+        const toks = tokens(head).filter((w) => w !== 'commit');
+        if (/\bgit\s+(?:-\S+\s+)*commit\b/.test(head)) toks.push('commit');
+        words.push(...toks);
+      }
       const d = c.input?.description;
-      if (typeof d === 'string') words.push(...tokens(d));
+      if (typeof d === 'string') words.push(...tokens(d).filter((w) => w !== 'commit'));
     }
   }
   return expand(words);
@@ -62,7 +73,7 @@ export function evidenceTokens(trace: RunTrace): Set<string> {
 
 /** Việc có vết làm xong? Cần ít nhất một từ có nghĩa của tên việc nằm trong vết. */
 export function hasEvidence(title: string, evidence: ReadonlySet<string>): boolean {
-  const words = expand(tokens(title));
+  const words = expand(tokens(title), foldVi(title).toLowerCase());
   for (const w of words) if (evidence.has(w)) return true;
   return false;
 }

@@ -227,12 +227,14 @@ describe('(iii) "tiếp tục" trần trụi', () => {
     });
     await h.send('lên kế hoạch rồi làm');
     await h.idle();
+    // lần chốt thứ 3 tự đóng việc dở thành 'blocked' (không còn tính là mở)
     expect(h.session().todos.filter((x) => x.status !== 'completed')).toHaveLength(2);
+    expect(h.session().todos.filter((x) => x.status === 'blocked')).toHaveLength(2);
     const before = h.provider.requests.length;
 
     await h.send('Tiếp tục');
     await h.idle();
-    expect(h.provider.requests.length).toBe(before + 3);
+    expect(h.provider.requests.length).toBe(before + 1); // việc blocked không kích hoạt cổng nhắc nữa
 
     const last = h.provider.requests[before].messages.at(-1)!; // yêu cầu ĐẦU TIÊN của lượt "tiếp tục"
     expect(last.role).toBe('user');
@@ -241,7 +243,8 @@ describe('(iii) "tiếp tục" trần trụi', () => {
     expect((last.content[0] as { text: string }).text).toBe('Tiếp tục');
     const sentText = (last.content[1] as { text: string }).text;
     expect(sentText).toContain('không làm lại từ đầu');
-    expect(sentText).toContain('Còn tồn (2)');
+    expect(sentText).not.toContain('Còn tồn'); // blocked không tính là còn mở
+    expect(sentText).toContain('Đã bị chặn trước đó');
     expect(sentText).toContain('Vá lỗi chạy hai chỗ');
     expect(sentText).toContain('Phát hành 0.6.31');
     expect(sentText).not.toContain('Bỏ bảng Tasks'); // việc đã xong không bị liệt kê
