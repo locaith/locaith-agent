@@ -1,0 +1,261 @@
+/* (lane:sessions-ux) Chip ngữ cảnh ở tiêu đề · menu ⋯ của tin nhắn · dòng «Rẽ nhánh từ» · lịch sử có nhóm ngày/ghim/chọn nhiều. */
+
+/* ── chip ngữ cảnh ─────────────────────────────────────────────────────────── */
+.meter-chip-wrap {
+  position: relative;
+  flex: none;
+}
+.meter-chip {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 2px 6px;
+  border-radius: 7px;
+  color: var(--fg-muted);
+  font-size: var(--nd-fs-xs);
+  line-height: 1.2;
+  font-variant-numeric: tabular-nums;
+}
+.meter-chip:hover,
+.meter-chip.is-open {
+  background: var(--surface-2, var(--surface-1));
+  color: var(--fg);
+}
+.meter-bar {
+  display: block;
+  height: 2px;
+  border-radius: 2px;
+  background: var(--line-soft);
+  overflow: hidden;
+}
+.meter-bar > span {
+  display: block;
+  height: 100%;
+  border-radius: 2px;
+  background: var(--ok-text);
+  transition: width 0.25s ease;
+}
+.meter-warn .meter-bar > span {
+  background: var(--warn);
+}
+.meter-danger .meter-bar > span {
+  background: var(--danger);
+}
+.meter-danger .meter-text {
+  color: var(--danger);
+}
+.meter-pop {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 40;
+  width: min(260px, 86vw);
+  padding: 10px 12px;
+  border: 1px solid var(--pop-line);
+  border-radius: 12px;
+  background: var(--pop-bg);
+  box-shadow: var(--pop-shadow);
+  animation: nd-rise 0.12s ease-out;
+}
+.meter-list {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 4px 12px;
+  margin: 0;
+  font-size: var(--nd-fs-sm);
+}
+.meter-list dt {
+  color: var(--fg-muted);
+}
+.meter-list dd {
+  margin: 0;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.meter-note {
+  margin: 8px 0 0;
+  font-size: var(--nd-fs-xs);
+  color: var(--fg-faint);
+}
+.meter-close {
+  display: block;
+  margin: 8px 0 0 auto;
+}
+@container app (max-width: 340px) {
+  .meter-word {
+    display: none;
+  }
+}
+
+/* ── menu ⋯ của tin nhắn người dùng ────────────────────────────────────────── */
+.msg-menu {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+}
+.msg-menu-btn {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 7px;
+  color: var(--fg-faint);
+  opacity: 0;
+  transition: opacity 0.12s;
+}
+.user-bubble:hover .msg-menu-btn,
+.msg-menu.is-open .msg-menu-btn,
+.msg-menu-btn:focus-visible {
+  opacity: 1;
+}
+@media (hover: none) {
+  .msg-menu-btn {
+    opacity: 0.7;
+  }
+}
+.msg-menu-btn:hover {
+  background: var(--surface-3);
+  color: var(--fg);
+}
+.msg-menu-pop {
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 0;
+  z-index: 40;
+  min-width: 170px;
+  max-width: 82vw;
+  display: flex;
+  flex-direction: column;
+  padding: 4px;
+  border: 1px solid var(--pop-line);
+  border-radius: 10px;
+  background: var(--pop-bg);
+  box-shadow: var(--pop-shadow);
+  animation: nd-rise 0.12s ease-out;
+}
+.msg-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border-radius: 7px;
+  font-size: var(--nd-fs-sm);
+  text-align: left;
+  color: var(--fg);
+}
+.msg-menu-item:hover:not(:disabled),
+.msg-menu-item:focus-visible {
+  background: var(--surface-3);
+}
+.msg-menu-item:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+/* ── dòng «Rẽ nhánh từ …» ───────────────────────────────────────────────────── */
+.branch-link {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  max-width: 100%;
+  font-size: var(--nd-fs-xs);
+  color: var(--fg-faint);
+  text-align: left;
+}
+.branch-link:hover .branch-text {
+  color: var(--fg-muted);
+  text-decoration: underline;
+}
+.branch-dot {
+  flex: none;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--fg-faint);
+}
+.branch-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ── lịch sử: nhóm ngày, ghim, chọn nhiều, trích đoạn tìm kiếm ──────────────── */
+.hist-group {
+  margin: 10px 2px 2px;
+  font-size: var(--nd-fs-xs);
+  color: var(--fg-faint);
+  letter-spacing: 0.02em;
+}
+.hist-group:first-child {
+  margin-top: 0;
+}
+.hist-snippet {
+  font-size: var(--nd-fs-xs);
+  color: var(--fg-muted);
+  overflow-wrap: anywhere;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  line-clamp: 3;
+  overflow: hidden;
+}
+.hist-snippet mark,
+.hist-title mark {
+  background: color-mix(in srgb, var(--accent-text) 28%, transparent);
+  color: inherit;
+  border-radius: 3px;
+  padding: 0 1px;
+}
+.hist-pinmark {
+  flex: none;
+  margin-top: 3px;
+  color: var(--fg-faint);
+}
+.hist-row.is-picked {
+  background: color-mix(in srgb, var(--nd-primary) 10%, transparent);
+}
+.hist-check {
+  flex: none;
+  margin-left: 10px;
+  accent-color: var(--accent-text);
+}
+.hist-bulk {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.hist-bulk-count {
+  flex: 1;
+  min-width: 0;
+  font-size: var(--nd-fs-sm);
+  color: var(--fg-muted);
+}
+.hist-searching {
+  font-size: var(--nd-fs-xs);
+  color: var(--fg-faint);
+  margin: -4px 2px 0;
+}
+.hist-actions.is-pinned {
+  opacity: 1;
+}
+
+@media (forced-colors: active) {
+  .meter-bar > span {
+    background: Highlight;
+  }
+  .hist-snippet mark,
+  .hist-title mark {
+    background: Mark;
+    color: MarkText;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .meter-bar > span,
+  .meter-pop,
+  .msg-menu-pop {
+    transition: none;
+    animation: none;
+  }
+}

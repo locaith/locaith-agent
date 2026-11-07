@@ -51,6 +51,10 @@ import { hasRedactions, redactForStorage, redactTranscript, settleForExit } from
 import { createBrowserToolRegistry } from './tools';
 import { hostOf, TabScope } from './tools/policy';
 import { Presence } from './presence';
+import { buildMeter, findPricing } from '../shared/sessionMeter'; // (lane:sessions-ux)
+import { contextReport, costReport } from '../shared/sessionMeter';
+import { getPromptStats } from '../core/engine/promptStats';
+import { forkCurrent, handleSessionsUxMessage, type SessionsUxPort } from '../host/sessionsUx';
 
 export interface ArtifactHost {
   open(rec: ArtifactRecord): Promise<void> | void;
@@ -90,6 +94,9 @@ const SLASH: Record<Lang, SlashCommandInfo[]> = {
     { name: 'skills', description: 'Xem các kỹ năng có sẵn' },
     { name: 'retry', description: 'Chạy lại tin nhắn cuối' },
     { name: 'export', description: 'Tải cuộc trò chuyện về dạng Markdown' },
+    { name: 'fork', description: 'Rẽ nhánh cuộc trò chuyện thành cuộc mới' }, // (lane:sessions-ux)
+    { name: 'context', description: 'Xem ngữ cảnh đang dùng, chia theo từng phần' },
+    { name: 'cost', description: 'Xem token đã dùng và ước tính chi phí' },
     { name: 'help', description: 'Xem hướng dẫn nhanh' },
   ],
   en: [
@@ -102,6 +109,9 @@ const SLASH: Record<Lang, SlashCommandInfo[]> = {
     { name: 'skills', description: 'List available skills' },
     { name: 'retry', description: 'Re-run the last message' },
     { name: 'export', description: 'Download the conversation as Markdown' },
+    { name: 'fork', description: 'Branch this conversation into a new one' }, // (lane:sessions-ux)
+    { name: 'context', description: 'Show context usage, broken down by part' },
+    { name: 'cost', description: 'Show tokens used and the estimated cost' },
     { name: 'help', description: 'Quick help' },
   ],
 };
@@ -291,6 +301,36 @@ export class BrowserController {
 
   private skillSummaries(): SkillSummary[] {
     return this.d.skills.list().map((s) => ({ name: s.name, description: s.description, loaded: this.session.loadedSkills.includes(s.name), source: s.source }));
+  }
+
+  /** (lane:sessions-ux) Đồng hồ chi phí/nén ở tiêu đề (cùng logic với bản VS Code). */
+  private meterPatch(): Pick<ViewState, 'meter'> {
+    return { meter: buildMeter(this.session, this.view?.transcript ?? [], findPricing(this.view?.providers, this.session.provider, this.session.model)) };
+  }
+
+  /** (lane:sessions-ux) Cổng cho rẽ nhánh / tìm kiếm / ghim / xoá hàng loạt — logic dùng chung với bản VS Code (src/host/sessionsUx.ts). */
+  private sessionsUxPort(): SessionsUxPort {
+    // eslint-disable-next-line @typescript-eslint/no-this-alias
+    const self = this;
+    return {
+      get lang() {
+        return self.lang;
+      },
+      get busy() {
+        return self.busy;
+      },
+      store: this.d.store,
+      session: () => this.session,
+      transcript: () => this.view?.transcript ?? [],
+      context: () => this.contextInfo(),
+      pricing: () => findPricing(this.view?.providers, this.session.provider, this.session.model),
+      saveNow: () => this.saveNow(),
+      open: (id) => this.loadSession(id),
+      refreshListings: async () => this.patch(await this.listings()),
+      post: (msg) => this.post(msg),
+      notice: (level, text) => this.emit({ t: 'notice', level, text }),
+      toast: (level, text) => this.toast(level, text),
+    };
   }
 
   private contextInfo(): ViewState['context'] {
@@ -550,7 +590,7 @@ export class BrowserController {
         this.patch({ skills: this.skillSummaries() });
         break;
       case 'usage':
-        this.patch({ context: this.contextInfo() });
+        this.patch({ context: this.contextInfo(), ...this.meterPatch() }); // (lane:sessions-ux)
         break;
       case 'mode':
         this.patch({ mode: ev.mode });
@@ -609,6 +649,12 @@ export class BrowserController {
         return this.startNewSession();
       case 'load_session':
         return this.loadSession(m.id);
+      // (lane:sessions-ux)
+      case 'fork_session':
+      case 'search_sessions':
+      case 'pin_session':
+      case 'delete_sessions':
+        return handleSessionsUxMessage(this.sessionsUxPort(), m);
       case 'delete_session':
         return this.deleteSession(m.id);
       case 'restore_session':
@@ -968,7 +1014,7 @@ export class BrowserController {
     this.emit({ t: 'run_state', running });
     if (!running) {
       this.flushNow();
-      void this.saveNow().then(async () => this.patch({ ...(await this.listings()), context: this.contextInfo() }));
+      void this.saveNow().then(async () => this.patch({ ...(await this.listings()), context: this.contextInfo(), ...this.meterPatch() })); // (lane:sessions-ux)
     }
   }
 
@@ -1299,6 +1345,20 @@ export class BrowserController {
       case 'export':
         await this.exportChat();
         return true;
+      // (lane:sessions-ux)
+      case 'fork':
+        await forkCurrent(this.sessionsUxPort());
+        return true;
+      case 'context': {
+        const port = this.sessionsUxPort();
+        info(contextReport({ lang: this.lang, ctx: this.contextInfo(), messages: this.session.messages, stats: getPromptStats(this.session), meter: buildMeter(this.session, this.view.transcript, port.pricing()) }));
+        return true;
+      }
+      case 'cost': {
+        const port = this.sessionsUxPort();
+        info(costReport({ lang: this.lang, meter: buildMeter(this.session, this.view.transcript, port.pricing()), pricing: port.pricing(), model: this.session.model }));
+        return true;
+      }
       case 'skills': {
         const list = this.d.skills.list().map((s) => `- **${s.name}**${this.session.loadedSkills.includes(s.name) ? ' ✓' : ''}: ${s.description}`);
         info(`${vi ? 'Kỹ năng có sẵn' : 'Available skills'}:\n${list.join('\n')}`);

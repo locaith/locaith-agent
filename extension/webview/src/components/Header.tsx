@@ -3,7 +3,8 @@ import { IconButton } from './ui';
 import { LoSpinner } from './Brand';
 import { LogoMark } from './Icons';
 import { RemoteToggle } from './RemoteView';
-import type { RemoteView } from '../../../src/shared/protocol';
+import { MeterChip } from './MeterChip'; // (lane:sessions-ux)
+import type { RemoteView, SessionMeterView, ViewState } from '../../../src/shared/protocol';
 
 export type Screen = 'chat' | 'settings' | 'history' | 'market';
 
@@ -17,6 +18,8 @@ export function Header({
   onMarket,
   onBack,
   remote,
+  context,
+  meter,
 }: {
   title: string;
   screen: Screen;
@@ -28,6 +31,9 @@ export function Header({
   onBack: () => void;
   /** Trạng thái Remote: có thì hiện công tắc bật/tắt ngay trên thanh tiêu đề (màn chat). */
   remote?: RemoteView;
+  /** (lane:sessions-ux) Chip «ngữ cảnh 38%» + chi phí ước tính. */
+  context?: ViewState['context'];
+  meter?: SessionMeterView;
 }) {
   const { t, platform } = useApp();
   const inChat = screen === 'chat';
@@ -45,6 +51,7 @@ export function Header({
       <h1 class="hdr-title" title={heading}>
         {heading}
       </h1>
+      {inChat && <MeterChip context={context} meter={meter} />}
       {running && inChat && (
         <span class="hdr-busy" role="status" aria-label={t('app.assistantBusy')}>
           <LoSpinner size={18} />

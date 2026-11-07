@@ -18,6 +18,7 @@ import { ActivitySegment } from './Activity';
 import { ArtifactCard } from './ArtifactCard';
 import { CollapseFoot } from './CollapseFoot';
 import { PermissionCard } from './PermissionCard';
+import { BranchBacklink } from '../MessageBranch'; // (lane:sessions-ux)
 
 export function NoticeView({
   level,
@@ -45,6 +46,7 @@ export function NoticeView({
 }
 
 export function StandaloneNotice({ item, canRetry }: { item: NoticeItem; canRetry: boolean }) {
+  if (item.fork) return <BranchBacklink item={item} />; // (lane:sessions-ux) dòng «Rẽ nhánh từ …»
   return (
     <div class="turn turn-notice">
       <NoticeView level={item.level} text={item.text} onRetry={canRetry && item.level === 'error' ? () => post({ type: 'retry' }) : undefined} />

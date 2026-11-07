@@ -14,29 +14,8 @@ import type { ChatMessage, ModelInfo } from '../core/types';
 import type { TItem, ViewState } from './protocol';
 import type { SessionMeterView } from './sessionsUxTypes';
 
-export type MeterTone = 'ok' | 'warn' | 'danger';
-
-/** Ngưỡng màu của chip: > 60% vàng, > 80% đỏ. */
-export function meterTone(ratio: number): MeterTone {
-  return ratio > 0.8 ? 'danger' : ratio > 0.6 ? 'warn' : 'ok';
-}
-
-export function contextRatio(ctx: ViewState['context'] | undefined): number | null {
-  if (!ctx || !(ctx.limitTokens > 0)) return null;
-  return Math.max(0, Math.min(1, ctx.usedTokens / ctx.limitTokens));
-}
-
-/** Chi phí ước tính (USD) — undefined nếu không có giá. */
-export function estimateCost(input: number, output: number, pricing: ModelInfo['pricing'] | undefined): number | undefined {
-  if (!pricing || !Number.isFinite(pricing.inputPerM) || !Number.isFinite(pricing.outputPerM)) return undefined;
-  return (Math.max(0, input) * pricing.inputPerM + Math.max(0, output) * pricing.outputPerM) / 1e6;
-}
-
-export function formatUsd(v: number): string {
-  if (v === 0) return '$0';
-  if (v < 0.01) return '<$0.01';
-  return `$${v < 10 ? v.toFixed(2) : v.toFixed(1)}`;
-}
+import { contextRatio, estimateCost, formatUsd } from './sessionMeterCalc';
+export { contextRatio, estimateCost, formatUsd, meterTone, type MeterTone } from './sessionMeterCalc';
 
 /** Đếm các lần nén và tổng kết quả công cụ đã lược từ thông báo nén (đứng riêng hoặc gắn trong lượt trả lời). */
 export function compactionStats(transcript: readonly TItem[]): { compactions: number; clearedResults: number } {

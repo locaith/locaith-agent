@@ -840,6 +840,13 @@ function initialView(): ViewState {
     case 'settings-nokeys':
       v = settingsState(false);
       break;
+    // (lane:sessions-ux) chip ngữ cảnh + chi phí ở tiêu đề, menu ⋯ của tin nhắn, lịch sử có nhóm ngày / ghim
+    case 'sessions-ux':
+      v = { ...longConversation(), context: { usedTokens: 132_000, limitTokens: 200_000 }, meter: { inputTokens: 412_300, outputTokens: 18_900, compactions: 2, clearedResults: 14, costUsd: 0.64 } };
+      break;
+    case 'sessions-ux-history':
+      v = { ...baseState(), screen: 'history', sessions: SESSIONS.map((s, i) => (i === 3 ? { ...s, pinned: true } : s)) };
+      break;
     case 'high-context':
       v = { ...longConversation(), context: { usedTokens: 188_000, limitTokens: 200_000 } };
       break;

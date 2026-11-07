@@ -218,6 +218,8 @@ export function App() {
           onSettings={() => setScreen((s) => (s === 'settings' ? 'chat' : 'settings'))}
           onBack={goChat}
           remote={view.remote}
+          context={view.context}
+          meter={view.meter}
         />
 
         <main class="app-main">

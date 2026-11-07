@@ -64,7 +64,7 @@ export function ChatView({ view, hasAnyKey }: { view: ViewState; hasAnyKey: bool
           ) : (
             view.transcript.map((item, i) => {
               const isLast = i === view.transcript.length - 1;
-              if (item.kind === 'user') return <UserMessage key={item.id} item={item} canEdit={i === lastUserIdx && !view.running} />;
+              if (item.kind === 'user') return <UserMessage key={item.id} item={item} canEdit={i === lastUserIdx && !view.running} busy={view.running} />;
               if (item.kind === 'assistant')
                 return <AssistantTurn key={item.id} item={item} live={view.running && !item.done} isLast={isLast} />;
               return <StandaloneNotice key={item.id} item={item} canRetry={isLast && !view.running} />;

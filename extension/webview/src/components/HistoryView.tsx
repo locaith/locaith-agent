@@ -1,11 +1,14 @@
 import { useEffect, useMemo, useRef, useState } from 'preact/hooks';
-import { MAX_BACKUP_BYTES, TRASH_DAYS, type SessionSummary, type TrashSummary, type ViewState } from '../../../src/shared/protocol';
+import { MAX_BACKUP_BYTES, TRASH_DAYS, type SessionSearchHit, type SessionSummary, type TrashSummary, type ViewState } from '../../../src/shared/protocol';
+import { groupSessions } from '../../../src/shared/sessionGroups'; // (lane:sessions-ux)
+import { useHistorySearch } from '../historySearch'; // (lane:sessions-ux)
 import { useApp } from '../ctx';
 import { formatRelativeTime } from '../format';
 import { filterByQuery } from '../text';
 import { cx } from '../util';
 import { post } from '../vscode';
 import { Icon } from './Icons';
+import { Marked } from './Marked'; // (lane:sessions-ux)
 import { Button, IconButton } from './ui';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -15,11 +18,21 @@ function SessionRow({
   current,
   now,
   onOpen,
+  hit,
+  selecting,
+  picked,
+  onPick,
 }: {
   s: SessionSummary;
   current: boolean;
   now: number;
   onOpen: () => void;
+  /** (lane:sessions-ux) Kết quả tìm toàn văn của cuộc này (trích đoạn + chữ khớp). */
+  hit?: SessionSearchHit;
+  /** (lane:sessions-ux) Đang ở chế độ chọn nhiều. */
+  selecting?: boolean;
+  picked?: boolean;
+  onPick?: () => void;
 }) {
   const { t, lang } = useApp();
   const [mode, setMode] = useState<'view' | 'rename' | 'confirm'>('view');
@@ -79,10 +92,29 @@ function SessionRow({
     );
   }
 
+  if (selecting) {
+    // (lane:sessions-ux) chọn nhiều: cuộc đang mở không chọn được (xoá nó qua nút Xoá thường để app chuyển sang cuộc mới cho đúng).
+    return (
+      <li class={cx('hist-row', picked && 'is-picked')}>
+        <input type="checkbox" class="hist-check" checked={!!picked} disabled={current} title={current ? t('sx.hist.noPick') : undefined} aria-label={s.title || t('app.untitled')} onChange={() => onPick?.()} />
+        <button type="button" class="hist-main" disabled={current} onClick={() => onPick?.()}>
+          <span class="hist-titlerow">
+            <span class="hist-title">{s.title || t('app.untitled')}</span>
+            {current && <span class="badge badge-accent">{t('hist.current')}</span>}
+          </span>
+          <span class="hist-meta">
+            {s.model} · {t('hist.messages', { n: s.messageCount })} · {formatRelativeTime(s.updatedAt, now, lang)}
+          </span>
+        </button>
+      </li>
+    );
+  }
+
   return (
     <li class={cx('hist-row', current && 'is-current')}>
       <button type="button" class="hist-main" onClick={onOpen}>
         <span class="hist-titlerow">
+          {s.pinned && <Icon name="pin" size={12} class="hist-pinmark" />}
           <span class="hist-title">{s.title || t('app.untitled')}</span>
           {current && <span class="badge badge-accent">{t('hist.current')}</span>}
           {s.other && (
@@ -93,9 +125,16 @@ function SessionRow({
         </span>
         <span class="hist-meta">
           {s.model} · {t('hist.messages', { n: s.messageCount })} · {formatRelativeTime(s.updatedAt, now, lang)}
+          {hit && hit.count > 0 ? ` · ${t('sx.hist.hits', { n: hit.count })}` : ''}
         </span>
+        {hit?.snippet && (
+          <span class="hist-snippet">
+            <Marked text={hit.snippet} marks={hit.marks} />
+          </span>
+        )}
       </button>
-      <div class="hist-actions">
+      <div class={cx('hist-actions', s.pinned && 'is-pinned')}>
+        <IconButton icon="pin" label={s.pinned ? t('sx.hist.unpin') : t('sx.hist.pin')} active={!!s.pinned} onClick={() => post({ type: 'pin_session', id: s.id, pinned: !s.pinned })} size={14} />
         <IconButton icon="download" label={t('hist.backupOne')} onClick={() => post({ type: 'export_backup', id: s.id })} size={14} />
         <IconButton icon="pencil" label={t('hist.rename')} onClick={() => setMode('rename')} size={14} />
         <IconButton icon="trash" label={t('hist.delete')} onClick={() => setMode('confirm')} size={14} />
@@ -197,10 +236,34 @@ function TrashSection({ trash, now }: { trash: TrashSummary[]; now: number }) {
 export function HistoryView({ view, onOpen }: { view: ViewState; onOpen: () => void }) {
   const { t, toast } = useApp();
   const [query, setQuery] = useState('');
+  const search = useHistorySearch(query); // (lane:sessions-ux) tìm toàn văn, kết quả về dần
+  const [selecting, setSelecting] = useState(false);
+  const [picked, setPicked] = useState<ReadonlySet<string>>(new Set());
+  const [confirmBulk, setConfirmBulk] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
   const now = Date.now();
   const sorted = useMemo(() => [...view.sessions].sort((a, b) => b.updatedAt - a.updatedAt), [view.sessions]);
-  const list = useMemo(() => filterByQuery(sorted, query, (s) => [s.title, s.model, s.provider]), [sorted, query]);
+  const list = useMemo(() => {
+    const local = filterByQuery(sorted, query, (s) => [s.title, s.model, s.provider]);
+    if (!query.trim() || search.query !== query.trim() || search.hits.size === 0) return local;
+    // (lane:sessions-ux) hợp kết quả lọc tại chỗ (tiêu đề/model) với kết quả toàn văn từ host, giữ thứ tự mới nhất trước.
+    const ids = new Set(local.map((x) => x.id));
+    return sorted.filter((x) => ids.has(x.id) || search.hits.has(x.id));
+  }, [sorted, query, search]);
+  const searching = query.trim().length > 0;
+  const hitOf = (id: string) => (search.query === query.trim() ? search.hits.get(id) : undefined);
+  const togglePick = (id: string) =>
+    setPicked((p) => {
+      const n = new Set(p);
+      if (n.has(id)) n.delete(id);
+      else n.add(id);
+      return n;
+    });
+  const stopSelecting = () => {
+    setSelecting(false);
+    setPicked(new Set());
+    setConfirmBulk(false);
+  };
   const hasAnything = view.sessions.length > 0 || view.trash.length > 0;
   const mine = list.filter((s) => !s.other);
   const others = list.filter((s) => s.other);
@@ -216,6 +279,10 @@ export function HistoryView({ view, onOpen }: { view: ViewState; onOpen: () => v
         post({ type: 'load_session', id: s.id });
         onOpen();
       }}
+      hit={hitOf(s.id)}
+      selecting={selecting}
+      picked={picked.has(s.id)}
+      onPick={() => togglePick(s.id)}
     />
   );
 
@@ -254,6 +321,9 @@ export function HistoryView({ view, onOpen }: { view: ViewState; onOpen: () => v
         <Button variant="outline" small icon="upload" title={t('hist.restoreFile.title')} onClick={() => fileRef.current?.click()}>
           {t('hist.restoreFile')}
         </Button>
+        <Button variant="outline" small icon="check" disabled={view.sessions.length < 2} onClick={() => (selecting ? stopSelecting() : setSelecting(true))}>
+          {selecting ? t('sx.hist.selectDone') : t('sx.hist.select')}
+        </Button>
         <input
           ref={fileRef}
           type="file"
@@ -268,6 +338,36 @@ export function HistoryView({ view, onOpen }: { view: ViewState; onOpen: () => v
         />
       </div>
       <p class="set-hint hist-note">{t('hist.note')}</p>
+      {searching && search.searching && <p class="hist-searching">{t('sx.hist.searching')}</p>}
+      {selecting && (
+        <div class="hist-bulk" role="group">
+          {confirmBulk ? (
+            <>
+              <span class="hist-confirm-text">{t('sx.hist.deleteConfirm', { n: picked.size, days: TRASH_DAYS })}</span>
+              <button
+                type="button"
+                class="btn btn-danger btn-sm"
+                onClick={() => {
+                  post({ type: 'delete_sessions', ids: [...picked] });
+                  stopSelecting();
+                }}
+              >
+                <span class="btn-label">{t('sx.hist.deleteN', { n: picked.size })}</span>
+              </button>
+              <button type="button" class="btn btn-ghost btn-sm" onClick={() => setConfirmBulk(false)}>
+                <span class="btn-label">{t('hist.cancel')}</span>
+              </button>
+            </>
+          ) : (
+            <>
+              <span class="hist-bulk-count">{t('sx.hist.selected', { n: picked.size })}</span>
+              <Button variant="outline" small icon="trash" disabled={picked.size === 0} onClick={() => setConfirmBulk(true)}>
+                {t('sx.hist.deleteN', { n: picked.size })}
+              </Button>
+            </>
+          )}
+        </div>
+      )}
 
       {view.sessions.length === 0 ? (
         <div class="empty-state">
@@ -280,7 +380,18 @@ export function HistoryView({ view, onOpen }: { view: ViewState; onOpen: () => v
         </div>
       ) : (
         <>
-          {mine.length > 0 && <ul class="hist-list">{mine.map(renderRow)}</ul>}
+          {mine.length > 0 &&
+            (searching ? (
+              <ul class="hist-list">{mine.map(renderRow)}</ul>
+            ) : (
+              // (lane:sessions-ux) nhóm theo ngày; đã ghim lên đầu
+              groupSessions(mine, now).map((g) => (
+                <section key={g.key} aria-label={t(`sx.hist.g.${g.key}`)}>
+                  <h3 class="hist-group">{t(`sx.hist.g.${g.key}`)}</h3>
+                  <ul class="hist-list">{g.items.map(renderRow)}</ul>
+                </section>
+              ))
+            ))}
           {others.length > 0 && (
             <section class="hist-others" aria-label={t('hist.others')}>
               <button type="button" class="hist-trash-head" aria-expanded={othersOpen} onClick={() => setShowOthers((o) => !o)}>
