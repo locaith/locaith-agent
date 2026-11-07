@@ -5,6 +5,7 @@ import { useApp } from '../../ctx';
 import type { IconName } from '../../iconNames';
 import { Markdown } from '../../markdown/Markdown';
 import { describeCommand } from '../../permissionView';
+import { isValidRuleText, permissionCardModel } from '../../permRulesView';
 import { cx } from '../../util';
 import { post } from '../../vscode';
 import { Icon } from '../Icons';
@@ -36,19 +37,24 @@ function withCode(text: string): ComponentChildren[] {
 }
 
 export function PermissionCard({ block }: { block: ToolBlock }) {
-  const { t } = useApp();
+  const { t, platform } = useApp();
   const req = block.permission;
   const [note, setNote] = useState('');
   const [showNote, setShowNote] = useState(false);
+  // (lane:perm-rules) «Luôn cho phép»: mở ô sửa đặc tả + chọn phạm vi trước khi lưu.
+  const [always, setAlways] = useState(false);
+  const [rule, setRule] = useState('');
+  const [scope, setScope] = useState<'user' | 'workspace'>('user');
   if (!req) return null;
 
+  const model = permissionCardModel(req);
   const cmd = req.command ? describeCommand(req.command) : null;
   // Tiêu đề và chi tiết có thể chứa chữ do bên thứ ba viết (tên phần tử trang web, tiêu đề tab, URL, văn bản sắp được gõ): phơi ra ký tự ẩn / đổi chiều chữ
   // thay vì để chúng đánh lừa người duyệt (cùng cách với lệnh shell).
   const titleView = describeCommand(req.title);
   const detailView = req.detail ? describeCommand(req.detail) : null;
   const hiddenInText = titleView.hidden + (detailView?.hidden ?? 0);
-  const isPlan = req.kind === 'plan';
+  const isPlan = model.isPlan;
   const respond = (decision: 'allow' | 'allow_session' | 'deny', withNote = false) =>
     post({
       type: 'permission_response',
@@ -56,6 +62,16 @@ export function PermissionCard({ block }: { block: ToolBlock }) {
       decision,
       feedback: withNote && note.trim() ? note.trim() : undefined,
     });
+  const ruleText = always ? rule : model.always?.defaultRule ?? '';
+  const ruleOk = isValidRuleText(ruleText);
+  const openAlways = () => {
+    setRule(model.always?.defaultRule ?? '');
+    setAlways(true);
+  };
+  const saveAlways = () => {
+    if (!ruleOk) return;
+    post({ type: 'permission_always', id: req.id, rule: ruleText.trim(), scope });
+  };
 
   return (
     <div class={cx('perm-card', `perm-${req.kind}`)} role="group" aria-label={titleView.text}>
@@ -64,6 +80,11 @@ export function PermissionCard({ block }: { block: ToolBlock }) {
           <Icon name={KIND_ICON[req.kind] ?? 'shield'} size={15} />
         </span>
         <span class="perm-kind">{t(`perm.kind.${req.kind}` as 'perm.kind.other')}</span>
+        {model.askedByRule && (
+          <span class="perm-rule" title={model.askedByRule}>
+            {t('perm.askedByRule', { rule: model.askedByRule })}
+          </span>
+        )}
       </div>
 
       <div class="perm-title">{titleView.text}</div>
@@ -114,11 +135,48 @@ export function PermissionCard({ block }: { block: ToolBlock }) {
         </div>
       )}
 
+      {always && model.always && (
+        <div class="perm-always" role="group" aria-label={t('perm.always')}>
+          <label class="perm-note-label" for={`rule-${req.id}`}>
+            {t('perm.always.edit')}
+          </label>
+          <input
+            id={`rule-${req.id}`}
+            class={cx('perm-rule-input', !ruleOk && 'is-invalid')}
+            type="text"
+            spellcheck={false}
+            value={rule}
+            onInput={(e) => setRule((e.target as HTMLInputElement).value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                e.preventDefault();
+                saveAlways();
+              }
+            }}
+          />
+          <div class="perm-always-foot">
+            {platform !== 'browser' && (
+              <div class="perm-scope" role="radiogroup" aria-label={t('perm.always')}>
+                {(['user', 'workspace'] as const).map((s) => (
+                  <button key={s} type="button" role="radio" aria-checked={scope === s} class={cx('perm-scope-opt', scope === s && 'is-on')} onClick={() => setScope(s)}>
+                    {t(`perm.always.scope.${s}` as 'perm.always.scope.user')}
+                  </button>
+                ))}
+              </div>
+            )}
+            <span class="perm-always-hint">{ruleOk ? t('perm.always.hint') : t('perm.always.invalid')}</span>
+          </div>
+        </div>
+      )}
+
       <div class="perm-actions">
         {isPlan ? (
           <>
-            <Button variant="primary" icon="check" onClick={() => respond('allow')}>
-              {t('perm.approvePlan')}
+            <Button variant="primary" icon="check" onClick={() => respond('allow_session')}>
+              {t('perm.approvePlan.auto')}
+            </Button>
+            <Button variant="secondary" onClick={() => respond('allow')}>
+              {t('perm.approvePlan.ask')}
             </Button>
             {showNote ? (
               <Button variant="outline" onClick={() => respond('deny', true)}>
@@ -126,18 +184,32 @@ export function PermissionCard({ block }: { block: ToolBlock }) {
               </Button>
             ) : (
               <Button variant="outline" onClick={() => setShowNote(true)}>
-                {t('perm.keepPlanning')}
+                {t('perm.keepPlanning.note')}
               </Button>
             )}
+          </>
+        ) : always ? (
+          <>
+            <Button variant="primary" icon="check" disabled={!ruleOk} onClick={saveAlways}>
+              {t('perm.always.save')}
+            </Button>
+            <Button variant="outline" onClick={() => setAlways(false)}>
+              {t('rules.collapse')}
+            </Button>
           </>
         ) : (
           <>
             <Button variant="primary" icon="check" onClick={() => respond('allow')}>
               {t('perm.allow')}
             </Button>
-            {req.canAllowSession && (
+            {model.session && (
               <Button variant="secondary" onClick={() => respond('allow_session')} title={req.sessionLabel}>
                 {withCode(req.sessionLabel ?? t('perm.allowSession'))}
+              </Button>
+            )}
+            {model.always && (
+              <Button variant="secondary" onClick={openAlways} title={model.always.defaultRule}>
+                {t('perm.always')} <code class="inline-code">{model.always.defaultRule}</code>
               </Button>
             )}
             {showNote ? (

@@ -59,6 +59,8 @@ function ToolRowView({ block, nested = false }: { block: ToolBlock; nested?: boo
 
   const meta: string[] = [];
   if (block.summary && !block.diff) meta.push(block.summary);
+  // (lane:perm-rules) Luật allow đã cho lệnh này qua không cần hỏi.
+  if (block.rule) meta.push(t('tool.allowedByRule', { rule: block.rule }));
   // Agent con đã xong/đã dừng: số liệu cuối («461,4k token · 12 lệnh») để so sánh các agent với nhau.
   if (block.agent) {
     const s = agentStats(block);
