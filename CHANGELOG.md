@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.7.1 - 2026-11-07
+
+- **A flatter, cleaner timeline when you expand it.** The expanded view had too many lines next to Claude Code's: a vertical rail down every opened block, a second rail on every nested group, a connector line between the dots, a thicker rail on thinking blocks, hairlines above every "Collapse", and a bordered box around both the command and its output. All of them are gone: the dots now sit in one column, nested groups (a task, the edited files) only indent a little, a command and its output share ONE box (the output is just a shade darker), and "Collapse" is a small grey text link — only the outermost one shows when several blocks end together. Long file paths now wrap at folder boundaries instead of in the middle of a word. The same flat look applies to the compact-chat summary, the independent-check row, the change bar, the rewind card and the background-task panel; the Remote page on locaith.ai and the Chrome/Edge build share it (no new events or fields). The screenshot harness now fails if any one-sided left border ever comes back to the timeline. A second pass after a side-by-side review: the right-hand column (line counts, results, durations, chevrons) now lines up on one edge for every row (the hidden "open file" button no longer takes room), secondary text is grey instead of bold, the diff card no longer repeats the file name and +/− counts already shown on the row above it, "Collapse" is a quiet grey link with a visible keyboard focus ring, and high-contrast / forced-colors themes keep an outline around the command box and diff card even though the normal border is lighter.
+
 ## 0.7.0 - 2026-11-07
 
 The "work like Claude Code" release: fourteen workstreams, each built on its own branch, independently verified, then integrated. Everything below also reaches the Chrome/Edge build where it makes sense, and the Remote page on locaith.ai receives the new data through optional fields only.
