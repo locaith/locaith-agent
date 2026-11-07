@@ -13,6 +13,12 @@ import { parseDuckDuckGoHtml } from '../src/core/tools/web/search';
 import { assertPublicUrl, isPrivateIp } from '../src/core/tools/web/ssrf';
 import { makeWorkspace } from './helpers/harness';
 
+/**
+ * Trần thời gian cho test có chạy PowerShell thật. Trên máy này lần khởi động "nguội" của Windows PowerShell có lúc mất 12–90 s (đo được 11,7 s và 58 s;
+ * các lần sau 0,2 s) nên mức 30–40 s cũ làm bộ test đỏ ngẫu nhiên dù mã đúng. Chỉ là trần: test chạy xong là qua, không chờ đủ.
+ */
+const SPAWN_TIMEOUT = 150_000;
+
 function ctxFor(dir: string, over: { fetchImpl?: typeof fetch; settings?: Record<string, unknown>; secrets?: Record<string, string> } = {}) {
   const host = new NodeToolHost({ roots: [dir], fetchImpl: over.fetchImpl, settings: over.settings, secrets: over.secrets });
   const session = newSession({ id: 's', provider: 'fake', model: 'm' });
@@ -222,7 +228,7 @@ describe('run_command', () => {
     expect(r.content).toContain('Mã thoát: 0');
     expect(r.content).toContain('Đặng Thị Hồng Nhung — ướ ữ ặ ổ ệ ẫ ể ₫');
     expect(progress.join('')).toContain('Đặng Thị Hồng Nhung');
-  }, 30_000);
+  }, SPAWN_TIMEOUT);
 
   it('báo lỗi khi lệnh thất bại và khi hết giờ', async () => {
     const dir = makeWorkspace();
@@ -234,7 +240,7 @@ describe('run_command', () => {
     const slow = await run(tool, { command: 'node -e "setTimeout(()=>{},20000)"', timeout_seconds: 2 }, ctx);
     expect(slow.isError).toBe(true);
     expect(slow.content).toContain('hết thời gian');
-  }, 40_000);
+  }, SPAWN_TIMEOUT);
 
   it.runIf(process.platform === 'win32')('Windows PowerShell: lỗi trả về văn bản thường, không phải CLIXML', async () => {
     const dir = makeWorkspace();
@@ -246,7 +252,7 @@ describe('run_command', () => {
     expect(r.content).not.toContain('<Objs');
     expect(r.content).not.toContain('_x000D_');
     expect(r.content).toContain('nd-agent-khong-ton-tai-123456');
-  }, 30_000);
+  }, SPAWN_TIMEOUT);
 
   it('tiến trình cháu tách rời còn giữ ống mở không làm lệnh treo: shell thoát là xong', async () => {
     const dir = makeWorkspace({
@@ -259,7 +265,7 @@ describe('run_command', () => {
     expect(r.isError).toBeFalsy();
     expect(r.content).toContain('đã khởi chạy nền');
     expect(Date.now() - t0).toBeLessThan(10_000);
-  }, 30_000);
+  }, SPAWN_TIMEOUT);
 
   it('hết giờ khi tiến trình cháu giữ ống: trả về sớm với timedOut thay vì chờ hàng chục giây', async () => {
     const dir = makeWorkspace({
@@ -272,7 +278,7 @@ describe('run_command', () => {
     expect(r.isError).toBe(true);
     expect(r.content).toContain('hết thời gian');
     expect(Date.now() - t0).toBeLessThan(12_000);
-  }, 40_000);
+  }, SPAWN_TIMEOUT);
 
   it.runIf(process.platform === 'win32')('mỗi luồng một bộ giải mã: ký tự UTF-8 bị cắt giữa hai khúc không vỡ khi stderr xen vào', async () => {
     const dir = makeWorkspace({
@@ -284,7 +290,7 @@ describe('run_command', () => {
     const r = await run(tool, { command: 'node split.js' }, { ...ctx, host });
     expect(r.content).toContain('ệ');
     expect(r.content).not.toContain('\ufffd');
-  }, 30_000);
+  }, SPAWN_TIMEOUT);
 
   it('không để lộ khoá API của nhà cung cấp cho tiến trình con', async () => {
     const dir = makeWorkspace();
@@ -298,7 +304,7 @@ describe('run_command', () => {
     } finally {
       delete process.env.OPENAI_API_KEY;
     }
-  }, 30_000);
+  }, SPAWN_TIMEOUT);
 
   it('danh sách cho phép lệnh chỉ-đọc rất hẹp: chỉ các mẫu đã biết, không ký tự điều khiển shell', () => {
     for (const ok of ['git status', 'git status -sb', 'git diff', 'git diff --stat', 'git log', 'git log --oneline -n 5', 'ls', 'ls -la', 'dir', 'pwd', 'node --version', 'npm -v', 'git branch --show-current', 'git remote -v']) {

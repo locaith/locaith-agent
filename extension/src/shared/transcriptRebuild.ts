@@ -7,6 +7,7 @@
  * Không bao giờ làm ngược lại: transcript nhiều lượt hơn `messages` (đã nén ngữ cảnh) được giữ nguyên.
  */
 
+import { RESUME_HEADER } from '../core/engine/resume';
 import type { ChatMessage, ContentBlock } from '../core/types';
 import type { AssistantItem, TItem, ToolBlock, UserItem } from './protocol';
 
@@ -79,8 +80,10 @@ export function rebuildTranscript(messages: readonly ChatMessage[]): TItem[] {
             tb.output = cap(b.content);
             pending.delete(b.toolUseId);
           }
-        } else if (b.type === 'text') texts.push(b.text);
-        else if (b.type === 'image') images.push(b);
+        } else if (b.type === 'text') {
+          // Chỉ dẫn "tiếp tục sau khi dừng" do host gắn vào sau chữ người dùng không phải thứ họ gõ → không hiện lại trên giao diện.
+          if (!RESUME_HEADER.test(b.text)) texts.push(b.text);
+        } else if (b.type === 'image') images.push(b);
       }
       // Tin chèn giữa vòng công cụ (đi chung tin kết quả): bỏ dòng báo của engine, phần còn lại là chữ người dùng.
       const body = stripWrappers((hasResult ? texts.filter((t) => !STEER_HEADER.test(t.trim())) : texts).join('\n\n'));

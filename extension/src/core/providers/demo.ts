@@ -182,13 +182,14 @@ function lastUserText(messages: ChatMessage[]): { text: string; step: number } {
   let idx = -1;
   for (let i = messages.length - 1; i >= 0; i--) {
     const m = messages[i];
-    if (m.role === 'user' && !m.synthetic && m.content.some((b) => b.type === 'text')) {
+    // Khối `volatile` (dòng ngân sách vòng lặp harness gắn vào cuối tin user cuối) không phải lời người dùng.
+    if (m.role === 'user' && !m.synthetic && m.content.some((b) => b.type === 'text' && !b.volatile)) {
       idx = i;
       break;
     }
   }
   if (idx < 0) return { text: '', step: 0 };
-  const text = messages[idx].content.filter((b) => b.type === 'text').map((b) => (b as { text: string }).text).join('\n');
+  const text = messages[idx].content.filter((b) => b.type === 'text' && !b.volatile).map((b) => (b as { text: string }).text).join('\n');
   const step = messages.slice(idx + 1).filter((m) => m.role === 'assistant' && !m.synthetic).length;
   return { text, step };
 }

@@ -11,7 +11,11 @@ export const settingsStub = {
 };
 
 export const workspace = {
-  workspaceFolders: undefined as undefined | { uri: { fsPath: string }; name: string }[],
+  // (0.6.31) Đủ cho test ChatController với deps giả (test/helpers/controllerHarness.ts): workspace tin cậy, chưa có tài liệu mở.
+  isTrusted: true,
+  name: undefined as string | undefined,
+  textDocuments: [] as { uri: { scheme: string; fsPath: string }; isClosed: boolean; isDirty: boolean }[],
+  workspaceFolders: undefined as undefined | { uri: { fsPath: string; scheme?: string }; name: string }[],
   getConfiguration: () => ({
     get: <T>(key: string, def?: T): T | undefined => {
       if (key in settingsStub.workspace) return settingsStub.workspace[key] as T;

@@ -62,6 +62,11 @@ export interface BlockOrigin {
 export interface TextBlock extends BlockOrigin {
   type: 'text';
   text: string;
+  /**
+   * Khối do harness gắn vào payload của MỘT lần gọi (ví dụ dòng ngân sách vòng lặp `[vòng N/M …]`) — không bao giờ được lưu vào lịch sử.
+   * Đổi ở mỗi lần gọi, nên adapter không được đặt điểm prompt-cache SAU nó và không được coi nó là lời của người dùng.
+   */
+  volatile?: boolean;
 }
 
 export interface ImageBlock {

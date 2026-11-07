@@ -68,8 +68,9 @@ describe('groupLabel', () => {
 
 describe('i18n', () => {
   it('t nội suy tham số', () => {
-    expect(t('vi', 'todo.progress', { done: 2, total: 5 })).toBe('2/5 hoàn thành');
-    expect(t('en', 'todo.progress', { done: 2, total: 5 })).toBe('2/5 done');
+    // (0.6.31) Khoá `todo.progress` đã bỏ cùng bảng Tasks; dùng khoá còn sống có tham số để thử nội suy.
+    expect(t('vi', 'act.taskAdded', { title: 'Vá lỗi' })).toBe('Đã thêm tác vụ: Vá lỗi');
+    expect(t('en', 'act.taskAdded', { title: 'Fix bug' })).toBe('Added task: Fix bug');
     expect(makeT('vi')('hist.messages', { n: 7 })).toBe('7 tin nhắn');
   });
   it('tOpt trả undefined khi không có khóa', () => {

@@ -1,6 +1,10 @@
 import * as vscode from 'vscode';
 import { AgentEngine, type QueuedMessage, type QueueState, type RunResult } from '../core/engine/engine';
+import { coreRunExtensions } from '../core/engine/extensions';
+import { hostRunExtensions } from './hostExtensions';
+import { SlashRegistry, type SlashContext } from './slashRegistry';
 import { loadProjectInstructions } from '../core/engine/instructions';
+import { resumeInstruction } from '../core/engine/resume';
 import { MEMORY_DIR, MEMORY_INDEX, type MemoryScope, type MemorySnapshot } from '../core/engine/memory';
 import { t, type Lang } from '../core/engine/strings';
 import { Summarizer } from '../core/engine/summarizer';
@@ -203,11 +207,17 @@ export class ChatController implements vscode.Disposable {
   private agentBusy = false;
   /** Tin gửi lúc trợ lý đang chạy, chờ được giao (engine lấy ở ranh giới vòng lặp, hoặc chạy ngay sau khi lượt kết thúc). */
   private queue: QueuedTurn[] = [];
+  /** Hàng đợi tuần tự của các LƯỢT CHẠY: mỗi lượt chờ lượt trước nhả xong mới ghi vào lịch sử (xem runAgentTurn). Lời hứa này không bao giờ bị từ chối. */
+  private turnLock: Promise<void> = Promise.resolve();
+  /** Số lượt đang chạy hoặc đang chờ khoá (để hạ cờ `starting`/`agentBusy` đúng lúc, không sớm). */
+  private pendingTurns = 0;
   /** Kết cục của lần chạy gần nhất ('error' = chưa có lần nào kết thúc bình thường): quyết định giao hay trả lại hàng đợi. */
   private lastStop: RunResult['stopReason'] = 'error';
   private readonly waiters = new Map<string, (d: PermissionDecision) => void>();
   private readonly host: VsCodeToolHost;
   private readonly registry: ToolRegistry;
+  /** Sổ đăng ký lệnh gạch chéo của các tính năng (xem slashRegistry.ts); lệnh dựng sẵn vẫn ở `handleSlash`. */
+  private readonly slash = new SlashRegistry();
   private readonly detachMcp: () => void;
   private readonly accountSub?: vscode.Disposable;
   private readonly remoteSub?: vscode.Disposable;
@@ -268,6 +278,18 @@ export class ChatController implements vscode.Disposable {
       currentProvider: () => this.session.provider,
     });
     this.detachMcp = d.mcp.attach(this.registry);
+    // ── Lệnh gạch chéo của từng tính năng: MỖI LANE MỘT DÒNG RIÊNG (bỏ dấu // ở dòng của mình + thêm import). Xem slashRegistry.ts. ──
+    // registerCompactSlash(this.slash, this); // (lane:ctx-compaction)  /compact <hướng dẫn>
+    // registerVerifySlash(this.slash, this); // (lane:blind-verifier)  /verify
+    // registerRewindSlash(this.slash, this); // (lane:checkpoints-rewind)  /rewind
+    // registerPermissionsSlash(this.slash, this); // (lane:perm-rules)  /permissions
+    // registerHooksSlash(this.slash, this); // (lane:hooks)  /hooks
+    // registerCommandsSlash(this.slash, this); // (lane:commands-agents)  lệnh tuỳ chỉnh + /review /simplify /status /doctor /agents /output-style /mcp
+    // registerTasksSlash(this.slash, this); // (lane:bg-tasks)  /tasks
+    // registerIdeSlash(this.slash, this); // (lane:ide-context)  /problems
+    // registerSessionsSlash(this.slash, this); // (lane:sessions-ux)  /fork /cost /context
+    // registerMcpSlash(this.slash, this); // (lane:mcp-parity)  /mcp__<server>__<prompt>
+    // registerMemorySlash(this.slash, this); // (lane:instructions-memory)  /memory /remember
     this.session = this.freshSession();
     this.view = this.baseView();
     // Tài khoản đổi (đăng nhập xong, bị thu hồi, đăng xuất ở cửa sổ khác…) → cập nhật ngay giao diện.
@@ -342,7 +364,31 @@ export class ChatController implements vscode.Disposable {
   }
 
   private slashList(): SlashCommandInfo[] {
-    return [...SLASH[this.lang], ...this.d.plugins.commands().map((c) => ({ name: c.name, description: c.description }))];
+    const all = [...SLASH[this.lang], ...this.slash.list(this.lang), ...this.d.plugins.commands().map((c) => ({ name: c.name, description: c.description }))];
+    // Trùng tên: giữ cái đứng trước (dựng sẵn > đăng ký > plugin).
+    const seen = new Set<string>();
+    return all.filter((c) => {
+      const k = c.name.replace(/^\//, '').toLowerCase();
+      if (seen.has(k)) return false;
+      seen.add(k);
+      return true;
+    });
+  }
+
+  /** Ngữ cảnh một lệnh đăng ký ở slashRegistry được phép dùng. */
+  private slashContext(args: string): SlashContext {
+    // eslint-disable-next-line @typescript-eslint/no-this-alias
+    const self = this;
+    return {
+      args: args.trim(),
+      lang: this.lang,
+      info: (text) => this.emit({ t: 'notice', level: 'info', text }),
+      warn: (text) => this.emit({ t: 'notice', level: 'warn', text }),
+      runPrompt: (text) => this.runAgentTurn(() => this.sendUnlocked(text, text, [])),
+      get busy() {
+        return self.busy;
+      },
+    };
   }
 
   private async orchestrationInfo(): Promise<OrchestrationInfo> {
@@ -1335,20 +1381,37 @@ export class ChatController implements vscode.Disposable {
 
   /** Chạy một lượt của agent rồi giao nốt hàng đợi. `starting` giữ suốt thời gian đó để tin mới không chen ngang hàng đợi. */
   private async runAgentTurn(fn: () => Promise<void>): Promise<void> {
+    this.pendingTurns++;
     this.starting = true;
     this.agentBusy = true;
-    this.lastStop = 'error';
+    // Khoá: KHÔNG BAO GIỜ hai lượt chạy cùng lúc trên một phiên. Trước đây "Dừng" rồi gõ "tiếp tục" có thể để
+    // lượt cũ còn đang nhả (engine đang kết thúc) và lượt mới cùng ghi vào một lịch sử → hai chỗ cùng "chạy".
+    // Mỗi lượt nối vào lượt TRƯỚC nó và chỉ chạy khi lượt trước đã nhả hẳn. `release` luôn được gọi (kể cả khi `fn` ném lỗi) và lời hứa
+    // của khoá không bao giờ bị từ chối — nếu không, một lượt hỏng sẽ "đầu độc" chuỗi và mọi lượt sau không bao giờ chạy.
+    const previous = this.turnLock;
+    let release!: () => void;
+    this.turnLock = new Promise<void>((resolve) => (release = resolve));
     try {
+      await previous;
+      this.lastStop = 'error';
       await fn();
       await this.drainQueue();
     } finally {
-      this.starting = false;
-      this.agentBusy = false;
-      if (this.queue.length > 0) this.restoreQueue();
+      release();
+      // Cờ bận chỉ hạ khi KHÔNG còn lượt nào đang chạy hoặc chờ khoá (lượt trước xong không được làm lượt sau tưởng mình rảnh).
+      if (--this.pendingTurns === 0) {
+        this.starting = false;
+        this.agentBusy = false;
+        if (this.queue.length > 0) this.restoreQueue();
+      }
     }
   }
 
   private async sendUnlocked(text: string, rawText: string, attachments: AttachmentInfo[]): Promise<void> {
+    // "Tiếp tục" trần trụi sau khi Dừng: ý người dùng là làm tiếp ĐÚNG chỗ đã dừng và dọn hết việc còn tồn,
+    // không phải một yêu cầu mới. Gắn chỉ dẫn rõ để model không mở lại việc cũ từ đầu (trước đây nó phát lại
+    // đúng các lệnh của tin trước → "chạy ở cả hai chỗ").
+    const resumed = resumeInstruction(text, this.session.todos, this.lang);
     const providerId = this.session.provider;
     if (!this.d.providers.has(providerId)) {
       this.emit({ t: 'notice', level: 'error', text: `Nhà cung cấp "${providerId}" không còn tồn tại. Hãy chọn lại model.` });
@@ -1392,6 +1455,9 @@ export class ChatController implements vscode.Disposable {
         docBudget: docCharBudget(this.d.providers.contextWindow(providerId, this.session.model)),
       });
       for (const w of built.warnings) this.emit({ t: 'notice', level: 'warn', text: w });
+      // Chỉ dẫn "tiếp tục" là MỘT KHỐI CHỮ RIÊNG đứng sau chữ người dùng gõ (không trộn vào chữ của họ): bản hiển thị, tiêu đề cuộc trò chuyện,
+      // "Sửa tin cuối" đều dùng `text` gốc, và transcript dựng lại từ lịch sử bỏ khối này đi (xem RESUME_HEADER).
+      if (resumed) built.content.push({ type: 'text', text: resumed });
 
       this.session.model = await this.d.providers.resolveModel(providerId, this.session.model);
       if (this.session.title === t('vi', 'titleDefault') || this.session.title === t('en', 'titleDefault')) {
@@ -1446,6 +1512,8 @@ export class ChatController implements vscode.Disposable {
       onAccountInvalid: () => void this.d.account?.recheck?.(),
       loadInstructions: (names) => loadProjectInstructions(this.host, names),
       loadMemory: () => this.loadMemory(),
+      // Các tính năng gắn quanh vòng lặp (xem core/engine/seams.ts): dùng chung mọi bề mặt + riêng VS Code.
+      extensions: [...coreRunExtensions(), ...hostRunExtensions({ deps: this.d, host: this.host, registry: this.registry, session: () => this.session })],
       // Model phát <think> thẳng vào chữ (Ollama/LM Studio/OpenRouter…): tách thẻ và nhắc suy nghĩ qua prompt.
       thinkTags: provider.kind === 'openai-chat' && provider.flavor === 'generic',
     });
@@ -2036,6 +2104,15 @@ export class ChatController implements vscode.Disposable {
         return true;
       }
       default: {
+        const reg = this.slash.get(cmd);
+        if (reg) {
+          if (reg.needsIdle !== false && this.busy) {
+            this.busyToast();
+            return true;
+          }
+          await reg.run(this.slashContext(args));
+          return true;
+        }
         const pc = this.d.plugins.command(cmd);
         if (!pc) return false;
         if (this.busy) {

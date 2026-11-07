@@ -6,7 +6,9 @@ node_modules/
 dist/
 dist-cli/
 dist-browser/
-market/
+# build output of the marketplace scripts at the top of the extension (NOT src/core/market, which is source)
+/market/
+/extension/market/
 .vscode-test/
 __pycache__/
 *.egg-info/

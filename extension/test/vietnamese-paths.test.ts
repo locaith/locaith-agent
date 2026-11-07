@@ -8,6 +8,12 @@ import { NodeToolHost } from '../src/core/host/nodeHost';
 import { editFileTool, globTool, grepTool, listDirTool, readFileTool, writeFileTool } from '../src/core/tools/fs';
 import { createTerminalTool } from '../src/core/tools/terminal';
 
+/**
+ * Trần thời gian cho test có chạy PowerShell thật. Trên máy này lần khởi động "nguội" của Windows PowerShell có lúc mất 12–90 s (đo được 11,7 s và 58 s;
+ * các lần sau 0,2 s) nên mức 30–40 s cũ làm bộ test đỏ ngẫu nhiên dù mã đúng. Chỉ là trần: test chạy xong là qua, không chờ đủ.
+ */
+const SPAWN_TIMEOUT = 150_000;
+
 /** Thư mục dự án thật của người dùng Việt hay có dấu cách và chữ có dấu: "Dự án Locaith AI/Báo giá/…". */
 function vietnameseWorkspace(): { dir: string; ctx: ToolContext; host: NodeToolHost } {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'Dự án Locaith AI – '));
@@ -104,5 +110,5 @@ describe('đường dẫn và tên tệp tiếng Việt có dấu cách', () => 
     expect(r.content).toContain('Tài liệu kiến trúc.md');
     const sub = await run(tool, { command: `node -e "console.log(process.cwd())"`, cwd: 'Báo giá/Khách hàng Đặng Thị Hồng' }, ctx);
     expect(sub.content).toContain('Khách hàng Đặng Thị Hồng');
-  }, 40_000);
+  }, SPAWN_TIMEOUT);
 });

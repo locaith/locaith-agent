@@ -29,10 +29,20 @@ const vi = {
   aborted: 'Đã dừng theo yêu cầu.',
   unknownTool: 'Công cụ "{name}" không tồn tại hoặc chưa được mở khóa. Dùng load_skill/search_skills để tìm.',
   toolCancelled: 'Người dùng đã dừng trước khi công cụ này chạy xong.',
+  // Kết quả "bù" cho lệnh gọi mồ côi (lượt trước bị Dừng/lỗi giữa vòng công cụ). Nói rõ là ĐÃ HUỶ để model không chạy lại.
+  toolInterrupted: 'Người dùng đã dừng trước khi thao tác này chạy xong — không có kết quả. Đừng chạy lại: hãy xem việc này là đã huỷ và tiếp tục phần còn lại.',
   toolDenied: 'Người dùng đã từ chối thao tác này.',
   toolDeniedWithFeedback: 'Người dùng đã từ chối thao tác này và nhắn: "{feedback}"',
   planMode: 'Đang ở chế độ lập kế hoạch: chỉ được đọc và nghiên cứu, chưa được sửa tệp hay chạy lệnh.',
   titleDefault: 'Cuộc trò chuyện mới',
+  budget: '[vòng {n}/{max} · còn {left} vòng]',
+  budgetLow: '[vòng {n}/{max} · còn {left} vòng — CHỐT VIỆC, KHÔNG MỞ VIỆC MỚI]',
+  // Nhãn đếm của tin nhắc hoàn thành (engine ghép vào đầu tin nhắc): để model biết đây là lần thứ mấy và phải đổi cách làm.
+  gateLabel: '[nhắc lần {n}]',
+  // Lần cổng can thiệp THỨ BA: không chèn nhắc nữa (nhắc vô hạn chỉ đốt thêm lượt gọi) mà dừng và nói thẳng với người dùng.
+  // {n} = số lần ĐÃ nhắc thật (không tính lần chốt này).
+  gateFinal: 'Đã nhắc {n} lần nhưng vẫn còn việc chưa xong: {list}. Dừng ở đây để bạn quyết định — nhắn "tiếp tục" để trợ lý làm nốt các việc này, hoặc đổi yêu cầu.',
+  gateFinalVerify: 'Trợ lý đã sửa tệp nhưng chưa chạy lệnh kiểm chứng nào (build / test) dù đã được nhắc. Hãy tự kiểm tra kết quả, hoặc nhắn "kiểm chứng" để trợ lý chạy.',
   todoReminder:
     'Bạn vẫn còn tác vụ chưa hoàn thành trong danh sách (todo_write). Hãy hoàn tất chúng hoặc cập nhật trạng thái cho đúng thực tế trước khi kết thúc.',
   gateTodos:
@@ -47,6 +57,23 @@ const vi = {
   queuedImageTask: '(ảnh)',
   maxTurnsWrapUp:
     'Đã hết số vòng lặp cho phép. KHÔNG gọi thêm công cụ. Hãy tóm tắt ngắn gọn: đã làm được gì, còn lại việc gì, và bước tiếp theo đề xuất.',
+  // ── (lane:cc-timeline-ui) ──
+  // ── (lane:ctx-compaction) ──
+  // ── (lane:output-timeouts) ──
+  // ── (lane:loop-guards) ──
+  // ── (lane:blind-verifier) ──
+  // ── (lane:checkpoints-rewind) ──
+  // ── (lane:perm-rules) ──
+  // ── (lane:hooks) ──
+  // ── (lane:commands-agents) ──
+  // ── (lane:bg-tasks) ──
+  // ── (lane:ide-context) ──
+  // ── (lane:sessions-ux) ──
+  // ── (lane:customer-bugs) ──
+  // ── (lane:gateway-client) ──
+  // ── (lane:mcp-parity) ──
+  // ── (lane:instructions-memory) ──
+  // ── (lane:tools-parity) ──
 };
 
 const en: typeof vi = {
@@ -74,10 +101,16 @@ const en: typeof vi = {
   aborted: 'Stopped as requested.',
   unknownTool: 'Tool "{name}" does not exist or is not unlocked. Use load_skill/search_skills to find it.',
   toolCancelled: 'The user stopped before this tool finished.',
+  toolInterrupted: 'The user stopped before this action finished — there is no result. Do not run it again: treat it as cancelled and continue with the rest.',
   toolDenied: 'The user denied this action.',
   toolDeniedWithFeedback: 'The user denied this action and said: "{feedback}"',
   planMode: 'Plan mode: read and research only — no file edits or commands yet.',
   titleDefault: 'New conversation',
+  budget: '[turn {n}/{max} · {left} turns left]',
+  budgetLow: '[turn {n}/{max} · {left} turns left — WRAP UP, DO NOT START NEW WORK]',
+  gateLabel: '[reminder {n}]',
+  gateFinal: 'Reminded {n} time(s) and work is still unfinished: {list}. Stopping here so you can decide — reply "continue" to have the assistant finish these, or change the request.',
+  gateFinalVerify: 'The assistant changed files but never ran a verifying command (build / test), even after being reminded. Check the result yourself, or reply "verify" to have it run one.',
   todoReminder:
     'You still have unfinished tasks in your todo list (todo_write). Finish them, or update their status to match reality, before ending.',
   gateTodos:
@@ -92,6 +125,23 @@ const en: typeof vi = {
   queuedImageTask: '(image)',
   maxTurnsWrapUp:
     'The loop budget is exhausted. Do NOT call more tools. Briefly summarize: what was done, what remains, and the suggested next step.',
+  // ── (lane:cc-timeline-ui) ──
+  // ── (lane:ctx-compaction) ──
+  // ── (lane:output-timeouts) ──
+  // ── (lane:loop-guards) ──
+  // ── (lane:blind-verifier) ──
+  // ── (lane:checkpoints-rewind) ──
+  // ── (lane:perm-rules) ──
+  // ── (lane:hooks) ──
+  // ── (lane:commands-agents) ──
+  // ── (lane:bg-tasks) ──
+  // ── (lane:ide-context) ──
+  // ── (lane:sessions-ux) ──
+  // ── (lane:customer-bugs) ──
+  // ── (lane:gateway-client) ──
+  // ── (lane:mcp-parity) ──
+  // ── (lane:instructions-memory) ──
+  // ── (lane:tools-parity) ──
 };
 
 export type StringKey = keyof typeof vi;

@@ -202,3 +202,21 @@ Kiểm thử: `test/queue.test.ts` (engine, transcript, sao lưu) và bước 13
 | Hàn gắn lịch sử | `shared/transcriptRebuild.ts`, `sessionStore.ts` | Dựng lại transcript từ `messages` khi ít lượt hơn; `backupRaw` giữ bản gốc một lần; `listAll` thấy mọi thư mục |
 
 Kiểm thử: `test/{bridge,chromeTool,connectors,bio,pluginMarket,swarm,historyHeal}.test.ts`, bước 14 của `test/vscode/suite.cjs` (VS Code thật). Phía extension Chrome 0.4.2 được thử bằng Chromium thật (ghép đôi qua CORS thật, duyệt trang, điều khiển trang) — kịch bản nằm ngoài kho này.
+
+## 11. Điểm cắm của engine — `RunExtension` (0.7.0)
+
+Vòng lặp `AgentEngine.run()` là trục của hệ thống; mọi tính năng "quanh vòng lặp" (cổng hoàn thành, kiểm tra độc lập, hook của người dùng, chốt chặn kỷ luật, thông báo tác vụ nền, chẩn đoán IDE…) **không** được chèn thẳng vào thân hàm đó. Mỗi tính năng là một `RunExtension` nằm trong tệp riêng (`src/core/engine/seams.ts` định nghĩa giao diện):
+
+| Móc | Khi nào | Có thể làm gì |
+|---|---|---|
+| `begin(scope)` | đầu mỗi `run()` | trả về bộ móc riêng cho lần chạy (trạng thái nằm trong closure) |
+| `beforeModel(turn)` | trước mỗi lần gọi model | trả về chữ để nối vào lịch sử (được lưu) |
+| `toolBefore(call, def, ctx)` | sau khi đối số hợp lệ, **trước** khi hỏi quyền | chặn (`{block}`) hoặc sửa đối số (`{input}`) |
+| `toolAfter(call, def, ctx, result)` | sau khi công cụ chạy xong | sửa/ghi chú vào kết quả |
+| `queuedTurn()` | tin xếp hàng thành lượt kế tiếp | đặt lại trạng thái theo lượt |
+| `finalize(ctx)` | model dừng mà không gọi công cụ | `accept` / `continue` (buộc làm tiếp) / `halt` |
+| `end(info)` | mọi đường thoát | dọn dẹp, ghi vết |
+
+Quy ước: ngoại lệ trong một móc **không** làm hỏng lần chạy (ghi log, coi như móc đó không làm gì); `finalize` — extension đầu tiên trả về khác `accept` thắng. `RunTrace` (do engine cập nhật) cho extension biết lần chạy đã thực sự ghi tệp, chạy lệnh gì, qua những công cụ nào.
+
+Đăng ký: `src/core/engine/extensions/index.ts` (dùng chung mọi bề mặt: VS Code, Chrome, CLI, agent con) và `src/host/hostExtensions.ts` (chỉ VS Code). Lệnh gạch chéo mới đăng ký qua `src/host/slashRegistry.ts`. Mỗi tính năng có sẵn một dòng riêng ở các tệp đăng ký để nhiều người sửa song song mà git gộp không xung đột.

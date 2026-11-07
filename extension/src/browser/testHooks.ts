@@ -64,7 +64,12 @@ class ScriptedProvider implements LLMProvider {
   constructor(private readonly turns: ScriptTurn[]) {}
 
   async *stream(req: StreamRequest): AsyncGenerator<ProviderEvent, void, void> {
-    const lastUser = req.messages.at(-1)?.content.map((b) => (b.type === 'text' ? b.text : b.type === 'tool_result' ? `[tool_result ${b.name}: ${b.content.slice(0, 200)}]` : '')).join('\n') ?? '';
+    // Khối `volatile` (dòng ngân sách vòng lặp harness gắn vào cuối tin user cuối) không phải chữ của người dùng: bỏ ra để các bài kiểm tra
+    // "tin gửi đi kết thúc bằng đúng câu hỏi" vẫn đúng. Dòng đó được ghi riêng ở `budget`.
+    const lastBlocks = req.messages.at(-1)?.content ?? [];
+    const lastUser = lastBlocks
+      .flatMap((b) => (b.type === 'text' ? (b.volatile ? [] : [b.text]) : b.type === 'tool_result' ? [`[tool_result ${b.name}: ${b.content.slice(0, 200)}]`] : ['']))
+      .join('\n');
     const images = (req.messages.at(-1)?.content ?? []).reduce((n, b) => n + (b.type === 'image' ? 1 : b.type === 'tool_result' ? (b.images?.length ?? 0) : 0), 0);
     const results = (req.messages.at(-1)?.content ?? []).flatMap((b) => (b.type === 'tool_result' ? [{ name: b.name ?? '', content: b.content }] : []));
     this.requests.push({ tools: req.tools.map((t) => t.name), system: req.system, lastUser, images, results });

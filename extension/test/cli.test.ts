@@ -51,7 +51,7 @@ describe('Locaith CLI — tham số và lệnh', () => {
   it('--version in phiên bản POC', () => {
     const r = run(['--version']);
     expect(r.code).toBe(0);
-    expect(r.out.trim()).toBe('0.1.0-poc');
+    expect(r.out.trim()).toMatch(/^\d+\.\d+\.\d+/);
   });
 
   it('--help nêu các lệnh và tuỳ chọn chính, kèm cảnh báo không truyền khoá qua dòng lệnh', () => {

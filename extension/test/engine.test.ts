@@ -379,17 +379,23 @@ describe('độ bền của vòng lặp', () => {
     expect(h.session.historyEdited).toBe(false); // đã gửi đi một lần rồi hạ cờ
   });
 
-  it('nhắc một lần khi còn tác vụ dở lúc kết thúc', async () => {
+  it('nhắc khi còn tác vụ dở lúc kết thúc; model làm xong ngay sau lời nhắc đầu thì chỉ nhắc ĐÚNG MỘT lần', async () => {
+    // CẬP NHẬT CÓ CHỦ ĐÍCH (0.6.31): trước đây kịch bản chỉ có `textTurn('Đã cập nhật.')` sau lời nhắc và test vẫn xanh vì việc dở chỉ
+    // được nhắc một lần rồi lượt kết thúc im lặng. Nay việc dở còn nguyên thì bị nhắc LẠI (lần 3 thì báo người dùng — xem gateFinal.test.ts),
+    // nên model phải thật sự cập nhật todo_write; khi đó vẫn đúng một lời nhắc.
     const h = makeHarness([
       () => toolTurn([{ name: 'todo_write', input: { todos: [{ id: 't1', title: 'Việc dở', status: 'in_progress' }] } }]),
       () => textTurn('Xong rồi.'),
+      () => toolTurn([{ name: 'todo_write', input: { todos: [{ id: 't1', title: 'Việc dở', status: 'completed' }] } }]),
       () => textTurn('Đã cập nhật.'),
     ]);
     await h.run('x');
-    expect(h.provider.requests).toHaveLength(3);
+    expect(h.provider.requests).toHaveLength(4);
     const nudge = h.provider.requests[2].messages.at(-1)!;
     expect(nudge.synthetic).toBe(true);
     expect((nudge.content[0] as any).text).toContain('todo_write');
+    expect((nudge.content[0] as any).text).toMatch(/^\[nhắc lần 1\]/);
+    expect(h.session.messages.filter((m) => m.synthetic)).toHaveLength(1); // đã xong thì không còn lời nhắc thứ hai
   });
 });
 

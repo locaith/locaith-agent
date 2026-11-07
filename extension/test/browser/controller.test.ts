@@ -456,6 +456,36 @@ describe('BrowserController', () => {
     expect(JSON.stringify(retried[0].content)).toContain('Hỏi lại');
   });
 
+  it('thử lại / sửa tin cuối SAU khi engine đã vá lệnh mồ côi (kết quả "đã huỷ" nằm ở tin tổng hợp): cắt đúng ở tin người dùng thật, tiền tố còn hợp lệ, không nhân đôi', async () => {
+    const r = await make([() => textTurn('Đã làm tiếp.'), () => textTurn('Làm lại xong.'), () => textTurn('Lần ba.')]);
+    // lịch sử còn lệnh mồ côi (sau Dừng / sự cố) rồi người dùng gõ tiếp
+    r.ctl.snapshot().session.messages.push(
+      { role: 'user', content: [{ type: 'text', text: 'build giúp tôi' }] },
+      { role: 'assistant', content: [{ type: 'tool_use', id: 'run1', name: 'run_command', input: { command: 'npm run build' } }] },
+    );
+    await r.ctl.send('tiếp tục', []);
+    await settle(r);
+    const afterFirst = r.ctl.snapshot().session.messages;
+    expect(afterFirst.map((m) => `${m.role}${m.synthetic ? '*' : ''}`)).toEqual(['user', 'assistant', 'user*', 'user', 'assistant']); // user* = kết quả huỷ do engine vá
+    expect(r.provider.requests[0].messages.map((m) => m.role)).toEqual(['user', 'assistant', 'user', 'user']);
+
+    // THỬ LẠI: cắt tại tin 'tiếp tục' (không phải tại tin tổng hợp), tiền tố [build, tool_use, kết quả huỷ] còn nguyên và hợp lệ
+    await r.ctl.onMessage({ type: 'retry' });
+    await settle(r);
+    expect(r.provider.requests).toHaveLength(2);
+    const retried = r.provider.requests[1].messages;
+    expect(retried.map((m) => m.role)).toEqual(['user', 'assistant', 'user', 'user']);
+    expect(retried[2].content[0]).toMatchObject({ type: 'tool_result', toolUseId: 'run1', isError: true });
+    expect(JSON.stringify(retried[3].content)).toContain('tiếp tục');
+    expect(r.ctl.snapshot().session.messages.filter((m) => m.role === 'user' && !m.synthetic)).toHaveLength(2); // 'build giúp tôi' + đúng MỘT 'tiếp tục'
+    expect(r.view().transcript.filter((i) => i.kind === 'user').map((i) => (i as { text: string }).text)).toEqual(['tiếp tục']);
+
+    // SỬA TIN CUỐI: đưa 'tiếp tục' về ô nhập và để lại đúng tiền tố hợp lệ
+    await r.ctl.onMessage({ type: 'edit_last' });
+    expect(r.messages.some((m) => m.type === 'draft' && m.text === 'tiếp tục')).toBe(true);
+    expect(r.ctl.snapshot().session.messages.map((m) => `${m.role}${m.synthetic ? '*' : ''}`)).toEqual(['user', 'assistant', 'user*']);
+  });
+
   // ───────────────────────── Toàn quyền (bỏ qua mọi xác nhận, bật bằng một hộp xác nhận) ─────────────────────────
 
   it('Toàn quyền: bật từ hộp xác nhận → cho phép chế độ bypass, chuyển phiên sang đó, ghi nhớ cho cuộc trò chuyện mới và xin quyền mọi trang web', async () => {

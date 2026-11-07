@@ -243,14 +243,14 @@ export function applyEvent(items: readonly TItem[], ev: UiEvent): TItem[] {
         if (idx >= 0) {
           return updateAssistant(items, targetId, (a) => {
             const blocks = deactivatePills(a.blocks.slice());
-            blocks.push({ type: 'notice', id: blockId(a, blocks, 'n'), level: ev.level, text: ev.text });
+            blocks.push({ type: 'notice', id: blockId(a, blocks, 'n'), level: ev.level, text: ev.text, ...(ev.compact ? { compact: ev.compact } : {}) });
             return { ...a, blocks };
           });
         }
       }
       return [
         ...items,
-        { kind: 'notice', id: `notice:${items.length}:${Date.now()}`, level: ev.level, text: ev.text, ts: Date.now() },
+        { kind: 'notice', id: `notice:${items.length}:${Date.now()}`, level: ev.level, text: ev.text, ts: Date.now(), ...(ev.compact ? { compact: ev.compact } : {}) },
       ];
     }
 

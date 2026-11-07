@@ -20,21 +20,29 @@ function lifecycle(events: UiEvent[]) {
 describe('hàng đợi tin nhắn — engine', () => {
   it('chèn SAU lượt công cụ: tin đi chung tin nhắn kết quả (tool_result đứng trước), có dòng báo cho model biết', async () => {
     let calls = 0;
-    const h = makeHarness([() => toolTurn([LIST]), () => textTurn('Đã làm theo TypeScript'), () => textTurn('Xong cả hai việc.')], {
+    // Tin chèn giữa chừng được ghi vào danh sách tác vụ (trạng thái chờ) nên khi model dừng, cổng hoàn thành nhắc một lần ([nhắc lần 1]);
+    // model đáp lại bằng todo_write đánh dấu xong rồi kết thúc. (0.6.31: việc dở còn nguyên sau lời nhắc thì bị nhắc lại — xem gateFinal.test.ts —
+    // nên bước cuối phải là cập nhật tác vụ thật, không còn là một câu chữ suông.)
+    const done = () => toolTurn([{ name: 'todo_write', input: { todos: [{ id: 't1', title: 'Dùng TypeScript nhé', status: 'completed' }] } }]);
+    const h = makeHarness([() => toolTurn([LIST]), () => textTurn('Đã làm theo TypeScript'), done, () => textTurn('Xong cả hai việc.')], {
       ...opts,
       takeQueued: () => (calls++ === 0 ? [msg('q1', 'Dùng TypeScript nhé')] : []),
     });
     const r = await h.run('Liệt kê thư mục');
     expect(r.stopReason).toBe('end_turn');
-    expect(h.provider.requests).toHaveLength(3); // lượt 3 = nhắc hoàn thành tác vụ còn chờ (todoReminder)
+    expect(h.provider.requests).toHaveLength(4); // lượt 3 = đáp lại lời nhắc hoàn thành tác vụ còn chờ
 
     const last = h.provider.requests[1].messages.at(-1)!;
     expect(last.role).toBe('user');
     expect(last.content.map((b) => b.type)).toEqual(['tool_result', 'text', 'text']);
     expect(last.content[1]).toMatchObject({ type: 'text', text: expect.stringContaining('trong lúc bạn đang làm việc') });
     expect(last.content[2]).toMatchObject({ type: 'text', text: 'Dùng TypeScript nhé' });
-    // hội thoại vẫn xen kẽ vai trò: user, assistant(tool_use), user(kết quả + tin chèn), assistant, user(nhắc), assistant
-    expect(h.session.messages.map((m) => m.role)).toEqual(['user', 'assistant', 'user', 'assistant', 'user', 'assistant']);
+    // lời nhắc hoàn thành có nhãn đếm và đứng SAU câu trả lời của model (vẫn xen kẽ vai trò)
+    const nudge = h.provider.requests[2].messages.at(-1)!;
+    expect(nudge).toMatchObject({ role: 'user', synthetic: true });
+    expect((nudge.content[0] as { text: string }).text).toMatch(/^\[nhắc lần 1\] /);
+    // hội thoại vẫn xen kẽ vai trò: user, assistant(tool_use), user(kết quả + tin chèn), assistant, user(nhắc), assistant(todo_write), user(kết quả), assistant
+    expect(h.session.messages.map((m) => m.role)).toEqual(['user', 'assistant', 'user', 'assistant', 'user', 'assistant', 'user', 'assistant']);
   });
 
   it('giao diện: đóng đoạn trả lời hiện tại → tin người dùng (steer) → mở đoạn mới; cùng một lần chạy', async () => {
@@ -139,7 +147,8 @@ describe('hàng đợi tin nhắn — engine', () => {
     // của tin assistant đang chờ kết quả công cụ → Anthropic trả 400. Tin chèn giữa chừng phải giữ nguyên khối suy luận.
     const t1 = toolTurn([{ name: 'load_skill', input: { skill_name: 'artifacts' } }]);
     (t1.at(-1) as Extract<ProviderEvent, { type: 'done' }>).message.content.unshift({ type: 'thinking', text: 'cần nạp kỹ năng', provider: 'fake', signature: 'sig' });
-    const provider = new FakeProvider([() => t1, () => textTurn('xong'), () => textTurn('xong cả việc mới')]);
+    // (0.6.31) Việc chèn giữa chừng vẫn "chờ" nên cổng nhắc hai lần rồi mới chốt: đủ bước để lượt chạy kết thúc êm, không rơi vào "hết kịch bản".
+    const provider = new FakeProvider([() => t1, () => textTurn('xong'), () => textTurn('xong cả việc mới'), () => textTurn('đã xong hết')]);
     (provider.capabilities as { thinkingBoundToPrefix?: boolean }).thinkingBoundToPrefix = true;
     let calls = 0;
     const h = makeHarness([], { ...opts, provider, takeQueued: () => (calls++ === 0 ? [msg('q1', 'nhớ dùng tiếng Việt')] : []) });

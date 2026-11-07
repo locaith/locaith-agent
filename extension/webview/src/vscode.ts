@@ -36,7 +36,6 @@ export interface PersistedUi {
   draft?: string;
   /** Chỉ lưu tệp/vùng chọn — ảnh (base64) quá nặng để lưu. */
   attachments?: AttachmentInfo[];
-  todoOpen?: boolean;
 }
 
 export function loadUiState(): PersistedUi {

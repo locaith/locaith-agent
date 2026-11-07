@@ -113,10 +113,13 @@ function textOf(m: ChatMessage): string {
  * Bỏ các tin nhắc TỔNG HỢP do harness chèn ở bản cũ (nhắc todo, "viết tiếp", "hết vòng lặp"…).
  * Chúng không phải lời người dùng, không hiện trên giao diện, nhưng vẫn được gửi lại mô hình ở mọi lượt sau —
  * giữ lại thì phiên cũ tiếp tục bị điều khiển bằng câu chữ của bản cũ. Tin tổng hợp sau khi nén được GIỮ.
+ * Tin tổng hợp mang `tool_result` (kết quả "đã huỷ" mà engine vá cho lệnh mồ côi sau khi Dừng) cũng được GIỮ: nó là một nửa cặp
+ * tool_use/tool_result chứ không phải lời nhắc — xoá nó làm lệnh mồ côi sống lại ở lần mở phiên sau.
  */
 function dropLegacyNudges(messages: ChatMessage[]): ChatMessage[] {
   return messages.filter((m) => {
     if (m.role !== 'user' || m.synthetic !== true) return true;
+    if (m.content.some((b) => b.type === 'tool_result')) return true;
     return textOf(m).includes(SUMMARY_TAG); // giữ tin tổng hợp sau khi nén, bỏ mọi tin nhắc
   });
 }

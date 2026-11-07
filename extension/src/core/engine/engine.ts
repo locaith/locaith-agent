@@ -27,7 +27,9 @@ import { newId } from '../../shared/transcript';
 import type { SkillRegistry } from '../skills/registry';
 import { sha1 } from '../tools/textUtil';
 import { compactIfNeeded, compactedNotice, stripThinking } from './compaction';
-import { completionGate, type GateReason } from './completion';
+import { turnBudgetNote, withBudgetNote } from './completion';
+import { coreRunExtensions } from './extensions';
+import { beginExtensions, newTrace, type ActiveExtension, type FinalizeContext, type FinalizeDecision, type RunExtension, type RunScope, type RunTrace, type TraceCall, type TurnInfo } from './seams';
 import { buildSystemPrompt } from './context';
 import { formatMemoryBlock } from './memory';
 import { ToolDispatcher } from './dispatcher';
@@ -91,6 +93,11 @@ export interface EngineDeps {
   onConsentRequired?(): void;
   /** Cổng Locaith báo token đăng nhập không còn hợp lệ (401): host kiểm tra lại tài khoản (bị thu hồi thì khoá extension và đòi đăng nhập lại). */
   onAccountInvalid?(): void;
+  /**
+   * Các tính năng gắn quanh vòng lặp (cổng hoàn thành, kiểm tra độc lập, hook…) — xem `seams.ts`. Không khai báo = chỉ các extension dùng chung
+   * (`coreRunExtensions()`, hiện là cổng hoàn thành). Host VS Code truyền `[...coreRunExtensions(), ...hostRunExtensions(...)]`.
+   */
+  extensions?: RunExtension[];
 }
 
 export interface RunInput {
@@ -130,10 +137,51 @@ function freshToolId(session: SessionState, providerId: string): string {
   }
 }
 
+/**
+ * Lượt bị DỪNG giữa vòng công cụ để lại tin assistant có `tool_use` mà không có `tool_result`.
+ * Lịch sử đó không hợp lệ với mọi hãng (Anthropic trả 400; số khác lặng lẽ phát lại lệnh cũ), và chính nó làm
+ * tin "tiếp tục" chạy lại đúng những lệnh của tin trước. Vá bằng `tool_result` đánh dấu đã huỷ — không chạy lại gì.
+ * Idempotent; trả về số lệnh đã vá.
+ *
+ * Quy tắc chèn (quan trọng): kết quả huỷ nằm trong MỘT TIN TỔNG HỢP RIÊNG đặt ngay sau tin assistant. Chỉ khi tin user kế tiếp
+ * VỐN LÀ tin kết quả (đã có tool_result, thiếu một phần do dừng giữa lúc chạy song song) mới bổ sung vào chính tin đó. KHÔNG gộp
+ * vào một tin người dùng thật: nó sẽ mất tư cách "điểm bắt đầu lượt" (`isTurnStart`), "Thử lại / Sửa tin cuối" nhắm sai chỗ và
+ * transcript dựng lại sẽ hiện nó như tin chen giữa.
+ */
+export function repairOrphanToolCalls(session: SessionState, lang: Lang = 'vi'): number {
+  const msgs = session.messages;
+  let repaired = 0;
+  for (let i = 0; i < msgs.length; i++) {
+    const m = msgs[i];
+    if (m.role !== 'assistant') continue;
+    const uses = m.content.filter((b): b is ToolUseBlock => b.type === 'tool_use');
+    if (uses.length === 0) continue;
+    const next = msgs[i + 1];
+    const existing: ToolResultBlock[] = next && next.role === 'user' ? next.content.filter((b): b is ToolResultBlock => b.type === 'tool_result') : [];
+    const byId = new Map(existing.map((r) => [r.toolUseId, r] as const));
+    const missing = uses.filter((u) => !byId.has(u.id));
+    if (missing.length === 0) continue;
+    const cancelled = (u: ToolUseBlock): ToolResultBlock => ({ type: 'tool_result', toolUseId: u.id, name: u.name, content: t(lang, 'toolInterrupted'), isError: true });
+    repaired += missing.length;
+    if (next && next.role === 'user' && existing.length > 0) {
+      // Tin kết quả có sẵn nhưng thiếu một phần → bổ sung ngay trong đó, tool_result theo đúng thứ tự gọi và luôn đứng trước phần còn lại.
+      const ids = new Set(uses.map((u) => u.id));
+      const rest = next.content.filter((b) => !(b.type === 'tool_result' && ids.has(b.toolUseId)));
+      msgs[i + 1] = { ...next, content: [...uses.map((u) => byId.get(u.id) ?? cancelled(u)), ...rest] };
+    } else {
+      msgs.splice(i + 1, 0, { role: 'user', content: missing.map(cancelled), synthetic: true, ts: Date.now() });
+    }
+  }
+  if (repaired > 0) session.historyEdited = true;
+  return repaired;
+}
+
 export class AgentEngine {
   private readonly dispatcher: ToolDispatcher;
+  private readonly extensions: RunExtension[];
 
   constructor(private readonly d: EngineDeps) {
+    this.extensions = d.extensions ?? coreRunExtensions();
     this.dispatcher = new ToolDispatcher({
       registry: d.registry,
       host: d.host,
@@ -151,6 +199,10 @@ export class AgentEngine {
     const providerLabel = this.d.provider.label;
 
     emit({ t: 'assistant_start', id, provider: this.d.provider.id, model: session.model, ts: Date.now() });
+    // Lượt trước bị DỪNG giữa vòng công cụ có thể để lại `tool_use` không có `tool_result`. Lịch sử đó không hợp lệ:
+    // hãng sẽ từ chối, hoặc tệ hơn — lần chạy sau phát lại đúng các lệnh cũ ("chạy ở cả hai chỗ"). Vá ngay ở đây,
+    // bằng cách đánh dấu chúng là đã huỷ, TRƯỚC khi thêm tin mới.
+    repairOrphanToolCalls(session, lang);
     session.messages.push({ role: 'user', content: input.content, ts: Date.now() });
     session.updatedAt = Date.now();
     // Lựa chọn của lượt trước chỉ có nghĩa với lượt đó: người dùng đã gửi việc mới thì thu hồi các nút cũ.
@@ -163,10 +215,8 @@ export class AgentEngine {
     const recentSigs: string[] = [];
     let turns = 0;
     let continuations = 0;
-    /** Cổng hoàn thành: số lần đã nhắc + các lý do đã dùng (mỗi lý do một lần). */
-    const gate = { nudges: 0, reasons: [] as GateReason[] };
-    /** Những gì lượt chạy này đã THỰC SỰ làm — căn cứ để biết "xong" có bằng chứng hay không. */
-    const trace = { wrote: false, execs: 0 };
+    /** Những gì lượt chạy này đã THỰC SỰ làm — căn cứ để biết "xong" có bằng chứng hay không (cổng hoàn thành, kiểm tra độc lập…). */
+    const trace = newTrace();
     let emptyNudges = 0;
     let wrapUp = false;
     let compactedForOverflow = false;
@@ -174,6 +224,23 @@ export class AgentEngine {
     let lastWasToolResults = false;
 
     const notice = (level: 'info' | 'warn' | 'error', text: string) => emit({ t: 'notice', id, level, text });
+
+    // Các extension gắn quanh vòng lặp (xem seams.ts): mỗi cái nhận phạm vi của lần chạy này và trả về bộ móc riêng.
+    const scope: RunScope = {
+      session,
+      settings,
+      lang,
+      host: this.d.host,
+      provider: this.d.provider,
+      signal,
+      input: input.content,
+      trace,
+      emit,
+      notice,
+      assistantId: () => id,
+    };
+    const active = beginExtensions(this.extensions, scope);
+    const hostLog = (level: 'warn', message: string) => this.d.host.log(level, message);
 
     /**
      * Tin người dùng gửi trong lúc trợ lý đang làm = VIỆC MỚI. Ghi ngay vào danh sách tác vụ của phiên
@@ -240,8 +307,11 @@ export class AgentEngine {
           break;
         }
         turns++;
+        trace.turns = turns;
+        const turnInfo: TurnInfo = { turn: turns, maxTurns: settings.maxTurns, turnsLeft: Math.max(0, settings.maxTurns - turns), wrapUp };
 
         await this.compact(session, signal, id, false);
+        await this.runBeforeModel(active, turnInfo, session, hostLog);
 
         const unlocked = this.d.skills.unlockedTools(session.loadedSkills, session.provider);
       // Swarm: công cụ workflow luôn sẵn sàng (không cần nạp kỹ năng multi-agent trước).
@@ -316,11 +386,14 @@ export class AgentEngine {
 
         let done: Extract<ProviderEvent, { type: 'done' }> | null = null;
         let queued = false;
+        // (0.6.31) Dòng ngân sách vòng: model không thể biết còn bao nhiêu lượt nếu harness không nói.
+        // Gắn vào ĐUÔI tin nhắn cuối của payload (không sửa lịch sử đã lưu) → tiền tố nguyên vẹn cho prompt-cache.
+        const payload = withBudgetNote(session.messages, turnBudgetNote(turns, settings.maxTurns, lang));
         try {
           for await (const raw of this.d.provider.stream({
             model: session.model,
             system,
-            messages: session.messages,
+            messages: payload,
             tools: specs,
             toolChoice: wrapUp ? 'none' : undefined,
             maxOutputTokens: settings.maxOutputTokens,
@@ -397,7 +470,7 @@ export class AgentEngine {
             const last = calls[calls.length - 1];
             if (!last.parseError) last.parseError = 'đầu ra bị cắt do chạm giới hạn độ dài';
           }
-          const results = await this.runTools(calls, session, id, signal, available, recentSigs, lang, trace);
+          const results = await this.runTools(calls, session, id, signal, available, recentSigs, lang, trace, active, turns);
           // Tin người dùng gửi lúc công cụ đang chạy đi CHUNG tin nhắn kết quả (mỗi tin assistant chỉ được theo sau bởi MỘT tin user: giữ xen kẽ vai trò ở mọi hãng); tool_result luôn đứng trước.
           const steered = signal.aborted ? [] : takeQueued(true);
           session.messages.push({ role: 'user', content: [...results, ...steered], ts: Date.now() });
@@ -422,8 +495,7 @@ export class AgentEngine {
             lastWasToolResults = false;
             continuations = 0;
             emptyNudges = 0;
-            gate.nudges = 0;
-            gate.reasons.length = 0;
+            for (const ext of active) this.safeCall(ext, 'queuedTurn', () => ext.hooks.queuedTurn?.(), hostLog);
             continue;
           }
         }
@@ -444,35 +516,81 @@ export class AgentEngine {
           session.messages.push(userText(t(lang, 'emptyReplyNudge'), { synthetic: true }));
           continue;
         }
-        const pendingTodos = session.todos.filter((x) => x.status !== 'completed');
-        const decision = completionGate(
-          {
-            stop,
-            text,
-            pendingTodos,
-            wroteFiles: trace.wrote,
-            execCalls: trace.execs,
-            nudges: gate.nudges,
-            reasons: gate.reasons,
-            wrapUp,
-            aborted: signal.aborted,
-          },
-          lang,
-        );
-        if (decision) {
-          gate.nudges++;
-          gate.reasons.push(decision.reason);
-          // Nhắc cụ thể, không phải "hãy tiếp tục": nêu đúng việc còn lại / đúng phép kiểm tra còn thiếu.
-          session.messages.push(userText(decision.message, { synthetic: true }));
+        // Chế độ lập kế hoạch: các bước trong danh sách là KẾ HOẠCH chờ người dùng duyệt (chưa được phép làm) — chưa xong là điều đương nhiên,
+        // không nhắc và không báo "còn việc dở". Duyệt kế hoạch (`exit_plan_mode`) đổi chế độ, từ đó cổng làm việc bình thường.
+        const pendingTodos = session.mode === 'plan' ? [] : session.todos.filter((x) => x.status !== 'completed');
+        // Cổng hoàn thành, kiểm tra độc lập, hook Stop… đều là extension (xem seams.ts) — engine chỉ hỏi: chấp nhận, buộc làm tiếp, hay dừng.
+        const verdict = await this.runFinalize(active, { turn: turnInfo, message, text, stop, pendingTodos, aborted: signal.aborted }, hostLog);
+        if (verdict.action === 'continue') {
+          session.messages.push(userText(verdict.message, { synthetic: true }));
           continue;
         }
+        if (verdict.action === 'halt' && verdict.notice) notice(verdict.notice.level, verdict.notice.text);
         break;
       }
     } finally {
       session.updatedAt = Date.now();
+      for (const ext of active) await this.safeCallAsync(ext, 'end', () => ext.hooks.end?.({ stopReason: result, turns }), hostLog);
       emit({ t: 'assistant_end', id, stopReason: result });
     }
     return { stopReason: result, turns, assistantId: id };
+  }
+
+  // ── seams: gọi móc của extension (ngoại lệ không làm hỏng lần chạy) ─────────────────────────────────────────
+
+  private safeCall(ext: ActiveExtension, hook: string, fn: () => unknown, log: (level: 'warn', message: string) => void): void {
+    try {
+      fn();
+    } catch (err) {
+      log('warn', `Extension "${ext.id}" lỗi ở móc ${hook}: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  }
+
+  private async safeCallAsync(ext: ActiveExtension, hook: string, fn: () => unknown, log: (level: 'warn', message: string) => void): Promise<void> {
+    try {
+      await fn();
+    } catch (err) {
+      log('warn', `Extension "${ext.id}" lỗi ở móc ${hook}: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  }
+
+  /**
+   * Móc `beforeModel`: chữ các extension trả về được NỐI vào lịch sử (và lưu). Nếu tin cuối là tin người dùng mang kết quả công cụ thì gộp vào chính nó
+   * (giữ vai trò xen kẽ ở mọi hãng); ngược lại thành một tin synthetic riêng.
+   */
+  private async runBeforeModel(active: readonly ActiveExtension[], turn: TurnInfo, session: SessionState, log: (level: 'warn', message: string) => void): Promise<void> {
+    const texts: string[] = [];
+    for (const ext of active) {
+      if (!ext.hooks.beforeModel) continue;
+      try {
+        const r = await ext.hooks.beforeModel(turn);
+        if (Array.isArray(r)) for (const x of r) if (typeof x === 'string' && x.trim()) texts.push(x);
+      } catch (err) {
+        log('warn', `Extension "${ext.id}" lỗi ở móc beforeModel: ${err instanceof Error ? err.message : String(err)}`);
+      }
+    }
+    if (texts.length === 0) return;
+    const blocks: ContentBlock[] = texts.map((text) => ({ type: 'text', text }));
+    const last = session.messages[session.messages.length - 1];
+    if (last && last.role === 'user' && last.content.some((b) => b.type === 'tool_result')) {
+      session.messages[session.messages.length - 1] = { ...last, content: [...last.content, ...blocks] };
+    } else {
+      session.messages.push({ role: 'user', content: blocks, synthetic: true, ts: Date.now() });
+    }
+  }
+
+  /** Móc `finalize`: extension đầu tiên trả về khác 'accept' thắng; không extension nào can thiệp → chấp nhận. */
+  private async runFinalize(active: readonly ActiveExtension[], ctx: FinalizeContext, log: (level: 'warn', message: string) => void): Promise<FinalizeDecision> {
+    for (const ext of active) {
+      if (!ext.hooks.finalize) continue;
+      try {
+        const d = await ext.hooks.finalize(ctx);
+        if (d && d.action !== 'accept') return d;
+      } catch (err) {
+        log('warn', `Extension "${ext.id}" lỗi ở móc finalize: ${err instanceof Error ? err.message : String(err)}`);
+      }
+    }
+    return { action: 'accept' };
   }
 
   /** Nén thủ công (/compact) hoặc khi lỗi tràn ngữ cảnh. */
@@ -638,7 +756,9 @@ export class AgentEngine {
     available: ReadonlySet<string>,
     recentSigs: string[],
     lang: Lang,
-    trace: { wrote: boolean; execs: number },
+    trace: RunTrace,
+    active: readonly ActiveExtension[],
+    turn: number,
   ): Promise<ToolResultBlock[]> {
     // Chặn vòng lặp vô ích: cùng một lệnh với cùng đối số lặp lại ≥ 3 lần.
     const blocked = new Map<string, ToolResultBlock>();
@@ -675,11 +795,16 @@ export class AgentEngine {
         toRun.push(c);
       }
     }
-    const ran = toRun.length ? await this.dispatcher.runBatch({ calls: toRun, session, assistantId: id, signal, available }) : [];
+    const ran = toRun.length ? await this.dispatcher.runBatch({ calls: toRun, session, assistantId: id, signal, available, hooks: active }) : [];
+    const resultOf = new Map(ran.map((r) => [r.toolUseId, r]));
     // Ghi lại việc ĐÃ THẬT SỰ chạy (không phải việc mô hình nói đã làm): căn cứ cho cổng hoàn thành ở cuối lượt.
     // Artifact (báo cáo, dashboard) không phải mã nguồn phải chạy test — chỉ ghi tệp trong workspace mới cần kiểm chứng.
     for (const c of toRun) {
       const risk = this.d.registry.get(c.name)?.risk;
+      const res = resultOf.get(c.id);
+      const ok = !!res && !res.isError;
+      const entry: TraceCall = { callId: c.id, name: c.name, risk: risk ?? 'unknown', input: (c.input ?? {}) as Record<string, unknown>, turn, ts: Date.now(), ok, resultHead: (res?.content ?? '').slice(0, 200) };
+      trace.calls.push(entry);
       if (risk === 'write' && !ARTIFACT_TOOLS.has(c.name)) trace.wrote = true;
       else if (risk === 'exec') trace.execs++;
     }

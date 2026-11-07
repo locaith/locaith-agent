@@ -18,6 +18,7 @@ import { newId } from '../../shared/transcript';
 import { decidePermission, rememberApproval } from './permissions';
 import { t, type Lang } from './strings';
 import type { ToolRegistry } from './toolRegistry';
+import type { ActiveExtension } from './seams';
 import type { SessionState, ToolContext, ToolHost, ToolResult } from './types';
 
 export const MAX_TOOL_RESULT_CHARS = 40_000;
@@ -49,6 +50,8 @@ export interface RunBatchInput {
   signal: AbortSignal;
   /** Tên các công cụ đang khả dụng với model ở lượt này. */
   available: ReadonlySet<string>;
+  /** Extension đang hoạt động của lần chạy (móc toolBefore/toolAfter — xem seams.ts). */
+  hooks?: readonly ActiveExtension[];
 }
 
 /** Ảnh đưa lên giao diện để người dùng bấm xem: tối đa 4 ảnh, mỗi ảnh ≤ ~3 MB base64 (ảnh lớn hơn chỉ đi tới mô hình, không hiện). */
@@ -192,6 +195,30 @@ export class ToolDispatcher {
       const semantic = await def.validate?.(call.input, ctx);
       if (semantic) return fail(semantic);
 
+      // Móc toolBefore của extension (hook PreToolUse, chốt chặn kỷ luật…): có thể chặn hoặc sửa đối số TRƯỚC khi hỏi quyền.
+      let beforeNote = '';
+      for (const ext of input.hooks ?? []) {
+        if (!ext.hooks.toolBefore) continue;
+        let r: Awaited<ReturnType<NonNullable<typeof ext.hooks.toolBefore>>>;
+        try {
+          r = await ext.hooks.toolBefore(call, def, ctx);
+        } catch (err) {
+          this.o.host.log('warn', `Extension "${ext.id}" lỗi ở móc toolBefore: ${err instanceof Error ? err.message : String(err)}`);
+          continue;
+        }
+        if (!r) continue;
+        if ('block' in r) return fail(r.block, r.state ?? 'error');
+        if ('input' in r) {
+          // Đối số do extension sửa phải qua cùng kiểm tra schema như đối số của model.
+          const next = JSON.parse(JSON.stringify(r.input)) as Record<string, unknown>;
+          stripNullOptionals(next, def.inputSchema);
+          if (validate && !validate(next)) return fail(`Đối số (đã được ${ext.id} sửa) không hợp lệ cho ${def.name}: ${this.ajv.errorsText(validate.errors, { dataVar: 'input' })}`);
+          call.input = next;
+          if (r.note) beforeNote += (beforeNote ? '\n' : '') + r.note;
+          emit({ t: 'tool_start', id: assistantId, callId: call.id, name: call.name, args: call.input });
+        }
+      }
+
       const verdict = await decidePermission(def, call.input, ctx, session.mode);
       if (verdict.action === 'deny') return fail(t(language, 'planMode'), 'denied');
 
@@ -232,8 +259,19 @@ export class ToolDispatcher {
         emit({ t: 'tool_start', id: assistantId, callId: call.id, name: call.name, args: call.input });
       }
 
-      const result = await raceWithAbort(def.execute(call.input, ctx), signal, this.o.toolTimeoutMs ?? 10 * 60_000);
+      let result = await raceWithAbort(def.execute(call.input, ctx), signal, this.o.toolTimeoutMs ?? 10 * 60_000);
       if (signal.aborted) return fail(t(language, 'toolCancelled'), 'cancelled');
+      if (beforeNote) result = { ...result, content: `${beforeNote}\n${result.content}` };
+      // Móc toolAfter (PostToolUse, chẩn đoán IDE…): thêm ghi chú/sửa kết quả mà model nhìn thấy.
+      for (const ext of input.hooks ?? []) {
+        if (!ext.hooks.toolAfter) continue;
+        try {
+          const r = await ext.hooks.toolAfter(call, def, ctx, result);
+          if (r) result = r;
+        } catch (err) {
+          this.o.host.log('warn', `Extension "${ext.id}" lỗi ở móc toolAfter: ${err instanceof Error ? err.message : String(err)}`);
+        }
+      }
       return finish('done', result);
     } catch (err) {
       if (signal.aborted) return fail(t(language, 'toolCancelled'), 'cancelled');

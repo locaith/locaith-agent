@@ -143,6 +143,22 @@ export interface ToolBlock {
   durationMs?: number;
 }
 
+/**
+ * Số liệu của một lần nén ngữ cảnh, đính kèm vào thông báo 'notice' (tuỳ chọn) để giao diện vẽ dòng gọn
+ * «Đã nén cuộc trò chuyện · tự động · giải phóng 968k token». Là TRƯỜNG TUỲ CHỌN của loại đã có (không phải loại sự kiện mới):
+ * bản cũ và trang Remote cũ chỉ thấy dòng chữ thường, không hỏng.
+ */
+export interface CompactInfo {
+  mode: 'auto' | 'manual' | 'overflow';
+  /** Ước lượng token giải phóng được (trước − sau). */
+  tokensFreed?: number;
+  summarizedMessages?: number;
+  /** Số kết quả công cụ cũ đã bị lược (xoá nội dung, đọc lại được). */
+  clearedResults?: number;
+  /** Bản tóm tắt (cắt hợp lý) để mở ra xem. */
+  summary?: string;
+}
+
 export type ABlock =
   | { type: 'text'; id: string; text: string }
   /** Văn bản suy luận thật do hãng trả (nếu có) — hiển thị trong khối thu gọn. */
@@ -155,7 +171,7 @@ export type ABlock =
   | { type: 'skill'; id: string; skill: string; unlocked: string[] }
   | ToolBlock
   | ({ type: 'artifact'; id: string; state: 'writing' | 'ready'; sizeChars?: number } & ArtifactRef)
-  | { type: 'notice'; id: string; level: 'info' | 'warn' | 'error'; text: string };
+  | { type: 'notice'; id: string; level: 'info' | 'warn' | 'error'; text: string; compact?: CompactInfo };
 
 /** Tệp người dùng tải lên (PDF, Word, Excel, HTML, CSV, TXT) sau khi đã được đọc thành chữ. */
 export interface DocInfo {
@@ -225,6 +241,7 @@ export interface NoticeItem {
   level: 'info' | 'warn' | 'error';
   text: string;
   ts: number;
+  compact?: CompactInfo;
 }
 
 export type TItem = UserItem | AssistantItem | NoticeItem;
@@ -265,11 +282,28 @@ export type UiEvent =
   | { t: 'usage'; id: string; usage: Usage; contextTokens?: number }
   | { t: 'assistant_end'; id: string; stopReason: string }
   /** Có id → gắn vào lượt trả lời đó; không có → thành NoticeItem độc lập. */
-  | { t: 'notice'; id?: string; level: 'info' | 'warn' | 'error'; text: string }
+  | { t: 'notice'; id?: string; level: 'info' | 'warn' | 'error'; text: string; compact?: CompactInfo }
   | { t: 'run_state'; running: boolean }
   | { t: 'mode'; mode: PermissionMode }
   /** Cập nhật bảng tác vụ cố định phía trên ô nhập. */
   | { t: 'todos'; todos: TodoItem[] }
+  // ── (lane:cc-timeline-ui) ──
+  // ── (lane:ctx-compaction) ──
+  // ── (lane:output-timeouts) ──
+  // ── (lane:loop-guards) ──
+  // ── (lane:blind-verifier) ──
+  // ── (lane:checkpoints-rewind) ──
+  // ── (lane:perm-rules) ──
+  // ── (lane:hooks) ──
+  // ── (lane:commands-agents) ──
+  // ── (lane:bg-tasks) ──
+  // ── (lane:ide-context) ──
+  // ── (lane:sessions-ux) ──
+  // ── (lane:customer-bugs) ──
+  // ── (lane:gateway-client) ──
+  // ── (lane:mcp-parity) ──
+  // ── (lane:instructions-memory) ──
+  // ── (lane:tools-parity) ──
   /** Các lựa chọn hướng đi hiện dưới dạng nút (rỗng = thu hồi). Thay cho việc liệt kê "bước tiếp theo" trong chat. */
   | { t: 'options'; id?: string; options: SuggestionOption[] };
 
@@ -767,6 +801,23 @@ export interface ViewState {
   chromePair?: ChromePairView;
   /** Mô hình Locaith: đồng ý thông báo dữ liệu + thẻ thông báo (chỉ bản VS Code). */
   locaith?: LocaithView;
+  // ── (lane:cc-timeline-ui) ──
+  // ── (lane:ctx-compaction) ──
+  // ── (lane:output-timeouts) ──
+  // ── (lane:loop-guards) ──
+  // ── (lane:blind-verifier) ──
+  // ── (lane:checkpoints-rewind) ──
+  // ── (lane:perm-rules) ──
+  // ── (lane:hooks) ──
+  // ── (lane:commands-agents) ──
+  // ── (lane:bg-tasks) ──
+  // ── (lane:ide-context) ──
+  // ── (lane:sessions-ux) ──
+  // ── (lane:customer-bugs) ──
+  // ── (lane:gateway-client) ──
+  // ── (lane:mcp-parity) ──
+  // ── (lane:instructions-memory) ──
+  // ── (lane:tools-parity) ──
   /** Lời mời đánh giá trên Chrome Web Store (chỉ bản trình duyệt, chỉ hiện sau vài lần dùng). */
   rating?: { sends: number };
 }
@@ -821,6 +872,23 @@ export type HostMessage =
   /** Trả lời `resolve_media` (0.6.3): `items` cùng thứ tự với `paths` đã xin. CHỈ gửi cho khung chat trong VS Code, không phát lại cho Remote. */
   | { type: 'media_resolved'; key: string; items: MediaItem[] }
   | { type: 'market_state'; state: MarketState }
+  // ── (lane:cc-timeline-ui) ──
+  // ── (lane:ctx-compaction) ──
+  // ── (lane:output-timeouts) ──
+  // ── (lane:loop-guards) ──
+  // ── (lane:blind-verifier) ──
+  // ── (lane:checkpoints-rewind) ──
+  // ── (lane:perm-rules) ──
+  // ── (lane:hooks) ──
+  // ── (lane:commands-agents) ──
+  // ── (lane:bg-tasks) ──
+  // ── (lane:ide-context) ──
+  // ── (lane:sessions-ux) ──
+  // ── (lane:customer-bugs) ──
+  // ── (lane:gateway-client) ──
+  // ── (lane:mcp-parity) ──
+  // ── (lane:instructions-memory) ──
+  // ── (lane:tools-parity) ──
   | { type: 'toast'; level: 'info' | 'warn' | 'error'; text: string }
   | { type: 'test_result'; provider: string; ok: boolean; message: string };
 
@@ -864,9 +932,6 @@ export type WebviewMessage =
   | { type: 'set_model'; provider: string; model: string }
   | { type: 'set_mode'; mode: PermissionMode }
   | { type: 'set_thinking'; level: ThinkingLevel }
-  | { type: 'set_swarm'; on: boolean }
-  | { type: 'set_swarm'; on: boolean }
-  | { type: 'set_swarm'; on: boolean }
   | { type: 'set_swarm'; on: boolean }
   | { type: 'set_ui_setting'; key: keyof UiSettings; value: string | number | boolean }
   | { type: 'permission_response'; id: string; decision: 'allow' | 'allow_session' | 'deny'; feedback?: string }
@@ -937,6 +1002,23 @@ export type WebviewMessage =
   | { type: 'set_orchestration'; mode: OrchestrationMode }
   /** Hành động trên khối mã: chèn vào editor đang mở / thay vùng chọn / tạo file mới. */
   | { type: 'apply_code'; code: string; lang?: string; mode: 'insert' | 'replace' | 'new_file' }
+  // ── (lane:cc-timeline-ui) ──
+  // ── (lane:ctx-compaction) ──
+  // ── (lane:output-timeouts) ──
+  // ── (lane:loop-guards) ──
+  // ── (lane:blind-verifier) ──
+  // ── (lane:checkpoints-rewind) ──
+  // ── (lane:perm-rules) ──
+  // ── (lane:hooks) ──
+  // ── (lane:commands-agents) ──
+  // ── (lane:bg-tasks) ──
+  // ── (lane:ide-context) ──
+  // ── (lane:sessions-ux) ──
+  // ── (lane:customer-bugs) ──
+  // ── (lane:gateway-client) ──
+  // ── (lane:mcp-parity) ──
+  // ── (lane:instructions-memory) ──
+  // ── (lane:tools-parity) ──
   // ── chỉ bản trình duyệt ──
   | { type: 'save_custom_provider'; provider: CustomProviderInput }
   /** Đăng nhập / đăng xuất bằng tài khoản (OAuth) cho một nhà cung cấp (bản trình duyệt). */

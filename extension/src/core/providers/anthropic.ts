@@ -151,7 +151,18 @@ function toolResultContent(
 
 export function toAnthropicMessages(
   history: readonly ChatMessage[],
-  opts: { historyEdited?: boolean; /** Id của adapter này: chỉ phát lại suy luận do CHÍNH nó sinh ra (mặc định 'anthropic'). */ providerId?: string },
+  opts: {
+    historyEdited?: boolean;
+    /** Id của adapter này: chỉ phát lại suy luận do CHÍNH nó sinh ra (mặc định 'anthropic'). */
+    providerId?: string;
+    /**
+     * Có khối chữ `volatile` ở cuối tin user (dòng ngân sách vòng lặp — đổi ở MỖI lần gọi): đặt điểm prompt-cache tường minh ở khối thật
+     * ngay TRƯỚC nó. Điểm cache tự động (`cache_control` cấp yêu cầu) luôn rơi vào khối cuối cùng, tức chính khối volatile; nếu chỉ có
+     * điểm đó thì bản ghi cache của lần gọi này chứa dòng ngân sách cũ, lần gọi sau không còn dòng đó nên KHÔNG BAO GIỜ trúng cache
+     * (mỗi vòng trả giá ghi cache cho cả lịch sử mà không đọc lại được gì). Chỉ bật khi host chấp nhận `cache_control`.
+     */
+    cacheBeforeVolatile?: boolean;
+  },
 ): Array<Record<string, unknown>> {
   const ownId = opts.providerId ?? 'anthropic';
   const out: Array<Record<string, unknown>> = [];
@@ -159,6 +170,7 @@ export function toAnthropicMessages(
     if (m.role === 'user') {
       const results: Array<Record<string, unknown>> = [];
       const rest: Array<Record<string, unknown>> = [];
+      const tail: Array<Record<string, unknown>> = [];
       for (const b of m.content) {
         if (b.type === 'tool_result') {
           const item: Record<string, unknown> = {
@@ -169,13 +181,15 @@ export function toAnthropicMessages(
           if (b.isError) item.is_error = true;
           results.push(item);
         } else if (b.type === 'text') {
-          if (!isBlank(b.text)) rest.push({ type: 'text', text: b.text });
+          if (!isBlank(b.text)) (b.volatile ? tail : rest).push({ type: 'text', text: b.text });
         } else if (b.type === 'image') {
           rest.push({ type: 'image', source: { type: 'base64', media_type: b.mediaType, data: b.data } });
         }
       }
-      // tool_result PHẢI đứng trước mọi nội dung khác trong tin nhắn user.
-      const content = [...results, ...rest];
+      // tool_result PHẢI đứng trước mọi nội dung khác trong tin nhắn user; khối volatile (nếu có) luôn là khối CUỐI.
+      const stable = [...results, ...rest];
+      if (opts.cacheBeforeVolatile && tail.length > 0 && stable.length > 0) stable[stable.length - 1].cache_control = { type: 'ephemeral' };
+      const content = [...stable, ...tail];
       if (content.length > 0) out.push({ role: 'user', content });
     } else {
       const content: Array<Record<string, unknown>> = [];
@@ -493,7 +507,11 @@ export class AnthropicProvider implements LLMProvider {
       noDisplay: state.noDisplay,
     });
 
-    const messages = toAnthropicMessages(req.messages, { historyEdited: req.historyEdited || state.noReplayThinking, providerId: this.id });
+    const messages = toAnthropicMessages(req.messages, {
+      historyEdited: req.historyEdited || state.noReplayThinking,
+      providerId: this.id,
+      cacheBeforeVolatile: this.isOfficialHost() && !state.noCache,
+    });
     let tools = req.tools.map((t) => {
       const tool: Record<string, unknown> = { name: t.name, description: t.description, input_schema: t.inputSchema };
       if (t.eagerInput && eagerAllowed && !state.noEager) tool.eager_input_streaming = true;

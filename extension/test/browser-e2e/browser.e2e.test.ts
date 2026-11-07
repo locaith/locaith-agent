@@ -1501,8 +1501,8 @@ describe.skipIf(BROWSERS.length === 0)('bản trình duyệt (tiện ích MV3) t
     );
 
 
-    // ───────────────────── Bảng tác vụ: việc còn lại bấm được để chạy tiếp ─────────────────────
-    it('bảng tác vụ: khi đã dừng mà còn việc dở, mỗi bước còn lại là một nút bấm để trợ lý làm tiếp (có "Tiếp tục tất cả" và nút ẩn); hết việc thì ẩn hẳn', async () => {
+    // ───────────────────── Bảng "Tasks" cuối khung chat đã BỎ (0.6.31) ─────────────────────
+    it('không còn bảng tác vụ ở cuối khung chat dù còn việc dở; việc dở được nhắc trong hội thoại rồi BÁO người dùng ở lần chốt (cách duy nhất họ biết)', async () => {
       await newRun(c);
       await c.panel.bringToFront();
       const todos = [
@@ -1510,31 +1510,37 @@ describe.skipIf(BROWSERS.length === 0)('bản trình duyệt (tiện ích MV3) t
         { id: 'b', title: 'Đọc nội dung fanpage', status: 'in_progress' },
         { id: 'c', title: 'Đề xuất kế hoạch', status: 'pending' },
       ];
-      await runScript(c, [{ calls: [{ name: 'todo_write', input: { todos } }] }, { text: 'Tôi dừng ở đây.' }], 'Lập kế hoạch');
-      await c.panel.waitForSelector('.todo-choices', { timeout: 10_000 });
-      expect(await c.panel.$$eval('.todo-pick .todo-text', (els) => els.map((e) => e.textContent))).toEqual(['Đọc nội dung fanpage', 'Đề xuất kế hoạch']); // việc đã xong không hiện
-      expect(await c.panel.$eval('.todo-choices .todo-all', (e) => e.textContent)).toContain('Tiếp tục tất cả');
-      if (SHOTS) await c.panel.screenshot({ path: path.join(SHOTS, `${name}-todo-choices.png`) });
+      // todo_write → "xong" (nhắc lần 1) → "xong" (nhắc lần 2) → "xong" (lần chốt: thôi nhắc, báo người dùng). Đúng 4 bước kịch bản: bước thứ 5 sẽ nổ "Kịch bản đã hết".
+      await runScript(c, [{ calls: [{ name: 'todo_write', input: { todos } }] }, { text: 'Tôi dừng ở đây.' }, { text: 'Vẫn dừng.' }, { text: 'Hết cách.' }], 'Lập kế hoạch');
+      await c.panel.waitForFunction(() => !(window as any).__nd.controller.isRunning, { timeout: 20_000, polling: 100 });
 
-      // bấm một bước → trợ lý làm tiếp đúng bước đó (tin nhắn "Tiếp tục: …" được gửi đi)
-      await c.panel.evaluate(async () => (window as any).__ndTest.script([{ text: 'Đã làm tiếp.' }]));
-      await c.panel.click('.todo-pick');
-      await c.panel.waitForFunction(
-        () => (window as any).__nd.controller.snapshot().view.transcript.some((i: any) => i.kind === 'user' && i.text === 'Tiếp tục: Đọc nội dung fanpage'),
-        { timeout: 15_000, polling: 100 },
-      );
-      await c.panel.waitForFunction(() => !(window as any).__nd.controller.isRunning, { timeout: 15_000, polling: 100 });
-      await c.panel.waitForSelector('.todo-choices', { timeout: 10_000 }); // kế hoạch chưa được cập nhật → vẫn còn việc để chọn
+      // 1) không có bảng nào ở chân khung chat
+      for (const sel of ['.todo', '.todo-choices', '.todo-pick', '.todo-all', '.todo-dismiss', '.todo-expand']) expect(await c.panel.$(sel), sel).toBeNull();
+      if (SHOTS) await c.panel.screenshot({ path: path.join(SHOTS, `${name}-no-tasks-panel.png`) });
 
-      // nút ẩn: danh sách việc còn lại biến mất
-      await c.panel.click('.todo-dismiss');
-      await c.panel.waitForFunction(() => !document.querySelector('.todo-choices'), { timeout: 5000 });
+      // 2) trạng thái việc dở vẫn còn trong phiên (engine / cổng hoàn thành vẫn cần nó), và lượt chạy KHÔNG vượt trần số lần gọi
+      const state = await c.panel.evaluate(() => {
+        const w = window as any;
+        const v = w.__nd.controller.snapshot().view;
+        const notices = v.transcript.filter((i: any) => i.kind === 'assistant').flatMap((a: any) => a.blocks).filter((b: any) => b.type === 'notice').map((b: any) => ({ level: b.level, text: b.text }));
+        return { todos: v.todos, notices, calls: w.__ndTest.requests().length, error: v.transcript.some((i: any) => i.kind === 'assistant' && i.blocks.some((b: any) => b.type === 'notice' && b.level === 'error')) };
+      });
+      expect(state.todos.filter((x: any) => x.status !== 'completed').map((x: any) => x.title)).toEqual(['Đọc nội dung fanpage', 'Đề xuất kế hoạch']);
+      expect(state.calls).toBe(4);
+      expect(state.error, JSON.stringify(state.notices)).toBe(false);
 
-      // hết việc (mọi bước đã xong) → không còn bảng nào
+      // 3) người dùng được BÁO ngay trong hội thoại, nêu đúng việc còn dở
+      const warn = state.notices.find((n: any) => n.level === 'warn' && /Đã nhắc 2 lần/.test(n.text));
+      expect(warn, JSON.stringify(state.notices)).toBeTruthy();
+      expect(warn.text).toContain('Đọc nội dung fanpage');
+      expect(await c.panel.evaluate(() => document.body.innerText)).toContain('Đã nhắc 2 lần');
+
+      // 4) hết việc (mọi bước đã xong) → không nhắc, không báo, không bảng
       await newRun(c);
       await runScript(c, [{ calls: [{ name: 'todo_write', input: { todos: todos.map((x) => ({ ...x, status: 'completed' })) } }] }, { text: 'Xong hết.' }], 'Làm hết');
-      await new Promise((r) => setTimeout(r, 300));
+      await c.panel.waitForFunction(() => !(window as any).__nd.controller.isRunning, { timeout: 20_000, polling: 100 });
       expect(await c.panel.$('.todo')).toBeNull();
+      expect(await c.panel.evaluate(() => document.body.innerText)).not.toContain('Đã nhắc');
     });
 
 

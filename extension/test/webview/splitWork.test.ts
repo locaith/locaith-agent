@@ -72,4 +72,20 @@ describe('splitWork — vùng câu trả lời là DÃY chữ cuối lượt', (
     expect(keys(s!.tail)).toEqual(['t1', 't2', 't3']);
     expect(keys(s!.work)).toEqual(['a1', 'a2']);
   });
+
+  it('LỖI ĐÃ SỬA: câu trả lời dài + công cụ chạy sau + câu chốt ngắn → câu dài vẫn HIỆN (nằm ở kept)', () => {
+    const long = 'Toàn bộ nội dung trả lời chi tiết. '.repeat(12); // > 280 ký tự
+    const s = splitWork([act('a1'), act('a2'), text('t1', long), act('a3'), text('t2', 'Chốt.')]);
+    expect(s).not.toBeNull();
+    expect(keys(s!.tail)).toEqual(['t2']); // câu chốt vẫn ở đuôi
+    expect(keys(s!.kept)).toEqual(['t1']); // câu dài KHÔNG bị gấp
+    expect(textOf(s!.kept)).toContain('nội dung trả lời chi tiết');
+    expect(textOf(s!.work)).not.toContain('nội dung trả lời chi tiết');
+  });
+
+  it('lời dẫn NGẮN thì vẫn gấp (không phá thiết kế cũ)', () => {
+    const s = splitWork([act('a1'), act('a2'), text('t1', 'Để em kiểm tra…'), act('a3'), text('t2', 'Xong.')]);
+    expect(keys(s!.work)).toEqual(['a1', 'a2', 't1', 'a3']);
+    expect(keys(s!.kept)).toEqual([]);
+  });
 });

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { completionGate, type GateInput } from '../src/core/engine/completion';
+import { GATE_MAX_NUDGES, completionGate, type GateInput } from '../src/core/engine/completion';
 
 const base = (over: Partial<GateInput> = {}): GateInput => ({
   stop: 'end_turn',
@@ -42,12 +42,29 @@ describe('completionGate — cổng hoàn thành do máy phán', () => {
     expect(completionGate(base({ wroteFiles: true, execCalls: 2 }), 'vi')).toBeNull();
   });
 
-  it('mỗi lý do chỉ nhắc một lần, tổng tối đa 2 lần', () => {
+  // (0.6.31) Quy tắc cũ "mỗi lý do chỉ một lần, tổng tối đa 2" làm nhánh "lần thứ ba → báo người dùng" của engine KHÔNG BAO GIỜ chạy tới
+  // (nhắc việc dở một lần rồi lượt kết thúc im lặng). Quy tắc mới: mỗi lý do được nói ra ít nhất một lần, việc dở được nhắc LẠI, tổng ≤ 3.
+  it('thứ tự: việc dở → kiểm chứng (mỗi thứ nói một lần trước) → việc dở nhắc lại', () => {
     const todos = [{ title: 'A', status: 'pending' as const }];
-    expect(completionGate(base({ pendingTodos: todos, reasons: ['todos'] }), 'vi')).toBeNull();
-    const second = completionGate(base({ pendingTodos: todos, wroteFiles: true, nudges: 1, reasons: ['todos'] }), 'vi');
-    expect(second?.reason).toBe('verify');
-    expect(completionGate(base({ pendingTodos: todos, wroteFiles: true, nudges: 2, reasons: ['todos', 'verify'] }), 'vi')).toBeNull();
+    expect(completionGate(base({ pendingTodos: todos, wroteFiles: true }), 'vi')?.reason).toBe('todos');
+    expect(completionGate(base({ pendingTodos: todos, wroteFiles: true, nudges: 1, reasons: ['todos'] }), 'vi')?.reason).toBe('verify');
+    expect(completionGate(base({ pendingTodos: todos, wroteFiles: true, nudges: 2, reasons: ['todos', 'verify'] }), 'vi')?.reason).toBe('todos');
+  });
+
+  it('việc dở còn nguyên sau lần nhắc đầu → nhắc lại (model hay lờ lần đầu); kiểm chứng thì KHÔNG lặp', () => {
+    const todos = [{ title: 'A', status: 'pending' as const }];
+    expect(completionGate(base({ pendingTodos: todos, nudges: 1, reasons: ['todos'] }), 'vi')?.reason).toBe('todos');
+    expect(completionGate(base({ pendingTodos: todos, nudges: 2, reasons: ['todos', 'todos'] }), 'vi')?.reason).toBe('todos'); // lần 3 = lần chốt của engine
+    expect(completionGate(base({ wroteFiles: true, nudges: 1, reasons: ['verify'] }), 'vi')).toBeNull(); // đã nhắc kiểm chứng rồi, hết việc dở
+  });
+
+  it('TRẦN: từ lần can thiệp thứ 4 trở đi không bao giờ chặn nữa, dù còn gì', () => {
+    const todos = [{ title: 'A', status: 'pending' as const }];
+    expect(completionGate(base({ pendingTodos: todos, wroteFiles: true, nudges: 3, reasons: ['todos', 'verify', 'todos'] }), 'vi')).toBeNull();
+    expect(completionGate(base({ pendingTodos: todos, nudges: 9, reasons: [] }), 'vi')).toBeNull();
+    expect(GATE_MAX_NUDGES).toBe(3);
+    // maxNudges tuỳ chỉnh vẫn được tôn trọng
+    expect(completionGate(base({ pendingTodos: todos, nudges: 1, reasons: ['todos'], maxNudges: 1 }), 'vi')).toBeNull();
   });
 
   it('người dùng bấm Dừng, hoặc đang tổng kết vì chạm trần → không chặn', () => {

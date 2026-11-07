@@ -225,21 +225,6 @@ const vi = {
   'rating.stars': 'Chọn số sao',
   'rating.star': '{n} sao',
   'rating.hint': 'Mở trang Chrome Web Store để viết đánh giá.',
-  // ── bảng tác vụ ──
-  'todo.title': 'Tác vụ',
-  'todo.remaining': 'Việc còn lại',
-  'todo.runAll': 'Tiếp tục tất cả',
-  'todo.dismiss': 'Ẩn danh sách này',
-  'todo.pick.title': 'Bấm để trợ lý làm tiếp bước này',
-  'todo.continue.one': 'Tiếp tục: {title}',
-  'todo.continue.all': 'Tiếp tục thực hiện các bước còn lại trong kế hoạch.',
-  'todo.progress': '{done}/{total} hoàn thành',
-  'todo.current': 'Đang làm: {title}',
-  'todo.expand': 'Mở danh sách tác vụ',
-  'todo.collapse': 'Thu gọn danh sách tác vụ',
-  'todo.status.pending': 'Chưa làm',
-  'todo.status.in_progress': 'Đang làm',
-  'todo.status.completed': 'Đã xong',
 
   // ── dòng thời gian ──
   'act.taskAdded': 'Đã thêm tác vụ: {title}',
@@ -816,6 +801,23 @@ const vi = {
   'chr.safe.2': "Cầu nối chỉ mở trên máy bạn (127.0.0.1), cần mã ghép đôi dùng một lần; trang web không chạm vào được.",
   'chr.safe.3': "Nội dung trang gửi tới nhà cung cấp AI bạn đang dùng — chỉ cho phép những trang bạn thoải mái chia sẻ.",
   'chr.need': "Chrome chính thức không tự nạp extension từ thư mục: dùng \"Tải tiện ích đã giải nén\" ở chrome://extensions (bật Chế độ nhà phát triển).",
+  // ── (lane:cc-timeline-ui) ──
+  // ── (lane:ctx-compaction) ──
+  // ── (lane:output-timeouts) ──
+  // ── (lane:loop-guards) ──
+  // ── (lane:blind-verifier) ──
+  // ── (lane:checkpoints-rewind) ──
+  // ── (lane:perm-rules) ──
+  // ── (lane:hooks) ──
+  // ── (lane:commands-agents) ──
+  // ── (lane:bg-tasks) ──
+  // ── (lane:ide-context) ──
+  // ── (lane:sessions-ux) ──
+  // ── (lane:customer-bugs) ──
+  // ── (lane:gateway-client) ──
+  // ── (lane:mcp-parity) ──
+  // ── (lane:instructions-memory) ──
+  // ── (lane:tools-parity) ──
 } as const;
 
 export type I18nKey = keyof typeof vi;
@@ -1030,22 +1032,8 @@ const en: Record<I18nKey, string> = {
   'rating.stars': 'Choose a rating',
   'rating.star': '{n} stars',
   'rating.hint': 'Opens the Chrome Web Store page to write a review.',
-  'todo.title': 'Tasks',
   'options.title': 'Which reading did you mean?',
   'options.hide': 'Hide these options',
-  'todo.remaining': 'Remaining steps',
-  'todo.runAll': 'Continue all',
-  'todo.dismiss': 'Hide this list',
-  'todo.pick.title': 'Click to let the assistant do this step',
-  'todo.continue.one': 'Continue: {title}',
-  'todo.continue.all': 'Continue with the remaining steps of the plan.',
-  'todo.progress': '{done}/{total} done',
-  'todo.current': 'Working on: {title}',
-  'todo.expand': 'Expand task list',
-  'todo.collapse': 'Collapse task list',
-  'todo.status.pending': 'Pending',
-  'todo.status.in_progress': 'In progress',
-  'todo.status.completed': 'Completed',
 
   'act.taskAdded': 'Added task: {title}',
   'act.skillLoaded': 'Loaded skill {skill}',
@@ -1613,6 +1601,23 @@ const en: Record<I18nKey, string> = {
   'chr.safe.2': "The bridge only listens on your machine (127.0.0.1) and needs a one-time pairing code; websites cannot reach it.",
   'chr.safe.3': "Page content goes to the AI provider you use — only allow pages you are comfortable sharing.",
   'chr.need': "Official Chrome does not auto-load unpacked extensions: use \"Load unpacked\" at chrome://extensions (turn on Developer mode).",
+  // ── (lane:cc-timeline-ui) ──
+  // ── (lane:ctx-compaction) ──
+  // ── (lane:output-timeouts) ──
+  // ── (lane:loop-guards) ──
+  // ── (lane:blind-verifier) ──
+  // ── (lane:checkpoints-rewind) ──
+  // ── (lane:perm-rules) ──
+  // ── (lane:hooks) ──
+  // ── (lane:commands-agents) ──
+  // ── (lane:bg-tasks) ──
+  // ── (lane:ide-context) ──
+  // ── (lane:sessions-ux) ──
+  // ── (lane:customer-bugs) ──
+  // ── (lane:gateway-client) ──
+  // ── (lane:mcp-parity) ──
+  // ── (lane:instructions-memory) ──
+  // ── (lane:tools-parity) ──
 };
 
 const dictionaries: Record<Lang, Record<string, string>> = { vi, en };

@@ -1,4 +1,4 @@
-/** Chip số agent con đang chạy, cạnh mức suy luận. Bấm vào: bảng agent GIỮA màn hình (tên, trạng thái, đang làm gì, thời gian, token/lệnh). */
+/** Chip số agent con đang chạy. Bấm vào: SƠ ĐỒ LUỒNG rộng — agent điều phối ở trên, các agent con nối xuống dưới, thấy rõ ai đang làm gì. */
 import { useEffect, useMemo, useRef, useState } from 'preact/hooks';
 import type { ToolBlock, ViewState } from '../../../../src/shared/protocol';
 import { useApp } from '../../ctx';
@@ -21,10 +21,12 @@ export function agentsOf(view: ViewState): ToolBlock[] {
 }
 
 /**
- * Đóng bảng SAU MỘT NHỊP (260 ms) chứ không đóng ngay khi rời chip: bảng nổi ở giữa màn hình, con trỏ
- * phải đi qua khoảng trống mới tới được nó — đóng ngay thì không kịp trỏ vào xem agent nào làm gì.
+ * Đóng bảng SAU MỘT NHỊP chứ không đóng ngay khi rời chip: bảng nổi ở giữa màn hình, con trỏ phải đi qua
+ * khoảng trống mới tới được nó — đóng ngay thì không kịp trỏ vào xem agent nào làm gì.
  */
 const CLOSE_DELAY_MS = 260;
+
+const STATE_LABEL: Record<string, string> = { running: 'running', error: 'error', done: 'done' };
 
 export function AgentChip({ view }: { view: ViewState }) {
   const { t, lang } = useApp();
@@ -53,7 +55,7 @@ export function AgentChip({ view }: { view: ViewState }) {
       <button
         type="button"
         class={cx('picker-btn', open && 'is-open', live.length > 0 && 'is-live')}
-        aria-haspopup="listbox"
+        aria-haspopup="dialog"
         aria-expanded={open}
         aria-label={live.length ? t('agent.chip.title') : t('agent.chip.done')}
         title={`${live.length ? t('agent.chip.title') : t('agent.chip.done')}\n${agents.map((a) => describeTool(lang, a.name, a.args, a.state).label).join('\n')}`}
@@ -63,42 +65,50 @@ export function AgentChip({ view }: { view: ViewState }) {
         <span class="agent-count">{t('agent.chip', { n })}</span>
       </button>
       {open && (
-        <div
-          class="popover popover-small agent-pop"
-          role="list"
-          aria-label={t('agent.chip.done')}
-          onMouseEnter={stayOpen}
-          onMouseLeave={closeLater}
-        >
-          {agents.map((a) => {
-            const d = describeTool(lang, a.name, a.args, a.state);
-            const st = agentStats(a);
-            const secs = a.startedAt ? Math.round(((a.durationMs ?? Date.now() - a.startedAt) || 0) / 1000) : undefined;
-            const bits = [secs !== undefined && secs >= 1 ? formatDuration(secs * 1000, lang) : '', st.tokens || st.tools ? t('agent.row.tokens', { n: formatCompact(st.tokens, lang), m: formatInt(st.tools, lang) }) : ''].filter(Boolean).join(' · ');
-            const doing = st.activity && a.state === 'running' ? st.activity : '';
-            // Rê chuột vào một dòng: hiện đầy đủ trong tooltip (tên đầy đủ, việc đang làm, số liệu) — dòng hiển thị bị cắt bằng "…" ở khung hẹp.
-            const tip = [d.label, d.detail, doing, bits].filter(Boolean).join('\n');
-            return (
-              <div key={a.id} class={cx('agent-row', a.state !== 'running' && 'agent-row-done')} role="listitem" title={tip}>
-                <span class="act-icon">{a.state === 'running' ? <LoSpinner size={13} /> : a.state === 'error' ? <Icon name="alert" size={13} /> : <Icon name="check" size={13} />}</span>
-                <span class="agent-row-main">
-                  <span class="agent-row-name" title={d.label}>
-                    {d.label}
-                  </span>
-                  <span class="agent-row-meta">
-                    {d.detail ? `${d.detail}${bits ? ' · ' : ''}` : ''}
-                    {bits}
-                  </span>
-                  {doing && (
-                    <span class="agent-row-meta agent-row-act" title={doing}>
-                      {doing}
+        <div class="popover agent-pop" role="dialog" aria-label={t('agent.chip.done')} onMouseEnter={stayOpen} onMouseLeave={closeLater}>
+          <div class="agent-flow-head">
+            <span class="agent-flow-title">{live.length ? t('agent.chip.title') : t('agent.chip.done')}</span>
+            <span class="agent-flow-count">
+              <b>{live.length}</b>/{agents.length}
+            </span>
+          </div>
+          <div class="agent-flow">
+            <div class="agent-node is-main">
+              <span class="agent-node-dot" data-state={live.length ? 'running' : 'done'} />
+              <span class="agent-node-body">
+                <span class="agent-node-name">Locaith</span>
+                <span class="agent-node-meta">Locaith-v5-flash · điều phối {agents.length} agent</span>
+              </span>
+            </div>
+            <ul class="agent-flow-kids" role="list">
+              {agents.map((a) => {
+                const d = describeTool(lang, a.name, a.args, a.state);
+                const st = agentStats(a);
+                const secs = a.startedAt ? Math.round(((a.durationMs ?? Date.now() - a.startedAt) || 0) / 1000) : undefined;
+                const bits = [secs !== undefined && secs >= 1 ? formatDuration(secs * 1000, lang) : '', st.tokens || st.tools ? t('agent.row.tokens', { n: formatCompact(st.tokens, lang), m: formatInt(st.tools, lang) }) : ''].filter(Boolean).join(' · ');
+                const doing = st.activity && a.state === 'running' ? st.activity : '';
+                const tip = [d.label, d.detail, doing, bits].filter(Boolean).join('\n');
+                return (
+                  <li key={a.id} class={cx('agent-node', `is-${STATE_LABEL[a.state] ?? 'done'}`)} role="listitem" title={tip}>
+                    <span class="agent-node-dot" data-state={a.state} />
+                    <span class="agent-node-body">
+                      <span class="agent-node-name">{d.label}</span>
+                      <span class="agent-node-meta">
+                        {d.detail ? `${d.detail}${bits ? ' · ' : ''}` : ''}
+                        {bits}
+                      </span>
+                      {doing && (
+                        <span class="agent-node-act" title={doing}>
+                          {doing}
+                        </span>
+                      )}
+                      {a.state === 'error' && a.output && <span class="agent-node-err">{a.output.slice(0, 160)}</span>}
                     </span>
-                  )}
-                  {a.state === 'error' && a.output && <span class="agent-row-meta agent-row-err">{a.output.slice(0, 160)}</span>}
-                </span>
-              </div>
-            );
-          })}
+                  </li>
+                );
+              })}
+            </ul>
+          </div>
         </div>
       )}
     </div>

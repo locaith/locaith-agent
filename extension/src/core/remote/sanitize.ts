@@ -3,7 +3,7 @@
  * (kết quả công cụ, đối số, diff, suy luận). Thuần tuý, không import `vscode`.
  */
 
-import type { ABlock, AgentProgress, AttachmentInfo, DiffInfo, PermissionRequest, QueuedInfo, TItem, ToolBlock, UiEvent, ViewState } from '../../shared/protocol';
+import type { ABlock, AgentProgress, AttachmentInfo, CompactInfo, DiffInfo, PermissionRequest, QueuedInfo, TItem, ToolBlock, UiEvent, ViewState } from '../../shared/protocol';
 import type { RemoteHostInfo, RemoteProvider, RemoteState } from './protocol';
 import { REMOTE_API_VERSION } from './protocol';
 
@@ -90,6 +90,23 @@ export function sanitizeAgent(a: AgentProgress): AgentProgress {
   };
 }
 
+const COMPACT_SUMMARY_CAP = 1500;
+
+/** Số liệu nén ngữ cảnh gửi ra Remote: chỉ chế độ hợp lệ, số nguyên không âm và bản tóm tắt đã cắt (dữ liệu từ máy khách/tệp sao lưu không được tin). */
+export function sanitizeCompact(c: CompactInfo): CompactInfo {
+  const mode = c && (c.mode === 'auto' || c.mode === 'manual' || c.mode === 'overflow') ? c.mode : 'auto';
+  const out: CompactInfo = { mode };
+  const n = (v: unknown): number | undefined => (typeof v === 'number' && Number.isFinite(v) ? wholeNumber(v) : undefined);
+  const freed = n(c?.tokensFreed);
+  const sum = n(c?.summarizedMessages);
+  const cleared = n(c?.clearedResults);
+  if (freed !== undefined) out.tokensFreed = freed;
+  if (sum !== undefined) out.summarizedMessages = sum;
+  if (cleared !== undefined) out.clearedResults = cleared;
+  if (typeof c?.summary === 'string' && c.summary) out.summary = cap(c.summary, COMPACT_SUMMARY_CAP);
+  return out;
+}
+
 function sanitizeTool(b: ToolBlock): RemoteToolBlock {
   const { images, agent, ...rest } = b;
   return {
@@ -119,6 +136,8 @@ function sanitizeBlock(b: ABlock): ABlock {
       return sanitizeTool(b) as unknown as ABlock;
     case 'thinking':
       return b.text.length > THINK_CAP ? { ...b, text: capTail(b.text, THINK_CAP) } : b;
+    case 'notice':
+      return b.compact ? { ...b, compact: sanitizeCompact(b.compact) } : b;
     default:
       return b;
   }
@@ -127,6 +146,7 @@ function sanitizeBlock(b: ABlock): ABlock {
 export function sanitizeItem(it: TItem): TItem {
   if (it.kind === 'user') return { ...it, attachments: it.attachments.map(sanitizeAttachment) };
   if (it.kind === 'assistant') return { ...it, blocks: it.blocks.map(sanitizeBlock) };
+  if (it.kind === 'notice' && it.compact) return { ...it, compact: sanitizeCompact(it.compact) };
   return it;
 }
 
@@ -207,6 +227,8 @@ export function sanitizeEvent(ev: UiEvent): UiEvent {
       return { ...ev, ...sanitizeAgent(ev) };
     case 'tool_permission':
       return { ...ev, request: sanitizePermission(ev.request) };
+    case 'notice':
+      return ev.compact ? { ...ev, compact: sanitizeCompact(ev.compact) } : ev;
     case 'tool_end': {
       const { images, ...rest } = ev;
       return {
