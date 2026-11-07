@@ -20,6 +20,7 @@ import { Spinner } from '../ui';
 import { AgentChip } from './AgentChip';
 import { RunClock } from './RunClock'; // (lane:cc-timeline-ui)
 import { ContextMeter, ModelPicker, ModePicker, SwarmToggle, ThinkingPicker } from './Pickers';
+import { isModeCycleKey, nextMode } from '../../modeCycle'; // (lane:perm-rules)
 
 const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
 const MAX_TEXTAREA_PX = 260;
@@ -539,6 +540,13 @@ export function Composer({ view }: { view: ViewState }) {
   const onKeyDown = (e: KeyboardEvent) => {
     // Bộ gõ đang ghép chữ (Telex/VNI/IME): để nguyên cho bộ gõ xử lý.
     if (e.isComposing || composing.current || e.keyCode === 229) return;
+
+    // (lane:perm-rules) Shift+Tab xoay vòng chế độ quyền (default → acceptEdits → plan), như Claude Code; không áp khi menu @/ / đang mở.
+    if (!menuOpen && isModeCycleKey(e)) {
+      e.preventDefault();
+      post({ type: 'set_mode', mode: nextMode(view.mode) });
+      return;
+    }
 
     if (menuOpen) {
       const count = mention ? files.length : slashItems.length;

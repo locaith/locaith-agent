@@ -362,6 +362,34 @@
           "scope": "machine",
           "markdownDescription": "%cfg.allowBypass%"
         },
+        "locaithAgent.permissions.allow": {
+          "type": "array",
+          "items": { "type": "string" },
+          "default": [],
+          "scope": "machine-overridable",
+          "markdownDescription": "%cfg.permissions.allow%"
+        },
+        "locaithAgent.permissions.ask": {
+          "type": "array",
+          "items": { "type": "string" },
+          "default": [],
+          "scope": "resource",
+          "markdownDescription": "%cfg.permissions.ask%"
+        },
+        "locaithAgent.permissions.deny": {
+          "type": "array",
+          "items": { "type": "string" },
+          "default": [],
+          "scope": "resource",
+          "markdownDescription": "%cfg.permissions.deny%"
+        },
+        "locaithAgent.permissions.trustedWorkspaceAllow": {
+          "type": "array",
+          "items": { "type": "string" },
+          "default": [],
+          "scope": "machine",
+          "markdownDescription": "%cfg.permissions.trustedWorkspaceAllow%"
+        },
         "locaithAgent.chrome.bridge": {
           "type": "boolean",
           "default": true,

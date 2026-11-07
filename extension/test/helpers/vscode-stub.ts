@@ -27,9 +27,16 @@ export const workspace = {
       defaultValue: undefined as T | undefined,
       globalValue: settingsStub.global[key] as T | undefined,
       workspaceValue: settingsStub.workspace[key] as T | undefined,
+      workspaceFolderValue: undefined as T | undefined,
     }),
-    update: async () => undefined,
+    // (lane:perm-rules) ghi vào đúng cấp để test kiểm được "lưu vào phạm vi nào".
+    update: async (key: string, value: unknown, target?: number) => {
+      const bag = target === 1 || target === undefined ? settingsStub.global : settingsStub.workspace;
+      if (value === undefined) delete bag[key];
+      else bag[key] = value;
+    },
   }),
+  onDidChangeConfiguration: () => ({ dispose() {} }),
 };
 export const window = {};
 export class Uri {

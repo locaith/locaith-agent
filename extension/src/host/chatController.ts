@@ -5,6 +5,7 @@ import { hostRunExtensions } from './hostExtensions';
 import { registerVerifySlash } from './extensions/verifier'; // (lane:blind-verifier)
 import { SlashRegistry, type SlashContext } from './slashRegistry';
 import { commandsOutputStyle, registerCommandsSlash, type CommandsLaneAccess } from './commandsSlash'; // (lane:commands-agents)
+import { attachPermissionsFeature, type PermissionsFeature } from './permissionsFeature'; // (lane:perm-rules)
 import { loadProjectInstructions } from '../core/engine/instructions';
 import { resumeInstruction } from '../core/engine/resume';
 import { MEMORY_DIR, MEMORY_INDEX, type MemoryScope, type MemorySnapshot } from '../core/engine/memory';
@@ -221,6 +222,8 @@ export class ChatController implements vscode.Disposable {
   private readonly registry: ToolRegistry;
   /** Sổ đăng ký lệnh gạch chéo của các tính năng (xem slashRegistry.ts); lệnh dựng sẵn vẫn ở `handleSlash`. */
   private readonly slash = new SlashRegistry();
+  /** (lane:perm-rules) Luật quyền allow/ask/deny: lệnh /permissions, tin «Luôn cho phép», trường `permissions` của ViewState. */
+  private readonly perms: PermissionsFeature;
   private readonly detachMcp: () => void;
   private readonly accountSub?: vscode.Disposable;
   private readonly remoteSub?: vscode.Disposable;
@@ -285,7 +288,20 @@ export class ChatController implements vscode.Disposable {
     // registerCompactSlash(this.slash, this); // (lane:ctx-compaction)  /compact <hướng dẫn>
     registerVerifySlash(this.slash, { host: this.host, registry: this.registry, deps: this.d, session: () => this.session, emit: (ev) => this.emit(ev), runTurn: (fn) => this.runVerifyTurn(fn) }); // (lane:blind-verifier)  /verify
     // registerRewindSlash(this.slash, this); // (lane:checkpoints-rewind)  /rewind
-    // registerPermissionsSlash(this.slash, this); // (lane:perm-rules)  /permissions
+    // (lane:perm-rules) /permissions + tin «Luôn cho phép» / thêm-xoá luật + trường `permissions` của ViewState.
+    this.perms = attachPermissionsFeature(this.slash, {
+      config: d.config,
+      lang: () => this.lang,
+      patch: (p) => this.patch(p),
+      notice: (level, text) => this.emit({ t: 'notice', level, text }),
+      resolvePermission: (id, decision) => {
+        const w = this.waiters.get(id);
+        if (!w) return false;
+        w(decision);
+        return true;
+      },
+      showScreen: (screen) => this.showScreen(screen),
+    });
     // registerHooksSlash(this.slash, this); // (lane:hooks)  /hooks
     registerCommandsSlash(this.slash, this); // (lane:commands-agents)  lệnh tuỳ chỉnh + /review /simplify /status /doctor /agents /output-style /mcp
     // registerTasksSlash(this.slash, this); // (lane:bg-tasks)  /tasks
@@ -604,6 +620,7 @@ export class ChatController implements vscode.Disposable {
       skills: this.skillSummaries(),
       slashCommands: this.slashList(),
       allowBypass: this.d.config.allowBypass(),
+      permissions: this.perms.view(), // (lane:perm-rules)
       screen: 'chat',
       orchestration: { mode: this.d.config.orchestrationMode(), pool: [] },
       canQueue: true,
@@ -931,6 +948,7 @@ export class ChatController implements vscode.Disposable {
       this.requireAccount();
       return;
     }
+    if (this.perms.handle(m)) return; // (lane:perm-rules)
     switch (m.type) {
       case 'ready':
         this.stats.ready++;
@@ -2408,6 +2426,7 @@ export class ChatController implements vscode.Disposable {
     this.disposed = true;
     for (const fn of this.laneDisposers.splice(0)) fn(); // (lane:commands-agents)
     this.queue = [];
+    this.perms.dispose(); // (lane:perm-rules)
     this.detachMcp();
     this.accountSub?.dispose();
     this.remoteSub?.dispose();

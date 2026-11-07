@@ -13,6 +13,7 @@ import { RemoteCard } from './RemoteView';
 import { AddProviderForm, BrowserSettingsSections } from './BrowserSettings';
 import { Icon } from './Icons';
 import { OrchestrationSection } from './OrchestrationSection';
+import { PermissionsPanel } from './PermissionsPanel'; // (lane:perm-rules)
 import { Badge, Button, ProviderBadge, Segmented, Switch } from './ui';
 
 const FONT_ORDER: UiFontFamily[] = ['be-vietnam-pro', 'manrope', 'inter', 'system'];
@@ -310,6 +311,7 @@ export function SettingsView({ view, onSetting }: { view: ViewState; onSetting: 
       </section>
 
       {!isBrowser && <OrchestrationSection view={view} />}
+      {!isBrowser && <PermissionsPanel view={view.permissions} />} {/* (lane:perm-rules) */}
 
       <section class="set-section">
         <h2 class="set-title">{t('set.ui')}</h2>

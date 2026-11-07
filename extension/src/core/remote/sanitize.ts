@@ -61,14 +61,28 @@ export function capDiff(d: DiffInfo): DiffInfo {
   return { ...d, hunks, ...(truncated ? { truncated: true } : {}) };
 }
 
+/** (lane:perm-rules) Chữ một luật quyền gửi ra ngoài: một dòng, tối đa 200 ký tự. */
+const RULE_CAP = 200;
+export function sanitizeRule(r: unknown): string | undefined {
+  if (typeof r !== 'string' || !r) return undefined;
+  // eslint-disable-next-line no-control-regex
+  const s = r.replace(/[\u0000-\u001f\u007f]/g, ' ').trim();
+  return s ? cap(s, RULE_CAP) : undefined;
+}
+
 function sanitizePermission(p: PermissionRequest): PermissionRequest {
+  const { rule, suggest, ...rest } = p;
+  const cleanRule = sanitizeRule(rule);
+  const cleanSuggest = Array.isArray(suggest) ? suggest.map(sanitizeRule).filter((s): s is string => !!s).slice(0, 3) : [];
   return {
-    ...p,
+    ...rest,
     title: cap(p.title, 300),
     ...(p.detail ? { detail: cap(p.detail, 1000) } : {}),
     ...(p.command ? { command: cap(p.command, 2000) } : {}),
     ...(p.planMarkdown ? { planMarkdown: cap(p.planMarkdown, 20_000) } : {}),
     ...(p.diff ? { diff: capDiff(p.diff) } : {}),
+    ...(cleanRule ? { rule: cleanRule } : {}),
+    ...(cleanSuggest.length ? { suggest: cleanSuggest } : {}),
   };
 }
 
@@ -155,9 +169,11 @@ export function sanitizeVerify(v: VerifyInfo): VerifyInfo {
 }
 
 function sanitizeTool(b: ToolBlock): RemoteToolBlock {
-  const { images, agent, ...rest } = b;
+  const { images, agent, rule, ...rest } = b;
+  const cleanRule = sanitizeRule(rule);
   return {
     ...rest,
+    ...(cleanRule ? { rule: cleanRule } : {}),
     ...(agent && typeof agent === 'object' ? { agent: sanitizeAgent(agent) } : {}),
     args: capArgs(b.args),
     ...(b.output !== undefined ? { output: capTail(b.output, OUT_CAP) } : {}),
@@ -303,8 +319,11 @@ export function sanitizeEvent(ev: UiEvent): UiEvent {
   switch (ev.t) {
     case 'user':
       return { ...ev, attachments: ev.attachments.map(sanitizeAttachment) };
-    case 'tool_start':
-      return { ...ev, args: capArgs(ev.args) };
+    case 'tool_start': {
+      const { rule, ...rest } = ev;
+      const cleanRule = sanitizeRule(rule);
+      return { ...rest, args: capArgs(ev.args), ...(cleanRule ? { rule: cleanRule } : {}) };
+    }
     case 'tool_progress':
       return ev.output.length > 4000 ? { ...ev, output: capTail(ev.output, 4000) } : ev;
     case 'thinking': {

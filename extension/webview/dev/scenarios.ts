@@ -451,6 +451,9 @@ const permCmd: PermissionRequest = {
   command: 'npm test -- --run src/utils/formatMoney.test.ts',
   canAllowSession: true,
   sessionLabel: 'Luôn cho phép `npm test` trong phiên này',
+  // (lane:perm-rules) đặc tả «Luôn cho phép» host đề xuất + luật ask đã buộc hỏi
+  suggest: ['run_command(npm test:*)'],
+  rule: 'run_command(npm test*)',
 };
 
 const permPlan: PermissionRequest = {
@@ -646,7 +649,22 @@ export function onboardingState(): ViewState {
 }
 
 export function settingsState(withKeys: boolean): ViewState {
-  return baseState({ screen: 'settings', providers: withKeys ? PROVIDERS : noKeyProviders() });
+  return baseState({
+    screen: 'settings',
+    providers: withKeys ? PROVIDERS : noKeyProviders(),
+    // (lane:perm-rules) khu quản lý luật quyền mở sẵn (như sau lệnh /permissions), có luật của cả hai nguồn và một danh sách dự án đề xuất chờ xác nhận
+    permissions: {
+      focus: true,
+      rules: [
+        { action: 'deny', text: 'read_file(.env*)', source: 'user' },
+        { action: 'deny', text: 'run_command(git push*)', source: 'workspace' },
+        { action: 'ask', text: 'write_file(docs/**)', source: 'workspace' },
+        { action: 'allow', text: 'run_command(npm test:*)', source: 'user' },
+        { action: 'allow', text: 'edit_file(src/**)', source: 'user' },
+      ],
+      workspaceAllowPending: { hash: '1a2b3c4d', rules: ['run_command(npm run build:*)', 'fetch_url(domain:api.github.com)'] },
+    },
+  });
 }
 
 // ── 0.6.0: nhiều việc cùng lúc — dòng tóm tắt «N lệnh gọi công cụ» + dòng agent con sống (webview/src/styles/parallel.css) ──

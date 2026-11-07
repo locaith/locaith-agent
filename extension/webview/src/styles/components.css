@@ -908,6 +908,227 @@ button.tool-head:hover .tool-label {
   padding-block: 6px;
 }
 
+/* ── (lane:perm-rules) luật quyền: dòng «hỏi theo luật», ô «Luôn cho phép», khu quản lý ── */
+.perm-rule {
+  margin-left: auto;
+  font-size: var(--nd-fs-xs);
+  color: var(--fg-faint);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 55%;
+}
+.perm-always {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.perm-rule-input,
+.perm-select {
+  width: 100%;
+  min-width: 0;
+  padding: 6px 10px;
+  border-radius: 10px;
+  border: 1px solid var(--field-line);
+  background: var(--field-bg);
+  color: var(--fg);
+  font-family: var(--nd-code-font, ui-monospace, monospace);
+  font-size: var(--nd-fs-sm);
+  line-height: 1.5;
+}
+.perm-select {
+  width: auto;
+  font-family: inherit;
+}
+.perm-rule-input:focus-visible,
+.perm-select:focus-visible {
+  outline: none;
+  border-color: var(--accent-text);
+}
+.perm-rule-input.is-invalid {
+  border-color: color-mix(in srgb, var(--danger, #e5484d) 70%, var(--field-line));
+}
+.perm-always-foot,
+.perm-add-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.perm-always-hint {
+  font-size: var(--nd-fs-xs);
+  color: var(--fg-faint);
+  flex: 1 1 160px;
+}
+.perm-scope {
+  display: inline-flex;
+  gap: 2px;
+  padding: 2px;
+  border-radius: 9px;
+  border: 1px solid var(--line);
+}
+.perm-scope-opt {
+  padding: 3px 9px;
+  border-radius: 7px;
+  font-size: var(--nd-fs-xs);
+  color: var(--fg-muted);
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+}
+.perm-scope-opt.is-on {
+  color: var(--fg);
+  background: color-mix(in srgb, var(--accent-text) 16%, transparent);
+}
+.perm-scope-opt:focus-visible {
+  outline: 1px solid var(--accent-text);
+  outline-offset: 1px;
+}
+
+.perm-rules-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 0;
+  background: transparent;
+  border: 0;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.perm-rules-head .set-title {
+  margin: 0;
+}
+.perm-rules-count {
+  font-size: var(--nd-fs-xs);
+  color: var(--fg-faint);
+  font-variant-numeric: tabular-nums;
+}
+.perm-rules-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--warn);
+}
+.perm-rules-head .tool-chevron {
+  margin-left: auto;
+  color: var(--fg-faint);
+}
+.perm-rules-body {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: 10px;
+  padding-left: 10px;
+  border-left: 1px solid var(--line);
+}
+.perm-group-title {
+  font-size: var(--nd-fs-xs);
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  margin-bottom: 4px;
+}
+.perm-group-title.tone-ok {
+  color: var(--ok-text);
+}
+.perm-group-empty {
+  font-size: var(--nd-fs-xs);
+  color: var(--fg-faint);
+}
+.perm-rule-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.perm-rule-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  padding: 2px 0;
+}
+.perm-rule-row .inline-code {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+.perm-rule-src {
+  font-size: var(--nd-fs-xs);
+  color: var(--fg-faint);
+  flex: 0 0 auto;
+}
+.perm-rule-del {
+  margin-left: auto;
+  display: inline-grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 6px;
+  border: 0;
+  background: transparent;
+  color: var(--fg-faint);
+  cursor: pointer;
+  flex: 0 0 auto;
+}
+.perm-rule-del:hover,
+.perm-rule-del:focus-visible {
+  color: var(--fg);
+  background: color-mix(in srgb, var(--fg) 10%, transparent);
+  outline: none;
+}
+.perm-add,
+.perm-try {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.perm-add-row .perm-rule-input {
+  flex: 1 1 160px;
+  width: auto;
+}
+.perm-try-result {
+  font-size: var(--nd-fs-sm);
+  color: var(--fg-muted);
+  overflow-wrap: anywhere;
+}
+.perm-try-result.tone-ok {
+  color: var(--ok-text);
+}
+.perm-pending {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding-left: 10px;
+  border-left: 2px solid var(--warn);
+}
+.perm-pending-title {
+  font-weight: 600;
+  font-size: var(--nd-fs-sm);
+}
+.perm-pending-hint {
+  font-size: var(--nd-fs-xs);
+  color: var(--fg-faint);
+}
+.perm-pending .btn,
+.perm-add-row .btn {
+  align-self: flex-start;
+  width: auto;
+}
+.perm-rules-collapse {
+  align-self: flex-start;
+}
+@media (prefers-reduced-motion: reduce) {
+  .perm-card {
+    animation: none;
+  }
+}
+
 /* ── diff ─────────────────────────────────────────────────────────────────── */
 
 .diff {
