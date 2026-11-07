@@ -12,6 +12,7 @@ import locaithAddendum from '../prompts/locaith.addendum.md';
 import { LOCAITH_PROVIDER_ID } from '../providers/locaithGateway';
 import type { PermissionMode } from '../../shared/protocol';
 import type { ToolHost } from './types';
+import { outputStyleBlock, type SessionOutputStyle } from '../commands/outputStyles'; // (lane:commands-agents)
 
 export type PromptProfile = 'ide' | 'browser';
 
@@ -36,6 +37,8 @@ export interface SystemPromptInput {
   profile?: PromptProfile;
   /** Nhà cung cấp của phiên: họ mô hình Locaith được nhắc thêm về hai kỹ năng riêng (văn bản Nghị định 30, ghi nhớ). Nhà cung cấp khác: prompt giữ nguyên từng byte. */
   providerId?: string;
+  /** (lane:commands-agents) Phong cách đầu ra (`/output-style`); null/'default' = prompt giữ nguyên từng byte. */
+  outputStyle?: SessionOutputStyle | null;
 }
 
 const OS_NAME = { windows: 'Windows', mac: 'macOS', linux: 'Linux' } as const;
@@ -147,6 +150,10 @@ export function buildSystemPrompt(i: SystemPromptInput): string {
         '</swarm_mode>',
     );
   }
+
+  // (lane:commands-agents) Phong cách đầu ra: chỉ đổi giọng/định dạng, khối tự nhắc rằng không nới lỏng các quy tắc phía trên.
+  const style = outputStyleBlock(i.outputStyle);
+  if (style) parts.push(style);
 
   if (i.promptedThinking) {
     parts.push(

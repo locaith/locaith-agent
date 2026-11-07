@@ -4,6 +4,7 @@ import { coreRunExtensions } from '../core/engine/extensions';
 import { hostRunExtensions } from './hostExtensions';
 import { registerVerifySlash } from './extensions/verifier'; // (lane:blind-verifier)
 import { SlashRegistry, type SlashContext } from './slashRegistry';
+import { commandsOutputStyle, registerCommandsSlash, type CommandsLaneAccess } from './commandsSlash'; // (lane:commands-agents)
 import { loadProjectInstructions } from '../core/engine/instructions';
 import { resumeInstruction } from '../core/engine/resume';
 import { MEMORY_DIR, MEMORY_INDEX, type MemoryScope, type MemorySnapshot } from '../core/engine/memory';
@@ -41,6 +42,7 @@ import { extractDocument } from '../shared/docExtract';
 import { parseUploadedDocument } from '../shared/docWrap';
 import { backupFileName, makeBackup } from '../shared/sessionBackup';
 import { fold, isBypassSlash, MODE_ALIASES } from '../shared/slashMode';
+import { pickCommandModel } from './commandModel'; // (lane:commands-agents)
 import type {
   AttachmentInfo,
   HostMessage,
@@ -285,7 +287,7 @@ export class ChatController implements vscode.Disposable {
     // registerRewindSlash(this.slash, this); // (lane:checkpoints-rewind)  /rewind
     // registerPermissionsSlash(this.slash, this); // (lane:perm-rules)  /permissions
     // registerHooksSlash(this.slash, this); // (lane:hooks)  /hooks
-    // registerCommandsSlash(this.slash, this); // (lane:commands-agents)  lệnh tuỳ chỉnh + /review /simplify /status /doctor /agents /output-style /mcp
+    registerCommandsSlash(this.slash, this); // (lane:commands-agents)  lệnh tuỳ chỉnh + /review /simplify /status /doctor /agents /output-style /mcp
     // registerTasksSlash(this.slash, this); // (lane:bg-tasks)  /tasks
     // registerIdeSlash(this.slash, this); // (lane:ide-context)  /problems
     // registerSessionsSlash(this.slash, this); // (lane:sessions-ux)  /fork /cost /context
@@ -385,7 +387,7 @@ export class ChatController implements vscode.Disposable {
       lang: this.lang,
       info: (text) => this.emit({ t: 'notice', level: 'info', text }),
       warn: (text) => this.emit({ t: 'notice', level: 'warn', text }),
-      runPrompt: (text) => this.runAgentTurn(() => this.sendUnlocked(text, text, [])),
+      runPrompt: (text, opts) => this.runAgentTurn(() => this.sendWithModel(text, opts?.model)),
       get busy() {
         return self.busy;
       },
@@ -405,6 +407,25 @@ export class ChatController implements vscode.Disposable {
   /** MCP đổi trạng thái (khởi động xong, lỗi, dừng): làm mới danh sách nếu Chợ đang mở. */
   async refreshMarketIfOpen(): Promise<void> {
     if (this.marketOpen && !this.disposed && this.webview) await this.sendMarket(true);
+  }
+
+  // ── (lane:commands-agents) cửa cho host/commandsSlash.ts: phụ thuộc + phiên + làm mới menu `/` ──
+  private readonly laneDisposers: (() => void)[] = [];
+  commandsLaneAccess(): CommandsLaneAccess {
+    return {
+      deps: this.d,
+      host: this.host,
+      registry: this.registry,
+      session: () => this.session,
+      refreshMenu: () => {
+        if (this.view && !this.disposed) this.patch({ slashCommands: this.slashList() });
+      },
+      notice: (level, text) => {
+        if (this.view && !this.disposed) this.emit({ t: 'notice', level, text });
+      },
+      onDispose: (fn) => void this.laneDisposers.push(fn),
+      showScreen: (screen) => this.showScreen(screen),
+    };
   }
 
   /** Ảnh chụp trạng thái — chỉ dùng cho kiểm thử tích hợp. */
@@ -1418,6 +1439,25 @@ export class ChatController implements vscode.Disposable {
     }
   }
 
+  /** (lane:commands-agents) Chạy một lượt với model riêng của lệnh tuỳ chỉnh (`model:` trong frontmatter), rồi trả model phiên về như cũ. */
+  private async sendWithModel(text: string, want: string | undefined): Promise<void> {
+    const r = pickCommandModel(want, await this.d.providers.summaries());
+    if (r && !r.ok) {
+      const vi = this.lang === 'vi';
+      this.emit({ t: 'notice', level: 'warn', text: vi ? `Lệnh yêu cầu model "${want}" nhưng ${r.reason === 'none' ? 'không có model nào khớp' : 'có nhiều model khớp'} — chạy bằng model hiện tại.` : `The command asks for model "${want}" but ${r.reason === 'none' ? 'no model matches' : 'several models match'} — running on the current model.` });
+    }
+    if (!r || !r.ok) return this.sendUnlocked(text, text, []);
+    const prev = { provider: this.session.provider, model: this.session.model };
+    this.session.provider = r.pick.provider;
+    this.session.model = r.pick.model;
+    try {
+      await this.sendUnlocked(text, text, []);
+    } finally {
+      this.session.provider = prev.provider;
+      this.session.model = prev.model;
+    }
+  }
+
   private async sendUnlocked(text: string, rawText: string, attachments: AttachmentInfo[]): Promise<void> {
     // "Tiếp tục" trần trụi sau khi Dừng: ý người dùng là làm tiếp ĐÚNG chỗ đã dừng và dọn hết việc còn tồn,
     // không phải một yêu cầu mới. Gắn chỉ dẫn rõ để model không mở lại việc cũ từ đầu (trước đây nó phát lại
@@ -1522,6 +1562,7 @@ export class ChatController implements vscode.Disposable {
       emit: (ev) => this.onEngineEvent(ev),
       takeQueued: () => this.takeForEngine(),
       mcpInstructions: () => this.d.mcp.instructions(),
+      outputStyle: () => commandsOutputStyle(this), // (lane:commands-agents)
       onCompacted: (info) => this.saveCompactionToMemory(info.session, info.summary),
       onQueue: (q) => this.setModelQueue(q),
       onConsentRequired: () => this.onConsentRequired(),
@@ -2365,6 +2406,7 @@ export class ChatController implements vscode.Disposable {
 
   dispose(): void {
     this.disposed = true;
+    for (const fn of this.laneDisposers.splice(0)) fn(); // (lane:commands-agents)
     this.queue = [];
     this.detachMcp();
     this.accountSub?.dispose();

@@ -767,6 +767,16 @@
           "default": 8,
           "scope": "machine",
           "markdownDescription": "%cfg.agentsMaxConcurrent%"
+        },
+        "locaithAgent.commands.readClaudeDir": {
+          "type": "boolean",
+          "default": true,
+          "markdownDescription": "%cfg.commandsReadClaudeDir%"
+        },
+        "locaithAgent.agent.outputStyle": {
+          "type": "string",
+          "default": "default",
+          "markdownDescription": "%cfg.agentOutputStyle%"
         }
       }
     }
