@@ -1,0 +1,13 @@
+# Phản hồi khách: link mở 2 tab, ảnh trước → sau
+
+- **Bấm liên kết không còn mở hai tab.** Liên kết http(s) trong câu trả lời không còn mang thuộc tính `href` thật (webview của VS Code có bộ xử lý click riêng cho mọi thẻ `<a href>` và mở thêm một lần nữa sau handler của extension — nguyên nhân nghi nhất). Liên kết vẫn bấm được, dùng bàn phím được (Tab rồi Enter), nhấp giữa cũng đi đúng một đường. Thêm lớp chống nảy đúp: cùng một URL trong 1,5 giây chỉ mở một lần (khung chat VS Code, bản Chrome, nút đăng nhập, trang quản lý tài khoản, kết nối dịch vụ OAuth). Bấm «Đăng nhập» hai lần liên tiếp cũng chỉ mở một tab đăng nhập (trước đây lần hai ghi đè mã trạng thái của lần một).
+- **Ảnh «Trước → Sau» khi làm giao diện.** Khi bạn nhờ sửa/làm đẹp giao diện web, trợ lý nạp kỹ năng mới `ui-truoc-sau`: chụp ảnh «trước», sửa, chụp ảnh «sau» rồi hiện hai ảnh cạnh nhau trong chat qua công cụ mới `show_before_after`. Bấm ảnh để phóng to; bấm «Kéo để so sánh» để chuyển sang thanh trượt (bấm «Hai cột» để quay lại). Khung hẹp (khoảng 320px) tự xếp dọc. Nếu không có trang/tệp HTML để chụp, trợ lý nói thẳng thay vì bịa ảnh. Ảnh không gửi lại cho mô hình nên không tốn token ảnh. Mỗi ảnh PNG/JPEG/GIF/WebP tối đa khoảng 2 MB; đường dẫn nằm ngoài workspace hoặc là tệp bí mật vẫn phải được bạn cho phép như khi đọc tệp.
+  - Cách chụp: MCP Playwright nếu có, hoặc Chrome/Edge headless có sẵn trên máy (lệnh mẫu trong kỹ năng); ảnh lưu ở `.locaith/shots/`.
+  - Remote (locaith.ai): dòng công cụ tới nơi kèm số ảnh (`imageCount`) và khoá ảnh (`imageKeys`) để trang xin ảnh đầy đủ bằng lệnh `get_image` đã có; trang cũ vẫn thấy dòng chữ «Trước: … → Sau: …». Phần vẽ thẻ trên trang web cần cập nhật ở repo web.
+  - Chưa có cho bản Chrome/Edge: bản đó không lưu được ảnh chụp ra tệp.
+  - Không có cài đặt mới.
+
+## English (short)
+
+- External links in replies no longer open two tabs: http(s) links carry no real `href` (VS Code's built-in webview link handler was the suspected second opener), and the same URL is opened at most once per 1.5 s across the chat, the Chrome build, sign-in, account page and OAuth connectors. Double-clicking Sign in opens a single tab.
+- New skill `ui-truoc-sau` + tool `show_before_after`: when restyling a web UI the assistant captures a before shot, makes the change, captures an after shot and shows both side by side in chat (zoom on click, drag-to-compare mode, stacks in narrow panes). Images are shown to you only, never sent back to the model. Remote gets `imageCount` + `imageKeys` (fetch via the existing `get_image`); old clients see a text line. VS Code only for now; no new settings.

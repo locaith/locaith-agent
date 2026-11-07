@@ -142,7 +142,7 @@ export class ToolDispatcher {
         summary: res.summary,
         output: (res.display ?? res.content).slice(0, UI_TOOL_OUTPUT_LIMIT * 2),
         diff: res.diff,
-        images: uiImages(res.images),
+        images: uiImages(res.displayImages ?? res.images), // (lane:customer-bugs) displayImages: chỉ cho người dùng xem
         step: res.step,
         durationMs: Date.now() - started,
       });

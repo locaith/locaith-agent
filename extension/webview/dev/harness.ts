@@ -739,6 +739,33 @@ function imageScene(): ViewState {
   };
 }
 
+
+/** (lane:customer-bugs) Thẻ «Trước | Sau» của show_before_after: hai ảnh SVG dựng ngay trong cảnh (không cần tệp ngoài). */
+function beforeAfterScene(): ViewState {
+  const v = baseState();
+  const now = Date.now();
+  const page = (bg: string, btn: string, radius: number, title: string) =>
+    btoa(
+      `<svg xmlns="http://www.w3.org/2000/svg" width="640" height="400" viewBox="0 0 640 400"><rect width="640" height="400" fill="${bg}"/><rect x="40" y="40" width="360" height="26" rx="4" fill="#94a3b8"/><rect x="40" y="86" width="540" height="12" rx="3" fill="#64748b"/><rect x="40" y="110" width="480" height="12" rx="3" fill="#64748b"/><rect x="40" y="220" width="180" height="52" rx="${radius}" fill="${btn}"/><text x="130" y="253" text-anchor="middle" font-family="sans-serif" font-size="18" fill="#fff">${title}</text></svg>`,
+    );
+  const img = (data: string) => ({ mediaType: 'image/svg+xml', data });
+  return {
+    ...v,
+    transcript: [
+      { kind: 'user', id: 'u_ba', text: 'Làm đẹp nút đăng nhập ở trang chủ giúp anh', ts: now - 9000, attachments: [] },
+      {
+        kind: 'assistant', id: 'a_ba', provider: 'anthropic', model: 'claude-opus-5-5', ts: now - 6000, done: true, stopReason: 'end_turn',
+        blocks: [
+          { type: 'tool', id: 'ba1', name: 'show_before_after', state: 'done', summary: '2 ảnh', startedAt: now - 7000, durationMs: 80, output: 'Trước: .locaith/shots/home-truoc.png → Sau: .locaith/shots/home-sau.png',
+            args: { before: '.locaith/shots/home-truoc.png', after: '.locaith/shots/home-sau.png', caption: 'Nút đăng nhập bo tròn, đổi sang màu nhấn' },
+            images: [img(page('#f1f5f9', '#64748b', 2, 'Login')), img(page('#f8fafc', '#6d5efc', 26, 'Login'))] },
+          { type: 'text', id: 't_ba', text: 'Em đã bo tròn nút và đổi sang màu nhấn. Ảnh trước và sau ở ngay phía trên.' },
+        ],
+      },
+    ],
+  };
+}
+
 /** Đang chạy: nhiều lần sửa tệp (gộp một dòng), một lần đang sửa, ba agent con đang chạy, một agent lỗi. */
 function agentsScene(): ViewState {
   const v = baseState();
@@ -1033,6 +1060,9 @@ function initialView(): ViewState {
     case 'rewind-done':
     case 'rewind-recent':
       v = rewindScene(scenario.slice(7) as 'bar' | 'menu' | 'plan' | 'done' | 'recent');
+      break;
+    case 'before-after':
+      v = beforeAfterScene();
       break;
     case 'media':
     case 'media-live':

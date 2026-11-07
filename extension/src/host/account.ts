@@ -12,6 +12,7 @@ import { AccountClient, type AccountDevice, type AccountUser, type ClientMeta } 
 import { resolveAccountConfig, type AccountConfig } from '../core/account/config';
 import { AccountSession, type AccountState, type AccountStore, type PendingLogin, type SavedAccount } from '../core/account/session';
 import type { AccountView } from '../shared/protocol';
+import { OPEN_ONCE_WINDOW_MS, openExternalOnce } from '../core/host/openOnce'; // (lane:customer-bugs)
 import type { SecretsLike } from './chrome';
 import type { ConfigService } from './config';
 
@@ -100,6 +101,7 @@ export class AccountService implements AccountGate, vscode.Disposable {
   private readonly testMode = process.env.ND_AGENT_TEST === '1';
   private lastStatus: AccountState['status'] = 'signedOut';
   private lastFocusVerify = 0;
+  private signInAt = -Infinity;
 
   constructor(private readonly d: AccountDeps) {
     this.cfg = d.cfg ?? resolveAccountConfig();
@@ -116,7 +118,7 @@ export class AccountService implements AccountGate, vscode.Disposable {
           this.lastLoginUrl = url;
           return;
         }
-        await vscode.env.openExternal(vscode.Uri.parse(url));
+        await openExternalOnce(url, (x) => vscode.env.openExternal(vscode.Uri.parse(x)));
       },
       log: d.log,
     });
@@ -212,6 +214,9 @@ export class AccountService implements AccountGate, vscode.Disposable {
   // ── thao tác ──────────────────────────────────────────────────────────────
   async signIn(opts: { manual?: boolean } = {}): Promise<void> {
     if (this.session.state.status === 'signedIn') return;
+    // (lane:customer-bugs) Bấm «Đăng nhập» hai lần liên tiếp = hai tab trình duyệt, và lần sau ghi đè state của lần trước (tab đầu sẽ hỏng): chỉ nhận một lần trong cửa sổ ngắn.
+    if (Date.now() - this.signInAt < OPEN_ONCE_WINDOW_MS) return;
+    this.signInAt = Date.now();
     const manual = opts.manual ?? (vscode.env.uiKind === vscode.UIKind.Web || !KNOWN_SCHEMES.has(vscode.env.uriScheme));
     let url: string;
     try {
@@ -235,7 +240,7 @@ export class AccountService implements AccountGate, vscode.Disposable {
         copy,
       )
       .then(async (pick) => {
-        if (pick === again) await vscode.env.openExternal(vscode.Uri.parse(url));
+        if (pick === again) await openExternalOnce(url, (x) => vscode.env.openExternal(vscode.Uri.parse(x)));
         else if (pick === code) await this.enterCode();
         else if (pick === copy) await vscode.env.clipboard.writeText(url);
       });
@@ -272,7 +277,7 @@ export class AccountService implements AccountGate, vscode.Disposable {
       this.lastLoginUrl = url;
       return;
     }
-    await vscode.env.openExternal(vscode.Uri.parse(url));
+    await openExternalOnce(url, (x) => vscode.env.openExternal(vscode.Uri.parse(x)));
   }
 
   /** Trình duyệt chuyển về vscode://locaithai.locaith-agent/auth?code=…&state=… */

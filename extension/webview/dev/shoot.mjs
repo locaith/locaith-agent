@@ -358,6 +358,9 @@ const SHOTS = [
       await wait(250);
     },
   },
+  { name: 'before-after-dark-420', q: { scenario: 'before-after', theme: 'dark', expand: '1' }, w: 420, h: 700 },
+  { name: 'before-after-narrow-dark-300', q: { scenario: 'before-after', theme: 'dark', expand: '1' }, w: 300, h: 900 },
+  { name: 'before-after-light-720', q: { scenario: 'before-after', theme: 'light', expand: '1' }, w: 720, h: 600 },
   { name: 'parallel-narrow-dark-260', q: { scenario: 'parallel-narrow', theme: 'dark' }, w: 260, h: 900, act: assertParallel },
   { name: 'parallel-narrow-light-300', q: { scenario: 'parallel-narrow', theme: 'light' }, w: 300, h: 900, act: assertParallel },
   { name: 'parallel-wide-dark-900', q: { scenario: 'parallel-narrow', theme: 'dark' }, w: 900, h: 900, act: assertParallel },

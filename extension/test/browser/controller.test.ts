@@ -1133,4 +1133,20 @@ describe('lời mời đánh giá Chrome Web Store', () => {
     expect(r.api.calls.filter((c) => c.method === 'openExternal').length).toBe(opened.length + 1);
     expect(String((r.api.calls.filter((c) => c.method === 'openExternal').at(-1) as { arg?: string }).arg)).toContain('chromewebstore.google.com');
   });
+
+  // (lane:customer-bugs) Chống nảy đúp: hai lệnh open_external cùng URL liên tiếp chỉ mở một tab.
+  it('open_external gửi đúp cùng URL chỉ mở một lần; URL khác vẫn mở; chặn giao thức lạ', async () => {
+    const { openExternalOnce } = await import('../../src/core/host/openOnce');
+    openExternalOnce.reset();
+    const r = await make();
+    const n = () => r.api.calls.filter((c) => c.method === 'openExternal').length;
+    const before = n();
+    await r.ctl.onMessage({ type: 'open_external', url: 'https://example.com/dup' });
+    await r.ctl.onMessage({ type: 'open_external', url: 'https://example.com/dup' });
+    expect(n()).toBe(before + 1);
+    await r.ctl.onMessage({ type: 'open_external', url: 'https://example.com/other' });
+    expect(n()).toBe(before + 2);
+    await r.ctl.onMessage({ type: 'open_external', url: 'javascript:alert(1)' });
+    expect(n()).toBe(before + 2);
+  });
 });
