@@ -812,6 +812,11 @@ const vi = {
   // ── (lane:commands-agents) ──
   // ── (lane:bg-tasks) ──
   // ── (lane:ide-context) ──
+  'composer.editor.on': 'Đang gửi kèm tệp và vùng chọn của editor. Bấm để tắt.',
+  'composer.editor.off': 'Không gửi kèm tệp đang mở: {file}',
+  'composer.editor.offTitle': 'Đã tắt gửi kèm tệp và vùng chọn của editor. Bấm để bật lại.',
+  'composer.mention.problems': 'Lỗi và cảnh báo hiện tại của VS Code',
+  'composer.mention.lineHint': 'Thêm #L10-20 sau tên tệp để chỉ lấy các dòng đó',
   // ── (lane:sessions-ux) ──
   // ── (lane:customer-bugs) ──
   // ── (lane:gateway-client) ──
@@ -1612,6 +1617,11 @@ const en: Record<I18nKey, string> = {
   // ── (lane:commands-agents) ──
   // ── (lane:bg-tasks) ──
   // ── (lane:ide-context) ──
+  'composer.editor.on': 'The editor’s file and selection are being sent. Click to turn off.',
+  'composer.editor.off': 'Open file not sent: {file}',
+  'composer.editor.offTitle': 'Sending the editor’s file and selection is off. Click to turn it back on.',
+  'composer.mention.problems': 'Current VS Code errors and warnings',
+  'composer.mention.lineHint': 'Add #L10-20 after the file name to take only those lines',
   // ── (lane:sessions-ux) ──
   // ── (lane:customer-bugs) ──
   // ── (lane:gateway-client) ──

@@ -13,6 +13,10 @@ import { docKindOf, type DocKind } from '../shared/docKinds';
 import { DocError, extractDocument } from '../shared/docExtract';
 import { buildDocParts, wrapUploaded } from '../shared/docWrap';
 import type { AttachmentInfo, EditorContextInfo } from '../shared/protocol';
+import { hostLang } from '../core/tools/diagnostics'; // (lane:ide-context)
+import { mentionPathKey, problemsPart, renderSelection, resolveLineMentions } from './ideMentions'; // (lane:ide-context)
+import { isSecretFile } from '../core/fsutil/paths'; // (lane:ide-context)
+import { t } from '../core/engine/strings'; // (lane:ide-context)
 
 const MAX_FILE_CHARS = 80_000;
 const MAX_TOTAL_CHARS = 240_000;
@@ -68,8 +72,11 @@ export async function buildUserContent(inp: BuildInput): Promise<BuiltContent> {
   const warnings: string[] = [];
   let budget = MAX_TOTAL_CHARS;
   let selectionAttached = false;
+  // (lane:ide-context) `@tệp#L10-20` trong chữ → vùng chọn có khoảng dòng (chip từ ô nhập hoặc chỉ-có-chữ từ Remote/Chrome).
+  const lang = hostLang(inp.host);
+  const mentioned = resolveLineMentions(inp.text, inp.attachments);
 
-  for (const a of inp.attachments) {
+  for (const a of mentioned.attachments) {
     if (a.kind === 'image') {
       if (!a.data || images.length >= MAX_IMAGES) {
         warnings.push(`Bỏ qua ảnh "${a.label}" (quá nhiều ảnh hoặc không có dữ liệu).`);
@@ -128,12 +135,18 @@ export async function buildUserContent(inp: BuildInput): Promise<BuiltContent> {
       continue;
     }
     if (a.kind === 'selection' && a.range) {
-      const lines = text.split(/\r?\n/);
-      const [s, e] = a.range;
-      const body = lines.slice(s - 1, e).join('\n');
-      const cut = body.length > MAX_FILE_CHARS ? body.slice(0, MAX_FILE_CHARS) + '\n[… đã cắt]' : body;
-      budget -= cut.length;
-      parts.push(`<attached_selection path="${r.rel}" lines="${s}-${e}">\n${cut}\n</attached_selection>`);
+      // (lane:ide-context) mention chỉ có chữ: chỉ nhận tệp trong workspace và không phải tệp bí mật.
+      if (mentioned.textOnly.has(mentionPathKey(a.path)) && (r.zone !== 'workspace' || isSecretFile(r.abs) || isSecretFile(r.real))) {
+        warnings.push(t(lang, 'mentionSecret', { ref: a.label }));
+        continue;
+      }
+      const sel = renderSelection(text, r.rel, a.range, lang, a.label);
+      if (!sel.part) {
+        if (sel.warning) warnings.push(sel.warning);
+        continue;
+      }
+      budget -= sel.chars;
+      parts.push(sel.part);
       selectionAttached = true;
     } else {
       const body = text.length > MAX_FILE_CHARS ? text.slice(0, MAX_FILE_CHARS) + `\n[… đã cắt, tệp dài ${text.length.toLocaleString('en-US')} ký tự; dùng read_file để đọc phần còn lại]` : text;
@@ -155,8 +168,14 @@ export async function buildUserContent(inp: BuildInput): Promise<BuiltContent> {
   display.push(...docs.display);
   warnings.push(...docs.warnings);
 
+  // (lane:ide-context) `@problems`: chẩn đoán hiện tại của VS Code.
+  const prob = await problemsPart(inp.text, inp.host, lang);
+  if (prob.part) parts.push(prob.part);
+  if (prob.warning) warnings.push(prob.warning);
+
   const ctx: string[] = [];
-  if (inp.editor?.file) {
+  // (lane:ide-context) `off`: người dùng tắt chip «Đang xem» → không gửi tệp/vùng chọn của editor.
+  if (inp.editor?.file && !inp.editor.off) {
     ctx.push(`Active file in the editor: ${inp.editor.file}${inp.editor.language ? ` (${inp.editor.language})` : ''}`);
     if (inp.editor.selection) {
       const s = inp.editor.selection;

@@ -86,6 +86,10 @@ const vi = {
   diagAfterEditFix: 'Hãy sửa các lỗi này (hoặc giải thích vì sao bỏ qua) trước khi báo xong.',
   diagSummaryNew: '{counts} mới',
   problemsTitle: 'Chẩn đoán hiện tại của VS Code (@problems)',
+  problemsUnavailable: '@problems chỉ dùng được trong VS Code (cần language server).',
+  mentionOutOfRange: '«{ref}»: dòng {start} nằm ngoài tệp ({total} dòng) nên không đính kèm.',
+  mentionSecret: '«{ref}»: tệp có thể chứa bí mật nên không tự đính kèm từ chữ; hãy chọn tệp bằng nút @ nếu thật sự cần.',
+  mentionTruncated: '[… đã cắt ở {max} dòng; dùng read_file với offset={next} để đọc tiếp]',
   // ── (lane:sessions-ux) ──
   // ── (lane:customer-bugs) ──
   // ── (lane:gateway-client) ──
@@ -172,6 +176,10 @@ const en: typeof vi = {
   diagAfterEditFix: 'Fix these (or explain why they can be ignored) before reporting done.',
   diagSummaryNew: '{counts} new',
   problemsTitle: 'Current VS Code diagnostics (@problems)',
+  problemsUnavailable: '@problems only works in VS Code (it needs a language server).',
+  mentionOutOfRange: '“{ref}”: line {start} is past the end of the file ({total} lines), so it was not attached.',
+  mentionSecret: '“{ref}”: the file may contain secrets, so it is not attached from text; pick it with the @ button if you really need it.',
+  mentionTruncated: '[… cut at {max} lines; use read_file with offset={next} to read on]',
   // ── (lane:sessions-ux) ──
   // ── (lane:customer-bugs) ──
   // ── (lane:gateway-client) ──

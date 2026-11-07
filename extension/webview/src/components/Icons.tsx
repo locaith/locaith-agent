@@ -244,6 +244,12 @@ const SHAPES: Record<IconName, VNode> = {
       <circle cx="12" cy="12" r="2.8" />
     </>
   ),
+  'eye-off': (
+    <>
+      <path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12z" />
+      <path d="M4 4l16 16" />
+    </>
+  ),
   external: (
     <>
       <path d="M14 4h6v6" />

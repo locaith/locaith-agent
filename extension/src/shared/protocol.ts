@@ -565,6 +565,8 @@ export interface EditorContextInfo {
   file?: string;
   language?: string;
   selection?: { startLine: number; endLine: number; chars: number };
+  /** (lane:ide-context) Người dùng đã tắt việc gửi kèm tệp/vùng chọn của editor (cài đặt `context.editor`). Chip vẫn hiện để bật lại. */
+  off?: boolean;
 }
 
 /** Tab mà trợ lý đang "nhìn" (bản trình duyệt). */
@@ -1013,6 +1015,7 @@ export type WebviewMessage =
   // ── (lane:commands-agents) ──
   // ── (lane:bg-tasks) ──
   // ── (lane:ide-context) ──
+  | { type: 'set_editor_context'; on: boolean }
   // ── (lane:sessions-ux) ──
   // ── (lane:customer-bugs) ──
   // ── (lane:gateway-client) ──

@@ -11,6 +11,7 @@ import { bus } from '../../bus';
 import { useApp } from '../../ctx';
 import { basename, filterByQuery, mentionAtCaret, parseSlashCommand, relativizeUri, slashAtCaret, SLASH_COMMANDS_WITH_ARGS } from '../../text';
 import { imageKey } from '../../../../src/shared/transcriptRebuild';
+import { applyLineMentions, keepableFrag, lineMentionSig, parseLineMentions, PROBLEMS_HIT_PATH, splitMentionQuery } from '../../../../src/shared/lineMentions'; // (lane:ide-context)
 import { persistableAttachments } from '../../draftState';
 import { cx, readFileAsBase64 } from '../../util';
 import { loadUiState, post, saveUiState } from '../../vscode';
@@ -207,6 +208,8 @@ export function Composer({ view }: { view: ViewState }) {
   const [files, setFiles] = useState<FileHit[]>([]);
   const [filesBusy, setFilesBusy] = useState(false);
   const [active, setActive] = useState(0);
+  // (lane:ide-context) chữ ký các «@tệp#L10-20» trong ô nhập: đổi thì chip tệp đổi thành chip vùng chọn «a.ts:10–20».
+  const [mentionSig, setMentionSig] = useState('');
   const [picker, setPicker] = useState<PickerId | null>(null);
   const [dropping, setDropping] = useState(false);
 
@@ -220,6 +223,14 @@ export function Composer({ view }: { view: ViewState }) {
     [slash, view.slashCommands],
   );
   const menuOpen = mention !== null || (slash !== null && slashItems.length > 0);
+  // (lane:ide-context) mục «@problems» (chẩn đoán hiện tại) đứng đầu menu @ khi truy vấn khớp; chỉ ở VS Code.
+  const mentionPart = splitMentionQuery(mention?.query ?? '');
+  const showProblems = !isBrowser && mention !== null && mentionPart.frag === '' && 'problems'.startsWith(mentionPart.path.toLowerCase());
+  const mentionItems = useMemo<FileHit[]>(
+    () => (showProblems ? [{ path: PROBLEMS_HIT_PATH, name: '@problems', dir: t('composer.mention.problems') }, ...files] : files),
+    [showProblems, files, t],
+  );
+  const shownAtts = useMemo(() => applyLineMentions(taRef.current?.value ?? '', attachments), [attachments, mentionSig]);
 
   // ── thao tác trên textarea ──
   const autoGrow = useCallback(() => {
@@ -246,6 +257,7 @@ export function Composer({ view }: { view: ViewState }) {
       const pos = caret ?? value.length;
       ta.setSelectionRange(pos, pos);
       setHasText(value.trim().length > 0);
+      setMentionSig(lineMentionSig(value)); // (lane:ide-context)
       autoGrow();
       persistDraft();
       ta.focus();
@@ -277,7 +289,9 @@ export function Composer({ view }: { view: ViewState }) {
     const ta = taRef.current;
     if (!ta) return;
     const caret = ta.selectionStart ?? ta.value.length;
-    const m = mentionAtCaret(ta.value, caret);
+    let m = mentionAtCaret(ta.value, caret);
+    // (lane:ide-context) «@tệp#L10» đã đủ số dòng: đóng menu để Enter gửi tin thay vì chọn lại tệp.
+    if (m && /#L\d+(?:-L?\d+)?$/i.test(m.query)) m = null;
     const s = m ? null : slashAtCaret(ta.value, caret);
     const d = dismissed.current;
     const isDismissed = (start: number, query: string) => !!d && d.start === start && d.query === query;
@@ -385,7 +399,7 @@ export function Composer({ view }: { view: ViewState }) {
   );
 
   // ── tìm tệp khi gõ @ ──
-  const mentionQuery = mention?.query;
+  const mentionQuery = splitMentionQuery(mention?.query ?? '').path; // (lane:ide-context) phần «#L…» không dùng để tìm tệp
   const mentionOpen = mention !== null;
   useEffect(() => {
     if (!mentionOpen) {
@@ -438,9 +452,22 @@ export function Composer({ view }: { view: ViewState }) {
     }
     if (!text && attachments.length === 0) return;
     // Bỏ chip tệp tạo từ @mention mà người dùng đã xoá khỏi nội dung.
-    const atts = attachments.filter((a) => !(a.path && mentionPaths.current.has(a.path)) || text.includes(`@${a.path}`));
+    const kept = attachments.filter((a) => !(a.path && mentionPaths.current.has(a.path)) || text.includes(`@${a.path}`));
+    const atts = applyLineMentions(text, kept); // (lane:ide-context) «@tệp#L10-20» → chip vùng chọn
     post({ type: 'send', text, attachments: atts });
     clearAll();
+  };
+
+  /** (lane:ide-context) Xoá khỏi ô nhập đoạn «@tệp#L10-20» ứng với một chip vùng chọn. */
+  const dropLineMention = (a: AttachmentInfo) => {
+    const ta = taRef.current;
+    if (!ta || !a.range) return;
+    const hit = parseLineMentions(ta.value).find((m) => m.start === a.range![0] && m.end === a.range![1]);
+    if (!hit) return;
+    const at = ta.value.indexOf(hit.raw);
+    if (at < 0) return;
+    const after = ta.value.slice(at + hit.raw.length).replace(/^ /, '');
+    setTextValue(ta.value.slice(0, at) + after, at);
   };
 
   const pickMention = (hit: FileHit) => {
@@ -455,7 +482,14 @@ export function Composer({ view }: { view: ViewState }) {
       setTextValue(before + after.replace(/^s+/, ''), before.length);
       return;
     }
-    const insert = `@${hit.path}${hit.isDir && !hit.path.endsWith('/') ? '/' : ''} `;
+    if (hit.path === PROBLEMS_HIT_PATH) {
+      // (lane:ide-context) @problems: chỉ là chữ; host đính kèm chẩn đoán hiện tại khi gửi.
+      setMention(null);
+      setTextValue(before + '@problems ' + after.replace(/^\s+/, ''), (before + '@problems ').length);
+      return;
+    }
+    const frag = hit.isDir ? '' : keepableFrag(splitMentionQuery(mention.query).frag); // (lane:ide-context) giữ «#L10-20» người dùng đã gõ
+    const insert = `@${hit.path}${hit.isDir && !hit.path.endsWith('/') ? '/' : ''}${frag} `;
     mentionPaths.current.add(hit.path);
     addAttachment({ kind: hit.isDir ? 'folder' : 'file', label: hit.name, path: hit.path });
     setMention(null);
@@ -539,8 +573,21 @@ export function Composer({ view }: { view: ViewState }) {
     // Bộ gõ đang ghép chữ (Telex/VNI/IME): để nguyên cho bộ gõ xử lý.
     if (e.isComposing || composing.current || e.keyCode === 229) return;
 
+    // (lane:ide-context) Gõ «#» ngay sau «@tệp » vừa chọn: nuốt dấu cách thừa để thành «@tệp#» rồi gõ tiếp L10-20.
+    if (e.key === '#' && !e.ctrlKey && !e.metaKey && !e.altKey) {
+      const ta = taRef.current;
+      const pos = ta?.selectionStart ?? 0;
+      const m = ta && ta.selectionEnd === pos ? /@([^\s#]+) $/.exec(ta.value.slice(0, pos)) : null;
+      if (ta && m && mentionPaths.current.has(m[1])) {
+        e.preventDefault();
+        setTextValue(ta.value.slice(0, pos - 1) + '#' + ta.value.slice(pos), pos);
+        refreshTriggers();
+        return;
+      }
+    }
+
     if (menuOpen) {
-      const count = mention ? files.length : slashItems.length;
+      const count = mention ? mentionItems.length : slashItems.length;
       if (e.key === 'ArrowDown' && count > 0) {
         e.preventDefault();
         setActive((i) => (i + 1) % count);
@@ -552,9 +599,9 @@ export function Composer({ view }: { view: ViewState }) {
         return;
       }
       if ((e.key === 'Enter' && !e.shiftKey) || e.key === 'Tab') {
-        if (mention && files[active]) {
+        if (mention && mentionItems[active]) {
           e.preventDefault();
-          pickMention(files[active]);
+          pickMention(mentionItems[active]);
           return;
         }
         if (slash && slashItems[active]) {
@@ -639,8 +686,11 @@ export function Composer({ view }: { view: ViewState }) {
   const tabInfo = isBrowser ? view.browser?.tab ?? null : null;
   /** Tab người dùng đang xem khi khác tab trợ lý đã gắn (để gắn lại). */
   const viewingTab = isBrowser ? view.browser?.viewing ?? null : null;
+  const editorOff = editor?.off === true; // (lane:ide-context)
   const editorChip = editor?.file
-    ? [
+    ? editorOff
+      ? t('composer.editor.off', { file: basename(editor.file) })
+      : [
         t('composer.editor.viewing', { file: basename(editor.file) }),
         editor.selection
           ? editor.selection.startLine === editor.selection.endLine
@@ -664,18 +714,22 @@ export function Composer({ view }: { view: ViewState }) {
       onDragLeave={() => setDropping(false)}
       onDrop={onDrop}
     >
-      {mention && <MentionMenu items={files} busy={filesBusy} active={active} onPick={pickMention} onHover={setActive} />}
+      {mention && <MentionMenu items={mentionItems} busy={filesBusy} active={active} onPick={pickMention} onHover={setActive} />}
       {slash && slashItems.length > 0 && <SlashMenu items={slashItems} active={active} onPick={(c) => pickSlash(c)} onHover={setActive} />}
 
       <div class="composer-card">
         {canQueue && queued.length > 0 && <QueueList items={queued} />}
         {(attachments.length > 0 || reading.length > 0 || editorChip || tabInfo) && (
           <div class="chip-row">
-            {attachments.map((a, i) => (
+            {shownAtts.map((a, i) => (
               <AttachmentChip
                 key={`${a.kind}:${a.path ?? attachmentText(a)}:${i}`}
                 a={a}
-                onRemove={() => setAttachments((prev) => prev.filter((_, j) => j !== i))}
+                onRemove={() => {
+                  // (lane:ide-context) chip vùng chọn sinh từ «@tệp#L10-20»: xoá luôn chữ đó, nếu không host sẽ đính kèm lại từ chữ.
+                  if (a !== attachments[i]) dropLineMention(a);
+                  setAttachments((prev) => prev.filter((_, j) => j !== i));
+                }}
               />
             ))}
             {reading.map((r) => (
@@ -716,11 +770,17 @@ export function Composer({ view }: { view: ViewState }) {
               </span>
             )}
             {editorChip && (
-              <span class="chip chip-editor" title={t('composer.editor.title')}>
-                <span class="chip-main">
-                  <Icon name="eye" size={13} />
+              <span class={cx('chip', 'chip-editor', editorOff && 'is-off')} title={editorOff ? t('composer.editor.offTitle') : t('composer.editor.on')}>
+                <button
+                  type="button"
+                  class="chip-main"
+                  aria-pressed={!editorOff}
+                  aria-label={editorOff ? t('composer.editor.offTitle') : t('composer.editor.on')}
+                  onClick={() => post({ type: 'set_editor_context', on: editorOff })}
+                >
+                  <Icon name={editorOff ? 'eye-off' : 'eye'} size={13} />
                   <span class="chip-text">{editorChip}</span>
-                </span>
+                </button>
               </span>
             )}
           </div>
@@ -739,6 +799,7 @@ export function Composer({ view }: { view: ViewState }) {
           onInput={() => {
             autoGrow();
             setHasText((taRef.current?.value.trim().length ?? 0) > 0);
+            setMentionSig(lineMentionSig(taRef.current?.value ?? '')); // (lane:ide-context)
             persistDraft();
             refreshTriggers();
           }}
