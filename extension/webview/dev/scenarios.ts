@@ -807,3 +807,48 @@ export function locaithState(o: LocaithSceneOptions = {}): ViewState {
       : {}),
   };
 }
+
+// ── (lane:output-timeouts) câu trả lời bị cắt ở ranh giới câu + nút «Chạy tiếp phần 2» ──
+export function cutContinueState(opts: { forced?: boolean } = {}): ViewState {
+  const answer =
+    '## Báo cáo hiệu quả quảng cáo tháng 10\n\n' +
+    'Tổng chi 184,2 triệu ₫ cho 6 chiến dịch, thu về 1.912 khách hàng tiềm năng — CPL trung bình **96.300 ₫**, tốt hơn tháng 9 (112.000 ₫).\n\n' +
+    '### 1. Chiến dịch đang đốt tiền\n\n' +
+    '| Chiến dịch | Chi | CPL |\n|---|---|---|\n| Retarget 30 ngày | 41,0 tr | 201.000 ₫ |\n| Lookalike 1% | 22,5 tr | 88.000 ₫ |\n\n' +
+    'Retarget 30 ngày trùng 68% đối tượng với Lookalike 1% nên hai chiến dịch tự đấu giá với nhau.\n\n' +
+    '### 2. Đề xuất phân bổ tuần tới\n\n- Tạm dừng Retarget 30 ngày, chuyển 30 triệu sang Lookalike 1%.\n- Giữ nguyên ba chiến dịch tìm kiếm mới.';
+  return baseState({
+    title: 'Báo cáo quảng cáo Facebook tháng 10',
+    options: opts.forced
+      ? [{ id: 'continue-work', kind: 'continue', label: 'Chạy tiếp', prompt: 'Tiếp tục đúng việc đang dở…' }]
+      : [{ id: 'continue-part-2', kind: 'continue', label: 'Chạy tiếp phần 2', prompt: 'Viết tiếp phần 2 từ đúng chỗ vừa dừng: không lặp lại phần trước, không mở đầu lại, không tóm tắt lại.' }],
+    transcript: [
+      userItem('u1', 'Viết báo cáo đầy đủ về hiệu quả quảng cáo tháng 10 (kèm VAT 10%).', 95_000),
+      {
+        kind: 'assistant',
+        id: 'a1',
+        provider: 'locaith',
+        model: 'locaith-v5-flash',
+        ts: Date.now() - 90_000,
+        done: true,
+        stopReason: 'end_turn',
+        usage: { inputTokens: 12_400, outputTokens: 32_000 },
+        endedAt: Date.now() - 4_000,
+        blocks: opts.forced
+          ? [
+              { type: 'text', id: 'a1:t0', text: answer },
+              {
+                type: 'notice',
+                id: 'a1:n0',
+                level: 'warn',
+                text: 'Model vẫn không phản hồi sau 45 giây ở lần thử lại. Đã giữ phần đã viết và dừng lượt — đây là lỗi phía máy chủ/model, không phải lỗi của bạn.\nĐã dừng vì model không phản hồi.\n• Đã làm: chưa có thay đổi nào được ghi lại (chưa sửa tệp, chưa chạy lệnh).\n• Còn lại: không còn việc nào trong danh sách.\n• Chạy tiếp: bấm «Chạy tiếp» bên dưới hoặc nhắn "tiếp tục" — trợ lý làm nốt từ đúng chỗ dừng.',
+              },
+            ]
+          : [
+              { type: 'text', id: 'a1:t0', text: `${answer}\n\n[tiếp phần 2]\n\n` },
+              { type: 'notice', id: 'a1:n0', level: 'info', text: 'Câu trả lời dài hơn trần đầu ra nên đã cắt ở ranh giới câu. Bấm «Chạy tiếp phần 2» để viết tiếp.' },
+            ],
+      },
+    ],
+  });
+}
