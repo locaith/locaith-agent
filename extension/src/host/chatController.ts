@@ -1,7 +1,7 @@
 import * as vscode from 'vscode';
 import { AgentEngine, type QueuedMessage, type QueueState, type RunResult } from '../core/engine/engine';
 import { coreRunExtensions } from '../core/engine/extensions';
-import { hostRunExtensions } from './hostExtensions';
+import { hostRunExtensions, hostSubAgentExtensions } from './hostExtensions';
 import { registerVerifySlash } from './extensions/verifier'; // (lane:blind-verifier)
 import { SlashRegistry, type SlashContext } from './slashRegistry';
 import { commandsOutputStyle, registerCommandsSlash, type CommandsLaneAccess } from './commandsSlash'; // (lane:commands-agents)
@@ -52,7 +52,7 @@ import { docCharBudget } from '../shared/docKinds';
 import { extractDocument } from '../shared/docExtract';
 import { parseUploadedDocument } from '../shared/docWrap';
 import { backupFileName, makeBackup } from '../shared/sessionBackup';
-import { fold, isBypassSlash, MODE_ALIASES } from '../shared/slashMode';
+import { fold, isBypassSlash, isLocalOnlySlash, MODE_ALIASES } from '../shared/slashMode';
 import { pickCommandModel } from './commandModel'; // (lane:commands-agents)
 import type {
   AttachmentInfo,
@@ -295,7 +295,7 @@ export class ChatController implements vscode.Disposable {
         limiter: new Semaphore(d.config.agentsMaxConcurrent()),
         writeLock: new Semaphore(1),
         onSwitch: (i) => this.announceSwitch(i, false),
-        extensions: () => [hooksSubAgentExtension(() => this.hookService())], // (lane:hooks) hook PreToolUse/PostToolUse cũng áp cho agent con
+        extensions: () => hostSubAgentExtensions({ deps: this.d, host: this.host, registry: this.registry, session: () => this.session }, hooksSubAgentExtension(() => this.hookService())), // (lane:hooks) hook PreToolUse/PostToolUse + (lane:perm-rules) luật quyền cũng áp cho agent con
       },
       market: { search: (q, n, skip) => d.market.search(q, n, skip) },
       chrome: d.chrome,
@@ -569,6 +569,11 @@ export class ChatController implements vscode.Disposable {
     if (m.type === 'send' && isBypassSlash(m.text) && !this.d.config.remoteAllowBypass()) {
       this.notifyLocal('warn', this.lang === 'vi' ? 'Một thiết bị từ xa vừa thử đổi sang chế độ «Bỏ qua mọi xác nhận» — bị chặn (cài đặt locaithAgent.remote.allowBypass đang tắt).' : 'A remote device just tried to switch to “Bypass all prompts” — blocked (locaithAgent.remote.allowBypass is off).');
       return Promise.reject(new Error('bypass_not_allowed'));
+    }
+    // (xlane) `/permissions allow|trust…`, `/hooks trust|open`, `/agents new` đổi quyền/thực thi: chỉ ở VS Code, không đi đường vòng bằng nội dung tin `send` từ xa.
+    if (m.type === 'send' && isLocalOnlySlash(m.text)) {
+      this.notifyLocal('warn', this.lang === 'vi' ? 'Một thiết bị từ xa vừa thử chạy lệnh đổi quyền/hook (/permissions, /hooks, /agents) — bị chặn, chỉ dùng được trong VS Code.' : 'A remote device just tried a permission/hook command (/permissions, /hooks, /agents) — blocked; use it in VS Code.');
+      return Promise.reject(new Error('slash_local_only'));
     }
     if (m.type === 'bg_task' && m.action !== 'stop') return Promise.reject(new Error('bad_action')); // (lane:bg-tasks) từ xa chỉ được Dừng
     if (via && (m.type === 'send' || m.type === 'permission_response' || m.type === 'stop' || m.type === 'set_mode' || m.type === 'new_session' || m.type === 'load_session')) {
@@ -2410,6 +2415,7 @@ export class ChatController implements vscode.Disposable {
     // Cắt đuôi chỉ để lại một TIỀN TỐ nguyên vẹn của hội thoại cũ nên khối suy luận còn lại vẫn hợp lệ — không đặt
     // `historyEdited` (cờ đó chỉ bỏ suy luận ở một lần gọi rồi tự xoá, lượt sau lại phát lại bản cũ và API trả 400).
     this.session.messages = msgs.slice(0, idx);
+    this.session.lastContextTokens = 0; // xem rewind: số đo cũ không còn đúng với lịch sử đã cắt (xlane)
     this.patch({ transcript: this.view.transcript.slice(0, ti) });
     if (editOnly) {
       // Tệp tải lên: bản hiển thị không còn phần chữ → lấy lại từ bản lưu của tin cuối (nếu còn); phiên mới khôi phục từ kho thì phải đính kèm lại.

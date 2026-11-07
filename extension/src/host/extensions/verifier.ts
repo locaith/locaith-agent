@@ -24,6 +24,7 @@ import {
 import type { HostExtensionContext } from '../hostExtensions';
 import type { ControllerDeps } from '../chatController';
 import type { SlashRegistry } from '../slashRegistry';
+import { permissionRulesExtension } from './permissionRules';
 import type { VsCodeToolHost } from '../vscodeHost';
 
 /** Trạng thái theo controller (khoá = ToolHost của controller đó, mỗi khung chat một host). */
@@ -49,7 +50,12 @@ export function readVerifierSettings(host: VsCodeToolHost): VerifierSettings {
   return { mode: normalizeMode(host.setting<string>('agent.verify', 'auto')), model: model || undefined, maxRounds: VERIFY_MAX_ROUNDS };
 }
 
-function runnerFor(deps: ControllerDeps, host: VsCodeToolHost): VerifierRunner {
+/** Agent kiểm tra là một agent con: luật quyền (deny/ask) của người dùng cũng phải áp cho nó, nếu không `read_file(.env*)` bị cấm vẫn đọc được qua reviewer (xlane). */
+export function verifierSubExtensions(ctx: HostExtensionContext): RunExtension[] {
+  return [permissionRulesExtension(ctx)];
+}
+
+function runnerFor(deps: ControllerDeps, host: VsCodeToolHost, ctx: HostExtensionContext): VerifierRunner {
   const s = stateFor(host);
   if (!s.runner) {
     s.runner = runnerFromServices({
@@ -63,6 +69,7 @@ function runnerFor(deps: ControllerDeps, host: VsCodeToolHost): VerifierRunner {
       log: (level, msg) => deps.logger.log(level, msg),
       limiter: new Semaphore(1),
       writeLock: new Semaphore(1),
+      extensions: () => verifierSubExtensions(ctx),
     });
   }
   return s.runner;
@@ -74,7 +81,7 @@ export function verifierExtension(ctx: HostExtensionContext): RunExtension {
   return createVerifierExtension({
     settings: () => readVerifierSettings(ctx.host),
     registry: () => ctx.registry,
-    run: runnerFor(ctx.deps, ctx.host),
+    run: runnerFor(ctx.deps, ctx.host, ctx),
     onLastRun: (last) => {
       state.last = last;
     },
@@ -139,7 +146,7 @@ export function registerVerifySlash(slash: SlashRegistry, c: VerifySlashHost): v
             callId: `verify:${key}`,
             lang,
             model: settings.model,
-            run: runnerFor(c.deps, c.host),
+            run: runnerFor(c.deps, c.host, { deps: c.deps, host: c.host, registry: c.registry, session: () => c.session() }),
           });
           if (outcome.tokens > 0) session.usageTotals.input += outcome.tokens;
           if (outcome.kind === 'skipped' && outcome.reason === 'aborted') stop = 'aborted';
