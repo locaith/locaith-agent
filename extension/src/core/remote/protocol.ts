@@ -175,7 +175,7 @@ export function parseCommand(raw: unknown, opts: { canBypass: boolean }): ParseR
         if (!Array.isArray(o.files) || o.files.length > 200) return bad('bad_files');
         files = [];
         for (const f of o.files) {
-          if (typeof f !== 'string' || f.length === 0 || f.length > 500 || /[ -]/.test(f)) return bad('bad_files');
+          if (typeof f !== 'string' || f.length === 0 || f.length > 500 || /[\u0000-\u001f]/.test(f)) return bad('bad_files');
           files.push(f);
         }
       }

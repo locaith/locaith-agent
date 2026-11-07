@@ -9,7 +9,7 @@ const asst = (text: string, tool?: string): ChatMessage => ({
   role: 'assistant',
   content: [{ type: 'text', text }, ...(tool ? [{ type: 'tool_use' as const, id: tool, name: 'write_file', input: {} }] : [])],
 });
-const result = (id: string): ChatMessage => ({ role: 'user', content: [{ type: 'tool_result', toolUseId: id, content: 'ok' }] });
+const result = (id: string): ChatMessage => ({ role: 'user', content: [{ type: 'tool_result', toolUseId: id, name: 'write_file', content: 'ok' }] });
 const uItem = (id: string, text: string, steer?: boolean): TItem => ({ kind: 'user', id, text, attachments: [], ts: 1, ...(steer ? { steer: true } : {}) });
 const aItem = (id: string): TItem => ({ kind: 'assistant', id, provider: 'p', model: 'm', blocks: [], done: true, ts: 1 }) as unknown as TItem;
 
@@ -47,7 +47,7 @@ describe('cutConversation', () => {
 
   it('tin `steer` (chen giữa vòng công cụ) không được tính là điểm mở lượt và không chọn được', () => {
     const t2: TItem[] = [uItem('u1', 'một'), aItem('a1'), uItem('s1', 'chen vào', true), aItem('a1b'), uItem('u2', 'hai')];
-    const msgs = [user('một'), asst('x', 'k'), { role: 'user', content: [{ type: 'tool_result', toolUseId: 'k', content: 'ok' }, { type: 'text', text: 'chen vào' }] } as ChatMessage, asst('y'), user('hai')];
+    const msgs = [user('một'), asst('x', 'k'), { role: 'user', content: [{ type: 'tool_result', toolUseId: 'k', name: 'write_file', content: 'ok' }, { type: 'text', text: 'chen vào' }] } as ChatMessage, asst('y'), user('hai')];
     expect('error' in cutConversation(msgs, t2, 's1')).toBe(true);
     const cut = cutConversation(msgs, t2, 'u2');
     if ('error' in cut) throw new Error('lỗi');

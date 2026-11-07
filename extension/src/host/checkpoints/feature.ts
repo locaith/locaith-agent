@@ -381,8 +381,9 @@ export class CheckpointFeature {
     this.redo = null;
     await this.store!.markUndone(sid, r.turnIds, false);
     await this.refresh();
-    const promptId = this.d.view().rewind?.promptId ?? '';
-    this.d.patch({ rewind: { promptId, stage: 'done', what: 'code', restored, redone: true, ...(skipped ? { skipped } : {}), canRedo: false } });
+    const prev = this.d.view().rewind;
+    const promptId = prev?.promptId ?? '';
+    this.d.patch({ rewind: { promptId, stage: 'done', what: 'code', ...(prev?.scope ? { scope: prev.scope } : {}), restored, redone: true, ...(skipped ? { skipped } : {}), canRedo: false } });
   }
 
   private async diff(promptId: string, rel: string): Promise<void> {

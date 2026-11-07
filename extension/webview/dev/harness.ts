@@ -815,6 +815,36 @@ function taskflowScene(): ViewState {
   };
 }
 
+/** (lane:checkpoints-rewind) Cuộc trò chuyện dài + checkpoint cho tin cuối: thanh «N tệp đã đổi», menu / xem trước / kết quả của «Quay lại». */
+function rewindScene(stage: 'bar' | 'menu' | 'plan' | 'done' | 'recent'): ViewState {
+  const base = longConversation();
+  const id = [...base.transcript].reverse().find((i) => i.kind === 'user')!.id;
+  const files = [
+    { rel: 'src/ads/phanBoNganSach.ts', kind: 'edit' as const, added: 24, removed: 6 },
+    { rel: 'src/ads/bao-cao.test.ts', kind: 'create' as const, added: 41, removed: 0 },
+    { rel: 'data/báo-cáo-tháng-10.csv', kind: 'edit' as const, added: 3, removed: 3, skipped: 'too_large' as const },
+  ];
+  const v: ViewState = { ...base, running: false, checkpoints: [{ promptId: id, files }] };
+  if (stage === 'menu') v.rewind = { promptId: id, stage: 'menu' };
+  if (stage === 'recent') v.rewind = { promptId: id, stage: 'menu', recent: [{ promptId: id, text: 'Mình có bảng báo cáo quảng cáo Facebook tháng 10/2026', files: 3 }] };
+  if (stage === 'plan')
+    v.rewind = {
+      promptId: id,
+      stage: 'plan',
+      what: 'both',
+      scope: 'from',
+      conflicts: 1,
+      messages: 14,
+      files: [
+        { rel: 'src/ads/phanBoNganSach.ts', action: 'restore', added: 6, removed: 24, conflict: true },
+        { rel: 'src/ads/bao-cao.test.ts', action: 'delete', added: 0, removed: 41 },
+        { rel: 'data/báo-cáo-tháng-10.csv', action: 'skip', added: 0, removed: 0, reason: 'too_large' },
+      ],
+    };
+  if (stage === 'done') v.rewind = { promptId: id, stage: 'done', what: 'code', scope: 'from', restored: 2, skipped: 1, canRedo: true };
+  return v;
+}
+
 function initialView(): ViewState {
   let v: ViewState;
   switch (scenario) {
@@ -963,6 +993,13 @@ function initialView(): ViewState {
       break;
     case 'taskflow':
       v = taskflowScene();
+      break;
+    case 'rewind-bar':
+    case 'rewind-menu':
+    case 'rewind-plan':
+    case 'rewind-done':
+    case 'rewind-recent':
+      v = rewindScene(scenario.slice(7) as 'bar' | 'menu' | 'plan' | 'done' | 'recent');
       break;
     case 'media':
     case 'media-live':
