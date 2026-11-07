@@ -12,6 +12,7 @@ import { reduceView } from '../../src/shared/transcript';
 import {
   PROVIDERS,
   baseState,
+  ccTimelineState,
   errorState,
   locaithState,
   longConversation,
@@ -946,6 +947,13 @@ function initialView(): ViewState {
     case 'parallel-agents':
       v = parallelAgentsState();
       break;
+    // ── (lane:cc-timeline-ui) dòng thời gian gọn kiểu Claude Code (ba ảnh mẫu) ──
+    case 'cc-timeline':
+      v = ccTimelineState();
+      break;
+    case 'cc-working':
+      v = ccTimelineState({ working: true });
+      break;
     case 'parallel-narrow':
       v = parallelAgentsState({ narrow: true });
       break;
@@ -977,6 +985,8 @@ function initialView(): ViewState {
   if (langParam === 'en') v = { ...v, settings: { ...v.settings, language: 'en' } };
   if (fontParam) v = { ...v, settings: { ...v.settings, fontFamily: fontParam as ViewState['settings']['fontFamily'] } };
   if (params.get('bypass') === '1') v = { ...v, allowBypass: true };
+  // (lane:cc-timeline-ui) platform=browser: cùng giao diện chạy như bản Chrome/Edge (không nút mở tệp, placeholder tab).
+  if (params.get('platform') === 'browser') v = { ...v, platform: 'browser', canQueue: false, remote: undefined, account: undefined };
   v = {
     ...v,
     orchestration: {

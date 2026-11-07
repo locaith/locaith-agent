@@ -10,8 +10,8 @@
 import type { ABlock, TItem, ToolBlock } from '../../src/shared/protocol';
 import type { Lang } from './format';
 import { tOpt } from './i18n';
-import { describeTool } from './toolLabels';
-import type { WorkStats } from './timeline';
+import { AGENT_TOOLS, describeTool } from './toolLabels';
+import type { ActivityRow, WorkStats } from './timeline';
 
 // ── giờ & ngày ────────────────────────────────────────────────────────────────
 
@@ -212,6 +212,39 @@ export function formatSeconds(ms: number, lang: Lang): string {
   return lang === 'vi' ? `${h} giờ${mm ? ` ${mm} phút` : ''}` : `${h}h${mm ? ` ${mm}m` : ''}`;
 }
 
+/** Thời lượng NGẮN cho meta bên phải dòng nhóm: dưới 1 phút → giây; từ 1 phút → chỉ phút («24 phút» / «24m»); từ 1 giờ → giờ + phút. */
+export function formatDurationShort(ms: number, lang: Lang): string {
+  const s = Math.max(0, Math.round(ms / 1000));
+  if (s < 60) return formatSeconds(ms, lang);
+  const m = Math.floor(s / 60);
+  if (m < 60) return lang === 'vi' ? `${m} phút` : `${m}m`;
+  const h = Math.floor(m / 60);
+  const mm = m % 60;
+  return lang === 'vi' ? `${h} giờ${mm ? ` ${mm} phút` : ''}` : `${h}h${mm ? ` ${mm}m` : ''}`;
+}
+
+/** Mốc bắt đầu của lượt đang chạy (ts của lượt trả lời chưa xong, hoặc của tin người dùng cuối khi lượt chưa mở), hoặc undefined khi không chạy. */
+export function runningSince(view: { running: boolean; transcript: readonly TItem[] }): number | undefined {
+  if (!view.running) return undefined;
+  for (let i = view.transcript.length - 1; i >= 0; i--) {
+    const it = view.transcript[i];
+    if (it.kind === 'assistant') return !it.done && finiteTs(it.ts) ? it.ts : undefined;
+    if (it.kind === 'user') return finiteTs(it.ts) ? it.ts : undefined;
+  }
+  return undefined;
+}
+
+/** Đồng hồ chip ô nhập, ngắn và không phụ thuộc ngôn ngữ như Claude Code: «48s» · «59m» · «1h 12m». */
+export function formatElapsedShort(ms: number): string {
+  const s = Math.max(0, Math.floor(ms / 1000));
+  if (s < 60) return `${s}s`;
+  const m = Math.floor(s / 60);
+  if (m < 60) return `${m}m`;
+  const h = Math.floor(m / 60);
+  const mm = m % 60;
+  return mm ? `${h}h ${mm}m` : `${h}h`;
+}
+
 // ── nhóm ──────────────────────────────────────────────────────────────────────
 
 export type RunTone = 'ok' | 'fail' | 'live';
@@ -220,6 +253,42 @@ export type RunTone = 'ok' | 'fail' | 'live';
 export function runTone(stats: Pick<WorkStats, 'failed'>, live: boolean): RunTone {
   if (stats.failed > 0) return 'fail';
   return live ? 'live' : 'ok';
+}
+
+/**
+ * Mọi khối agent con / workflow trong một cụm dòng (đi xuyên vào nhóm, dòng tóm tắt, việc), theo thứ tự xuất hiện.
+ * Dòng nhóm GẬP vẫn hiện các dòng agent này ngay bên dưới (như Claude Code) — agent song song là thông tin sống quan trọng nhất.
+ */
+export function agentRowsOf(rows: readonly ActivityRow[]): ToolBlock[] {
+  const out: ToolBlock[] = [];
+  const seen = new Set<string>();
+  const push = (b: ToolBlock) => {
+    if (AGENT_TOOLS.has(b.name) && !seen.has(b.id)) {
+      seen.add(b.id);
+      out.push(b);
+    }
+  };
+  for (const r of rows) {
+    switch (r.kind) {
+      case 'tool':
+      case 'agent':
+        push(r.block);
+        break;
+      case 'toolgroup':
+      case 'editgroup':
+        r.blocks.forEach(push);
+        break;
+      case 'toolsum':
+        r.info.blocks.forEach(push);
+        break;
+      case 'taskgroup':
+        agentRowsOf(r.rows).forEach(push);
+        break;
+      default:
+        break;
+    }
+  }
+  return out;
 }
 
 /** Lệnh đang chạy nền? (đối số `run_in_background` / `background` do model đặt; thiếu = không). */

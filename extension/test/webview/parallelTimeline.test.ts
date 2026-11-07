@@ -50,7 +50,8 @@ describe('dòng tóm tắt «N lệnh gọi công cụ»', () => {
     expect(settled.kind === 'toolsum' && settled.info.latest).toBeUndefined();
   });
 
-  it('lệnh BÊN TRONG agent con được cộng vào tổng và số lỗi (như «89 tool calls · 1 failed»)', () => {
+  // (lane:cc-timeline-ui) ĐỔI CÓ CHỦ Ý theo ảnh Claude Code: «54 tool calls · 2 failed» chỉ đếm lệnh của lượt; «249 tools» của agent nằm trên dòng agent.
+  it('lệnh BÊN TRONG agent con KHÔNG cộng vào tổng/số lỗi của dòng nhóm (agent = 1 lệnh; số của nó hiện trên dòng agent)', () => {
     const blocks = [
       tool('r1', 'read_file'),
       tool('r2', 'grep'),
@@ -58,10 +59,10 @@ describe('dòng tóm tắt «N lệnh gọi công cụ»', () => {
       tool('ag2', 'agent', 'done', { description: 'B' }, { tokens: 2000, tools: 44 }),
     ];
     const row = rowsOf(buildSegments(blocks, true, true))[0];
-    expect(row.kind === 'toolsum' && row.info).toMatchObject({ total: 4 + 12 + 44, failed: 1 });
+    expect(row.kind === 'toolsum' && row.info).toMatchObject({ total: 4, failed: 0 });
   });
 
-  it('agent đang chạy có dòng riêng bên dưới; tổng của dòng tóm tắt vẫn cộng agent và lệnh của chúng', () => {
+  it('agent đang chạy có dòng riêng bên dưới; tổng của dòng tóm tắt đếm mỗi agent là một lệnh', () => {
     const blocks = [
       tool('r1', 'read_file'),
       tool('r2', 'grep'),
@@ -74,8 +75,9 @@ describe('dòng tóm tắt «N lệnh gọi công cụ»', () => {
     expect(kinds(rows)).toEqual(['toolsum', 'agent', 'agent', 'agent']);
     const sum = rows[0];
     expect(sum.kind === 'toolsum' && sum.info.blocks.map((b) => b.id)).toEqual(['r1', 'r2', 'r3']); // agent đang chạy KHÔNG nằm trong danh sách mở rộng
-    expect(sum.kind === 'toolsum' && sum.info.total).toBe(3 + 3 + 12 + 44 + 22); // 3 lệnh + 3 agent + lệnh của agent
-    expect(sum.kind === 'toolsum' && sum.info.failed).toBe(2);
+    expect(sum.kind === 'toolsum' && sum.info.total).toBe(3 + 3); // 3 lệnh + 3 agent (lệnh bên trong agent KHÔNG cộng)
+    expect(sum.kind === 'toolsum' && sum.info.failed).toBe(0);
+    expect(sum.kind === 'toolsum' && sum.info.liveCalls).toBe(3); // phần thuộc agent sống (có dòng riêng) để cụm gộp không đếm hai lần
     expect(rows.slice(1).map((r) => r.kind === 'agent' && r.block.id)).toEqual(['ag1', 'ag2', 'ag3']);
   });
 
@@ -131,7 +133,7 @@ describe('dòng tóm tắt «N lệnh gọi công cụ»', () => {
     // mặc định turnLive = !turnDone: lượt đã xong → không có dòng agent sống
     const done = rowsOf(buildSegments(stale, true, true));
     expect(kinds(done)).toEqual(['toolsum']);
-    expect(done[0].kind === 'toolsum' && done[0].info).toMatchObject({ running: false, total: 5 + 2 });
+    expect(done[0].kind === 'toolsum' && done[0].info).toMatchObject({ running: false, total: 5 });
     expect(done[0].kind === 'toolsum' && done[0].info.latest).toBeUndefined();
     // lượt chưa xong nhưng không chạy (view.running = false) → cũng vậy
     const idle = rowsOf(buildSegments(stale, false, true, false));
@@ -239,7 +241,11 @@ describe('giao diện: CSS và chuỗi', () => {
     expect(agentTsx).toMatch(/aria-live="off"/);
     expect(agentTsx).not.toMatch(/aria-live="(polite|assertive)"/);
     expect(agentTsx).not.toMatch(/role="(timer|status|progressbar)"/);
-    expect(summaryTsx).toMatch(/<button type="button" class="tool-head" aria-expanded=\{open\}/);
+    // (lane:cc-timeline-ui) nút mở rộng nằm trong RunHead dùng chung: vẫn là <button> thật có aria-expanded; ToolSummary truyền open/onToggle vào.
+    const runHeadTsx = fs.readFileSync(path.join(W, 'components/timeline/RunHead.tsx'), 'utf8');
+    expect(runHeadTsx).toMatch(/<button type="button" class=\{cx\('tool-head', 'cc-head'[^>]*aria-expanded=\{p\.open\}/);
+    expect(summaryTsx).toMatch(/<RunHead[\s\S]*open=\{open\}[\s\S]*onToggle=/);
+    expect(summaryTsx).toMatch(/if \(flat\)/); // trong nhóm đã mở: bày phẳng từng lệnh, không dòng tóm tắt trung gian
     expect(summaryTsx).toMatch(/role="listitem"/);
     // aria-label của dòng agent không chứa số giây (đọc to một đồng hồ chạy là nhiễu)
     expect(agentTsx).toMatch(/aria-label=\{t\('par\.agent\.aria', \{ title, activity, stats: `\$\{tokens\}, \$\{tools\}/);

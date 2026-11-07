@@ -36,7 +36,8 @@ async function assertParallel(p, tick = false) {
     return {
       width: app ? app.clientWidth : 0,
       agents: rows.length,
-      sums: q('.par-sum-count').map((e) => e.textContent.trim()),
+      // (lane:cc-timeline-ui) dòng nhóm gập của lượt đang chạy (RunHead) — agent sống hiện ngay dưới nhóm gập
+      sums: q('.turn-assistant > .run-group > .cc-head .cc-count').map((e) => e.textContent.trim()),
       overflowX: tl ? tl.scrollWidth - tl.clientWidth : -1,
       heights: rows.map((e) => Math.round(e.getBoundingClientRect().height)),
       counts: rows.map((e) => [shown(e.querySelector('.par-st-counts')), shown(e.querySelector('.par-act-counts'))]),
@@ -45,7 +46,7 @@ async function assertParallel(p, tick = false) {
   });
   if (r.agents !== 3) throw new Error(`cần 3 dòng agent sống, thấy ${r.agents}`);
   if (r.sums.length < 2 || !r.sums.every((s) => /(lệnh gọi công cụ|tool calls)/.test(s))) throw new Error(`dòng tóm tắt sai: ${JSON.stringify(r.sums)}`);
-  if (!/^161 /.test(r.sums[0])) throw new Error(`tổng phải là 161 (80 lệnh + 3 agent + 78 lệnh của agent con): ${r.sums[0]}`);
+  if (!/^83 /.test(r.sums[0])) throw new Error(`tổng phải là 83 (80 lệnh + 3 agent; lệnh của agent con hiện trên dòng agent): ${r.sums[0]}`);
   if (!/^4 /.test(r.sums[1])) throw new Error(`bước hiện tại phải là 4 lệnh: ${r.sums[1]}`);
   if (r.overflowX > 1) throw new Error(`tràn ngang ${r.overflowX}px`);
   if (r.heights.some((h) => h > 60)) throw new Error(`dòng agent cao hơn hai dòng chữ: ${r.heights.join(',')}`);
@@ -60,6 +61,99 @@ async function assertParallel(p, tick = false) {
   }
 }
 const assertParallelTick = (p) => assertParallel(p, true);
+
+/**
+ * (lane:cc-timeline-ui) Cảnh «cc-timeline» gập: đúng 4 dòng nhóm (22 · 54+2 lỗi · 36+2 lỗi · đang chạy), chấm xanh/đỏ/sống đúng màu,
+ * dòng agent với bộ số nằm dưới nhóm gập, dòng nén, đường ngăn ngày + giờ, chip đồng hồ dưới ô nhập, placeholder xếp hàng, không tràn ngang.
+ */
+async function assertCcCollapsed(p) {
+  const r = await p.evaluate(() => {
+    const q = (s) => [...document.querySelectorAll(s)];
+    const tl = document.querySelector('.timeline');
+    // dòng nhóm cấp lượt: «quá trình» của lượt đã xong (work-sum), cụm gộp (run-group) hoặc một dòng tóm tắt lẻ (par-sum) của lượt đang chạy
+    const heads = q('.turn-assistant > .act.work-sum .cc-head, .turn-assistant > .run-group > .cc-head, .turn-assistant > .act > .par-sum > .cc-head');
+    return {
+      heads: heads.map((h) => ({ text: h.querySelector('.cc-line').textContent.trim(), dot: [...h.querySelector('.cc-dot').classList].find((c) => c.startsWith('is-')), sub: (h.querySelector('.cc-sub') || {}).textContent || '' })),
+      agents: q('.par-agent').map((e) => ({ title: e.querySelector('.par-agent-title').textContent, stats: e.querySelector('.par-agent-stats').textContent, h: Math.round(e.getBoundingClientRect().height) })),
+      compact: q('.cc-compact-head').map((e) => e.textContent.trim()),
+      days: q('.cc-day-label').map((e) => e.textContent),
+      stamps: q('.cc-stamp').map((e) => e.textContent),
+      clock: (document.querySelector('.cc-clock-text') || {}).textContent || '',
+      placeholder: (document.querySelector('.composer-input') || {}).placeholder || '',
+      browser: /platform=browser/.test(location.search),
+      icons: q('.act-row .act-icon svg').length,
+      overflowX: tl ? tl.scrollWidth - tl.clientWidth : -1,
+      width: document.querySelector('.app').clientWidth,
+    };
+  });
+  if (r.heads.length !== 4) throw new Error(`cần 4 dòng nhóm, thấy ${r.heads.length}: ${JSON.stringify(r.heads)}`);
+  const [g22, g54, g36, gLive] = r.heads;
+  if (!/^22 /.test(g22.text) || g22.dot !== 'is-ok') throw new Error(`nhóm 1 phải «22 …» chấm xanh: ${JSON.stringify(g22)}`);
+  if (!/^54 .*2 (lỗi|failed)/.test(g54.text) || g54.dot !== 'is-fail') throw new Error(`nhóm 2 phải «54 … 2 lỗi» chấm đỏ: ${JSON.stringify(g54)}`);
+  if (!/^36 .*2 (lỗi|failed)/.test(g36.text) || g36.dot !== 'is-fail') throw new Error(`nhóm 3 phải «36 … 2 lỗi» chấm đỏ: ${JSON.stringify(g36)}`);
+  if (!/^(Đang chạy|Running) (Lệnh|Bash)/.test(gLive.text) || !/10 /.test(gLive.text) || gLive.dot !== 'is-live') throw new Error(`nhóm đang chạy sai: ${JSON.stringify(gLive)}`);
+  if (!/(Chạy nền|Run in background)/.test(gLive.sub)) throw new Error(`thiếu dòng phụ «Chạy nền»: ${JSON.stringify(gLive)}`);
+  if (r.agents.length !== 1 || !/654,9k|654\.9k/.test(r.agents[0].stats) || !/249/.test(r.agents[0].stats) || !/39( phút|m)/.test(r.agents[0].stats)) throw new Error(`dòng agent sai: ${JSON.stringify(r.agents)}`);
+  if (r.agents[0].h > 60) throw new Error(`dòng agent cao hơn hai dòng chữ: ${r.agents[0].h}`);
+  if (r.compact.length !== 1 || !/968k/.test(r.compact[0])) throw new Error(`dòng nén sai: ${JSON.stringify(r.compact)}`);
+  if (r.days.length !== 1) throw new Error(`cần đúng 1 đường ngăn ngày: ${JSON.stringify(r.days)}`);
+  if (r.stamps.length < 5) throw new Error(`thiếu dấu giờ: ${JSON.stringify(r.stamps)}`);
+  if (!/^\d+[smh]/.test(r.clock)) throw new Error(`chip đồng hồ không hiện: ${JSON.stringify(r.clock)}`);
+  // Bản Chrome chưa có hàng chờ tin nhắn → placeholder «đang làm việc» như cũ; VS Code → «Xếp hàng tin nhắn khác…».
+  if (!r.browser && !/(Xếp hàng|Queue)/.test(r.placeholder)) throw new Error(`placeholder phải nói xếp hàng: ${r.placeholder}`);
+  if (r.icons !== 0) throw new Error(`dòng thời gian gập không được có biểu tượng SVG ở cột chấm: ${r.icons}`);
+  if (r.overflowX > 1) throw new Error(`tràn ngang ${r.overflowX}px ở bề ngang ${r.width}px`);
+}
+
+/** Nhãn đang chạy cuối lượt: từ khoá đậm + logo Lo, không dấu «…». */
+async function assertCcWorking(p) {
+  const r = await p.evaluate(() => {
+    const w = document.querySelector('.cc-working');
+    return { label: w ? w.querySelector('.cc-working-label').textContent : null, logo: !!(w && w.querySelector('.lo-spin')), weight: w ? getComputedStyle(w.querySelector('.cc-working-label')).fontWeight : '' };
+  });
+  if (!r.label || /…/.test(r.label) || !r.logo || Number(r.weight) < 600) throw new Error(`nhãn đang chạy sai: ${JSON.stringify(r)}`);
+}
+
+/** Mở nhóm thứ i (0 = «22», 2 = «36 · 2 lỗi» có Write/Edit/Bash) và kiểm cấu trúc bên trong: thanh dọc, IN/OUT, xem trước tệp, nút Thu gọn ở cuối. */
+function expandCcGroup(i) {
+  return async (p) => {
+    const heads = await p.$$('.turn-assistant > .act.work-sum .cc-head, .turn-assistant > .run-group > .cc-head, .turn-assistant > .act > .par-sum > .cc-head');
+    await heads[i].click();
+    await wait(300);
+    const r = await p.evaluate(() => {
+      const q = (s) => [...document.querySelectorAll(s)];
+      const body = document.querySelector('.work-body');
+      const tl = document.querySelector('.timeline');
+      return {
+        body: !!body,
+        border: body ? getComputedStyle(body).borderLeftWidth : '',
+        thought: q('.cc-think').map((e) => e.textContent),
+        actions: q('.work-body .cc-action').map((e) => e.textContent),
+        io: q('.cc-io-label').map((e) => e.textContent),
+        previews: q('.cc-preview').length,
+        lines: q('.cc-lines').map((e) => e.textContent),
+        paths: q('.cc-path').length,
+        errOut: q('.cc-io.is-error').length,
+        foot: q('.work-body > .collapse-foot').length,
+        overflowX: tl ? tl.scrollWidth - tl.clientWidth : -1,
+      };
+    });
+    if (!r.body || r.border !== '1px') throw new Error(`thân nhóm phải mở với thanh dọc 1px: ${JSON.stringify(r)}`);
+    if (r.foot !== 1) throw new Error('thiếu nút Thu gọn ở cuối thân nhóm');
+    if (r.overflowX > 1) throw new Error(`tràn ngang ${r.overflowX}px`);
+    if (i === 0) {
+      if (!r.thought.some((x) => /(Đã suy nghĩ 14 giây|Thought for 14s)/.test(x))) throw new Error(`thiếu «Đã suy nghĩ 14 giây»: ${JSON.stringify(r.thought)}`);
+      if (!r.actions.some((a) => /^(Lệnh|Bash)$/.test(a))) throw new Error(`thiếu dòng Lệnh/Bash: ${JSON.stringify(r.actions)}`);
+      if (r.io.filter((x) => x === 'IN').length < 2 || r.io.filter((x) => x === 'OUT').length < 2) throw new Error(`thiếu ô IN/OUT: ${JSON.stringify(r.io)}`);
+    }
+    if (i === 2) {
+      if (!r.actions.some((a) => /^(Ghi|Write)$/.test(a)) || r.previews < 2) throw new Error(`thiếu dòng Ghi + xem trước tệp: ${JSON.stringify(r)}`);
+      if (!r.lines.some((x) => /58/.test(x))) throw new Error(`thiếu «58 dòng»: ${JSON.stringify(r.lines)}`);
+      if (r.paths < 3) throw new Error(`đường dẫn màu liên kết phải có ở Ghi/Sửa: ${r.paths}`);
+      if (r.errOut !== 1) throw new Error(`đầu ra lỗi (chữ đỏ) phải có đúng 1: ${r.errOut}`);
+    }
+  };
+}
 
 /** @type {{name:string, q:Record<string,string>, w?:number, h?:number, full?:boolean, page?:string, act?:(p:any)=>Promise<void>}[]} */
 const SHOTS = [
@@ -185,6 +279,18 @@ const SHOTS = [
   { name: '27-research-manrope-dark-420', q: { scenario: 'research', theme: 'dark', speed: '0', font: 'manrope' }, w: 420, h: 900 },
   { name: '28-research-hclight-420', q: { scenario: 'research', theme: 'hclight', speed: '0' }, w: 420, h: 900 },
   { name: '29-icons', q: {}, w: 900, h: 700, page: 'icons.html' },
+  // ── (lane:cc-timeline-ui) dòng thời gian gọn kiểu Claude Code: tái hiện ba ảnh mẫu ──
+  { name: 'cc-1-collapsed-dark-420', q: { scenario: 'cc-timeline', theme: 'dark', expand: '1' }, w: 420, h: 900, full: true, act: assertCcCollapsed },
+  { name: 'cc-1-collapsed-light-420', q: { scenario: 'cc-timeline', theme: 'light', expand: '1' }, w: 420, h: 900, full: true },
+  { name: 'cc-1-collapsed-hc-420', q: { scenario: 'cc-timeline', theme: 'hc', expand: '1' }, w: 420, h: 900, full: true },
+  { name: 'cc-1-collapsed-en-dark-420', q: { scenario: 'cc-timeline', theme: 'dark', expand: '1', lang: 'en' }, w: 420, h: 900, full: true, act: assertCcCollapsed },
+  { name: 'cc-1-collapsed-dark-300', q: { scenario: 'cc-timeline', theme: 'dark', expand: '1' }, w: 300, h: 900, full: true, act: assertCcCollapsed },
+  { name: 'cc-1-collapsed-browser-dark-420', q: { scenario: 'cc-timeline', theme: 'dark', expand: '1', platform: 'browser' }, w: 420, h: 900, full: true, act: assertCcCollapsed },
+  { name: 'cc-working-dark-420', q: { scenario: 'cc-working', theme: 'dark' }, w: 420, h: 820, act: assertCcWorking },
+  { name: 'cc-2-expanded-bash-dark-420', q: { scenario: 'cc-timeline', theme: 'dark', expand: '1' }, w: 420, h: 900, full: true, act: expandCcGroup(0) },
+  { name: 'cc-3-expanded-write-dark-420', q: { scenario: 'cc-timeline', theme: 'dark', expand: '1' }, w: 420, h: 900, full: true, act: expandCcGroup(2) },
+  { name: 'cc-3-expanded-write-light-300', q: { scenario: 'cc-timeline', theme: 'light', expand: '1' }, w: 300, h: 900, full: true, act: expandCcGroup(2) },
+  { name: 'cc-compact-open-dark-420', q: { scenario: 'cc-timeline', theme: 'dark', expand: '1' }, w: 420, h: 900, full: true, act: async (p) => { await p.click('.cc-compact-head'); await wait(200); } },
   // ── nhiều việc chạy cùng lúc (0.6.0): dòng tóm tắt «N lệnh gọi công cụ» + dòng agent con sống ──
   { name: 'parallel-agents-dark-420', q: { scenario: 'parallel-agents', theme: 'dark' }, w: 420, h: 900, act: assertParallelTick },
   { name: 'parallel-agents-light-420', q: { scenario: 'parallel-agents', theme: 'light' }, w: 420, h: 900, act: assertParallel },
@@ -197,7 +303,7 @@ const SHOTS = [
     w: 420,
     h: 1200,
     act: async (p) => {
-      await p.click('.par-sum .tool-head');
+      await p.click('.turn-assistant > .run-group > .cc-head');
       await wait(250);
     },
   },
@@ -252,8 +358,10 @@ const SHOTS = [
     h: 900,
     full: true,
     act: async (p) => {
-      // mở các dòng tóm tắt «N lệnh gọi công cụ» (0.6.0) để lộ từng lệnh, rồi mở từng dòng công cụ / suy nghĩ để xem chi tiết (lệnh + kết quả, diff, khối suy nghĩ)
-      for (const s of await p.$$('.par-sum > button.tool-head')) await s.click();
+      // mở dòng «quá trình» của lượt đã xong (lane:cc-timeline-ui: RunHead) rồi các dòng tóm tắt bên trong, rồi từng dòng công cụ / suy nghĩ
+      for (const s of await p.$$('.work-sum .cc-head')) await s.click();
+      await wait(150);
+      for (const s of await p.$$('.par-sum > button.tool-head[aria-expanded="false"]')) await s.click();
       await wait(150);
       const heads = await p.$$('.act-row:not(.tool-group) > .tool-line > button.tool-head, .act-thinking > button.tool-head');
       for (const h of heads) await h.click();

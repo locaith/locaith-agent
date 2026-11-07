@@ -1,38 +1,49 @@
 import type { VNode } from 'preact';
 import { useEffect, useMemo, useRef, useState } from 'preact/hooks';
-import type { AssistantItem, NoticeItem } from '../../../../src/shared/protocol';
+import type { AssistantItem, CompactInfo, NoticeItem } from '../../../../src/shared/protocol';
 import { useApp } from '../../ctx';
-import { formatCompact, formatDuration, formatInt } from '../../format';
+import { formatCompact } from '../../format';
 import { Markdown } from '../../markdown/Markdown';
 import { estimateTokens } from '../../../../src/core/engine/tokens';
 import type { ABlock } from '../../../../src/shared/protocol';
 import { useCountUp, useElapsed } from '../../hooks';
 import { activityStats, buildSegments, groupActivityRuns, latestRunningTool, needsWorkingIndicator, splitWork, turnPlainText, type NoticeBlockT, type Segment, type WorkStats } from '../../timeline';
-import { latestLabel } from './latestLabel';
+import { actionName, agentRowsOf, backgroundOf, formatSeconds } from '../../timelineCc';
 import { LoSpinner } from '../Brand';
 import { cx, copyText, memo } from '../../util';
 import { post } from '../../vscode';
 import { Icon } from '../Icons';
 import { Button } from '../ui';
 import { ActivitySegment } from './Activity';
+import { AgentRow } from './AgentRow';
 import { ArtifactCard } from './ArtifactCard';
 import { CollapseFoot } from './CollapseFoot';
+import { CompactRow } from './CompactRow';
 import { PermissionCard } from './PermissionCard';
+import { RunHead, StatusDot } from './RunHead';
+import { Stamp } from './TimeMarks';
 
+/**
+ * Thông báo (lane:cc-timeline-ui): mức info = chấm nhỏ + chữ nghiêng xám (như «Idle 1d 16h…» của Claude Code);
+ * warn/error nổi hơn (chấm cam/đỏ, chữ rõ, viền trái mảnh) nhưng KHÔNG tô nền kín. Có `compact` → dòng nén ngữ cảnh mở ra được.
+ */
 export function NoticeView({
   level,
   text,
+  compact,
   onRetry,
 }: {
   level: 'info' | 'warn' | 'error';
   text: string;
+  compact?: CompactInfo;
   onRetry?: () => void;
 }) {
   const { t } = useApp();
+  if (compact) return <CompactRow compact={compact} text={text} />;
   return (
-    <div class={cx('notice', `notice-${level}`)} role={level === 'error' ? 'alert' : 'status'}>
+    <div class={cx('notice', `notice-${level}`, 'cc-notice')} role={level === 'error' ? 'alert' : 'status'}>
       <span class="notice-icon">
-        <Icon name={level === 'info' ? 'info' : 'alert'} size={16} />
+        <StatusDot tone={level === 'info' ? 'muted' : level === 'warn' ? 'warn' : 'fail'} />
       </span>
       <div class="notice-text">{text}</div>
       {onRetry && (
@@ -47,11 +58,12 @@ export function NoticeView({
 export function StandaloneNotice({ item, canRetry }: { item: NoticeItem; canRetry: boolean }) {
   return (
     <div class="turn turn-notice">
-      <NoticeView level={item.level} text={item.text} onRetry={canRetry && item.level === 'error' ? () => post({ type: 'retry' }) : undefined} />
+      <NoticeView level={item.level} text={item.text} compact={item.compact} onRetry={canRetry && item.level === 'error' ? () => post({ type: 'retry' }) : undefined} />
     </div>
   );
 }
 
+/** Nhãn đang chạy cuối lượt (như «Actualizing…» của Claude Code): logo «Lo» nhỏ xoay nhẹ + từ trạng thái đậm, không dấu «…». */
 function WorkingIndicator({ empty, blocks }: { empty: boolean; blocks: readonly ABlock[] }) {
   const { t, lang } = useApp();
   // Token đã sinh trong lượt này (chữ trả lời + suy nghĩ), ước lượng từ nội dung đang stream; số chạy mượt, kèm số giây đã trôi.
@@ -62,19 +74,11 @@ function WorkingIndicator({ empty, blocks }: { empty: boolean; blocks: readonly 
   }, [blocks]);
   const shown = useCountUp(tokens, true);
   const secs = useElapsed(true);
-  const stat = [tokens > 0 ? t('act.thinkTokens', { n: shown.toLocaleString(lang === 'vi' ? 'vi-VN' : 'en-US') }) : '', secs !== null && secs >= 1 ? `${secs} s` : ''].filter(Boolean).join(' · ');
+  const stat = [tokens > 0 ? t('act.thinkTokens', { n: shown.toLocaleString(lang === 'vi' ? 'vi-VN' : 'en-US') }) : '', secs !== null && secs >= 1 ? formatSeconds(secs * 1000, lang) : ''].filter(Boolean).join(' · ');
   return (
-    <div class="working working-stage" role="status">
-      {/* Mascot: logo Locaith tách thành ba robot nhỏ nhún nhảy — để lúc chờ dài không thấy trống. Thuần CSS, tự dừng khi giảm chuyển động. */}
-      <div class="mascot" aria-hidden="true">
-        <LoSpinner size={18} />
-        <span class="mascot-bots">
-          <span class="mascot-bot b1" />
-          <span class="mascot-bot b2" />
-          <span class="mascot-bot b3" />
-        </span>
-      </div>
-      <span>{empty ? t('turn.preparing') : t('act.working')}</span>
+    <div class="working cc-working" role="status">
+      <LoSpinner size={15} />
+      <span class="cc-working-label">{empty ? t('turn.preparing') : t('act.working')}</span>
       {stat && <span class="work-stat">{stat}</span>}
     </div>
   );
@@ -125,40 +129,30 @@ function TurnFooter({ item, isLast }: { item: AssistantItem; isLast: boolean }) 
   );
 }
 
+/** Các dòng agent con của một cụm: luôn hiện ngay dưới dòng nhóm khi nhóm GẬP (mở ra thì chúng nằm trong thân, đúng vị trí). */
+function AgentLines({ rows }: { rows: Parameters<typeof agentRowsOf>[0] }) {
+  const agents = useMemo(() => agentRowsOf(rows), [rows]);
+  if (agents.length === 0) return null;
+  return (
+    <div class="act cc-agents" role="list">
+      {agents.map((b) => (
+        <AgentRow key={b.id} block={b} />
+      ))}
+    </div>
+  );
+}
+
 /**
- * (0.6.3) Dòng «Đã làm việc 2 phút 13 giây · 14 thao tác · sửa 3 tệp» thay cho cả quá trình của một lượt đã xong (timeline.ts → splitWork).
+ * (0.6.3 → lane:cc-timeline-ui) Dòng nhóm của một lượt ĐÃ XONG: «[chấm] 22 lệnh gọi công cụ · 2 lỗi · sửa 3 tệp   2 phút 13 giây ⌄».
  * Bấm để mở lại đúng như lúc đang chạy; mặc định gấp để câu trả lời cuối không bị đẩy xuống dưới một chuỗi dài suy nghĩ / công cụ / chữ xen giữa.
  */
-function WorkSummary({ stats, open, onToggle }: { stats: WorkStats; open: boolean; onToggle: () => void }) {
-  const { t, lang } = useApp();
-  const head = stats.durationMs ? t('work.head', { d: formatDuration(stats.durationMs, lang) }) : t('work.headPlain');
-  // Màu theo loại số liệu để đọc nhanh: thao tác = trung tính, tệp đã sửa = xanh ngọc, lỗi = đỏ.
-  const parts: { text: string; tone: string }[] = [];
-  if (stats.calls > 0) parts.push({ text: t('work.calls', { n: formatInt(stats.calls, lang) }), tone: 'is-calls' });
-  else if (stats.steps > 0) parts.push({ text: t('work.steps', { n: formatInt(stats.steps, lang) }), tone: 'is-calls' });
-  if (stats.edits > 0) parts.push({ text: t('work.edits', { n: formatInt(stats.edits, lang) }), tone: 'is-edits' });
+function WorkSummary({ stats, open, onToggle, rows }: { stats: WorkStats; open: boolean; onToggle: () => void; rows: Parameters<typeof agentRowsOf>[0] }) {
+  const { t } = useApp();
   return (
     <div class="act work-sum" role="list">
-      <div class={cx('act-row', 'work-row', open && 'is-open', stats.failed > 0 && 'has-fail')} role="listitem">
-        <button type="button" class="tool-head" aria-expanded={open} title={open ? t('work.collapse') : t('work.expand')} onClick={onToggle}>
-          <span class={cx('act-icon', stats.failed > 0 ? 'tone-danger' : 'tone-ok')}>
-            <Icon name="list-checks" size={15} />
-          </span>
-          <span class="tool-text">
-            <span class="work-line">
-              <span class="tool-label work-head">{head}</span>
-              {parts.map((p) => (
-                <span key={p.text} class={cx('work-part', p.tone)}>
-                  {p.text}
-                </span>
-              ))}
-              {stats.failed > 0 && <span class="work-part is-fail">{t('par.failed', { n: formatInt(stats.failed, lang) })}</span>}
-            </span>
-          </span>
-          <span class="tool-meta">
-            <Icon name={open ? 'chevron-down' : 'chevron-right'} size={14} class="tool-chevron" />
-          </span>
-        </button>
+      <div class={cx('act-row', 'work-row', 'cc-group', open && 'is-open', stats.failed > 0 && 'has-fail')} role="listitem">
+        <RunHead calls={stats.calls} failed={stats.failed} edits={stats.edits} steps={stats.steps} live={false} durationMs={stats.durationMs} open={open} onToggle={onToggle} expandTitle={t('work.expand')} collapseTitle={t('work.collapse')} />
+        {!open && <AgentLines rows={rows} />}
       </div>
     </div>
   );
@@ -168,40 +162,34 @@ function WorkSummary({ stats, open, onToggle }: { stats: WorkStats; open: boolea
  * (0.6.28) MỘT dòng cho cả quá trình đang chạy — như Claude Code: mọi thứ (gọi công cụ, bash, test, suy nghĩ,
  * dòng trạng thái, tác vụ, sửa tệp) nằm trong một dòng; bấm ra xem đầy đủ, y như lúc chưa gộp.
  * Không bỏ thứ gì: phần thân chính là các đoạn hoạt động gốc, giữ nguyên thứ tự và cách nhóm bên trong.
+ * Đang chạy: «Đang chạy Lệnh · 10 lệnh gọi công cụ» + «Chạy nền» khi lệnh chạy nền. Agent con luôn hiện ngay dưới dòng.
  */
-function ActivityRun({ segs, live, render }: { segs: Segment[]; live: boolean; render: (s: Segment, streaming: boolean, activityLive: boolean) => VNode }) {
+function ActivityRun({ segs, live, render }: { segs: Segment[]; live: boolean; render: (s: Segment, streaming: boolean, activityLive: boolean, expanded: boolean) => VNode }) {
   const { t, lang } = useApp();
   const [open, setOpen] = useState(false);
   const rows = useMemo(() => segs.flatMap((s) => (s.kind === 'activity' ? s.rows : [])), [segs]);
   const stats = useMemo(() => activityStats(rows), [rows]);
   const latest = live ? latestRunningTool(rows) : null;
-  const now = latest ? latestLabel(lang, latest) : '';
-  // Cùng cách đọc màu như dòng «Đã làm việc»: thao tác trung tính · tệp xanh ngọc · lỗi đỏ.
-  const head = stats.calls > 0 ? t('par.calls', { n: formatInt(stats.calls, lang) }) : t('act.steps', { n: formatInt(stats.steps, lang) });
 
   return (
-    <div class={cx('act-row', 'tool-group', 'run-group', stats.failed > 0 && 'has-fail')} role="listitem" data-testid="activity-run">
-      <button type="button" class="tool-head" aria-expanded={open} title={open ? t('run.collapse') : t('run.expand')} onClick={() => setOpen((v) => !v)}>
-        <span class={cx('act-icon', stats.failed > 0 ? 'tone-danger' : live ? 'tone-accent' : 'tone-ok')}>{live ? <LoSpinner size={15} /> : <Icon name="list-checks" size={15} />}</span>
-        <span class="tool-text">
-          <span class="work-line">
-            <span class="tool-label">{head}</span>
-            {stats.edits > 0 && <span class="work-part is-edits">{t('work.edits', { n: formatInt(stats.edits, lang) })}</span>}
-            {stats.failed > 0 && <span class="work-part is-fail">{t('par.failed', { n: formatInt(stats.failed, lang) })}</span>}
-          </span>
-          {now && (
-            <span class="run-now" title={now}>
-              {now}
-            </span>
-          )}
-        </span>
-        <span class="tool-meta">
-          <Icon name={open ? 'chevron-down' : 'chevron-right'} size={14} class="tool-chevron" />
-        </span>
-      </button>
+    <div class={cx('act-row', 'tool-group', 'run-group', 'cc-group', stats.failed > 0 && 'has-fail')} role="listitem" data-testid="activity-run">
+      <RunHead
+        calls={stats.calls}
+        failed={stats.failed}
+        edits={stats.edits}
+        steps={stats.steps}
+        live={live}
+        runningTool={latest ? actionName(lang, latest.name) : undefined}
+        background={backgroundOf(latest)}
+        open={open}
+        onToggle={() => setOpen((v) => !v)}
+        expandTitle={t('run.expand')}
+        collapseTitle={t('run.collapse')}
+      />
+      {!open && <AgentLines rows={rows} />}
       {open && (
         <div class="tool-group-body run-body" role="list">
-          {segs.map((s, i) => render(s, false, live && i === segs.length - 1))}
+          {segs.map((s, i) => render(s, false, live && i === segs.length - 1, true))}
           <CollapseFoot onCollapse={() => setOpen(false)} label={t('run.collapse')} />
         </div>
       )}
@@ -228,15 +216,15 @@ function AssistantTurnView({ item, live, isLast }: { item: AssistantItem; live: 
     }
     return null;
   }, [segments, item.done, live, item.blocks, item.ts, item.endedAt]);
-  const lastIdx = segments.length - 1;
+  const workRows = useMemo(() => (split ? split.work.flatMap((s) => (s.kind === 'activity' ? s.rows : [])) : []), [split]);
   const vscode = platform === 'vscode';
 
   const runs = useMemo(() => groupActivityRuns(segments), [segments]);
 
-  const render = (seg: Segment, streaming: boolean, activityLive: boolean) => {
+  const render = (seg: Segment, streaming: boolean, activityLive: boolean, expanded = false) => {
     switch (seg.kind) {
       case 'activity':
-        return <ActivitySegment key={seg.key} rows={seg.rows} live={activityLive} />;
+        return <ActivitySegment key={seg.key} rows={seg.rows} live={activityLive} expanded={expanded} />;
       case 'text':
         return (
           <div key={seg.key} class="turn-text">
@@ -254,6 +242,7 @@ function AssistantTurnView({ item, live, isLast }: { item: AssistantItem; live: 
             key={seg.key}
             level={b.level}
             text={b.text}
+            compact={b.compact}
             onRetry={isLast && item.done && b.level === 'error' ? () => post({ type: 'retry' }) : undefined}
           />
         );
@@ -265,10 +254,10 @@ function AssistantTurnView({ item, live, isLast }: { item: AssistantItem; live: 
     <section class="turn turn-assistant" aria-label={t('turn.assistant')} aria-busy={live}>
       {split ? (
         <>
-          <WorkSummary stats={split.stats} open={workOpen} onToggle={() => setWorkOpen((v) => !v)} />
+          <WorkSummary stats={split.stats} open={workOpen} onToggle={() => setWorkOpen((v) => !v)} rows={workRows} />
           {workOpen ? (
             <div class="work-body">
-              {split.work.map((seg) => render(seg, false, false))}
+              {split.work.map((seg) => render(seg, false, false, true))}
               {/* Đóng tại chỗ: khối quá trình có thể dài hơn màn hình, không phải cuộn lên đầu để thu gọn. */}
               <CollapseFoot onCollapse={() => setWorkOpen(false)} label={t('work.collapse')} />
             </div>
@@ -276,6 +265,8 @@ function AssistantTurnView({ item, live, isLast }: { item: AssistantItem; live: 
             split.changes && render(split.changes, false, false)
           )}
           {split.kept.map((seg) => render(seg, false, false))}
+          {/* Giờ của câu trả lời mở đầu sau một nhóm (như «6:16 PM» của Claude Code) — lấy từ lúc lượt xong; thiếu thì không vẽ. */}
+          {item.done && split.tail.length > 0 && <Stamp ts={item.endedAt} />}
           {split.tail.map((seg) => render(seg, false, false))}
         </>
       ) : (

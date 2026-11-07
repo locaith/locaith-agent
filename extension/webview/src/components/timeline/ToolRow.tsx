@@ -1,17 +1,26 @@
+/**
+ * Dòng công cụ kiểu Claude Code (lane:cc-timeline-ui):
+ *   [chấm trạng thái] **Tên hành động** mô tả-một-dòng (cắt …)            meta nhỏ bên phải (thời gian · «58 dòng» · +9 −3) [⌄]
+ * Mô tả ưu tiên đối số `description` do model đưa; không có thì lệnh / đường dẫn / mẫu tìm. Đường dẫn tệp màu liên kết, bấm để mở.
+ * Mở ra: lệnh shell → ô IN/OUT; Write → khung xem trước tệp; Edit → DiffView (nút «Mở diff trong editor»); công cụ lạ → tham số.
+ * Dòng LỒNG trong một nhóm đã mở (nested) tự bày IN/OUT, xem trước, diff ngay (như ảnh mẫu) — vẫn thu lại được bằng chevron.
+ */
 import { useState } from 'preact/hooks';
 import type { ToolBlock } from '../../../../src/shared/protocol';
 import { useApp } from '../../ctx';
-import type { IconName } from '../../iconNames';
 import { formatCompact, formatDuration, formatInt } from '../../format';
 import { agentStats } from '../../timeline';
+import { actionName, toolDescription, writeLineCount } from '../../timelineCc';
 import { describeTool, groupLabel, isKnownTool } from '../../toolLabels';
 import { cx, memo } from '../../util';
 import { bus } from '../../bus';
 import { post } from '../../vscode';
 import { Icon } from '../Icons';
-import { Spinner } from '../ui';
-import { DiffView } from './DiffView';
+import { CmdInOut } from './CmdInOut';
 import { CollapseFoot } from './CollapseFoot';
+import { DiffView } from './DiffView';
+import { FilePreview } from './FilePreview';
+import { StatusDot, type DotTone } from './RunHead';
 
 const ARGS_LIMIT = 2400;
 
@@ -25,40 +34,50 @@ function argsJson(args: Record<string, unknown>): string {
   return s.length > ARGS_LIMIT ? s.slice(0, ARGS_LIMIT) + '\n…' : s;
 }
 
-function stateIcon(block: ToolBlock, base: IconName): { icon: IconName; tone: string } {
-  switch (block.state) {
+/** Màu chấm + màu chữ trạng thái theo state của khối. */
+export function toolTone(state: ToolBlock['state']): { dot: DotTone; cls: string } {
+  switch (state) {
     case 'error':
-      return { icon: 'alert', tone: 'tone-danger' };
+      return { dot: 'fail', cls: 'tone-danger' };
     case 'denied':
-      return { icon: 'x', tone: 'tone-warn' };
+      return { dot: 'warn', cls: 'tone-warn' };
     case 'cancelled':
-      return { icon: 'x', tone: 'tone-muted' };
+      return { dot: 'muted', cls: 'tone-muted' };
     case 'awaiting_permission':
-      return { icon: 'shield', tone: 'tone-accent' };
+      return { dot: 'warn', cls: 'tone-accent' };
+    case 'running':
+      return { dot: 'live', cls: '' };
     default:
-      return { icon: base, tone: '' };
+      return { dot: 'ok', cls: '' };
   }
 }
 
 function ToolRowView({ block, nested = false }: { block: ToolBlock; nested?: boolean }) {
-  const { t, lang } = useApp();
+  const { t, lang, platform } = useApp();
   const desc = describeTool(lang, block.name, block.args, block.state);
+  const d = toolDescription(lang, block);
+  const name = actionName(lang, block.name);
   const [userOpen, setUserOpen] = useState<boolean | null>(null);
 
+  const isCmd = block.name === 'run_command';
+  const isWrite = block.name === 'write_file';
+  const content = isWrite && typeof block.args?.content === 'string' ? block.args.content : '';
+  const lineCount = isWrite ? writeLineCount(block) : undefined;
   const showArgs = (!isKnownTool(block.name) || block.name === 'scratchpad') && Object.keys(block.args ?? {}).length > 0;
-  const fullCommand = block.name === 'run_command' && typeof block.args?.command === 'string' ? block.args.command : '';
+  const fullCommand = isCmd && typeof block.args?.command === 'string' ? block.args.command : '';
   const hasOutput = block.output !== undefined && (block.output.length > 0 || block.state !== 'running');
-  const expandable = Boolean(block.diff || fullCommand || showArgs || hasOutput || block.state === 'error');
-  const autoOpen = block.name === 'run_command' && block.state === 'running' && Boolean(block.output);
+  const expandable = Boolean(block.diff || fullCommand || showArgs || hasOutput || content || block.state === 'error');
+  // Lệnh đang chạy có đầu ra → tự mở; dòng lồng trong nhóm đã mở → bày sẵn IN/OUT, xem trước, diff (một lần bấm là thấy hết, như Claude Code).
+  const autoOpen = (isCmd && block.state === 'running' && Boolean(block.output)) || (nested && Boolean(fullCommand || content || block.diff));
   const open = expandable && (userOpen ?? autoOpen);
 
   const running = block.state === 'running';
-  const { icon, tone } = stateIcon(block, desc.icon);
+  const { dot, cls } = toolTone(block.state);
   const stateText =
     block.state === 'error' ? t('tool.failed') : block.state === 'denied' ? t('tool.denied') : block.state === 'cancelled' ? t('tool.cancelled') : '';
 
   const meta: string[] = [];
-  if (block.summary && !block.diff) meta.push(block.summary);
+  if (block.summary && !block.diff && lineCount === undefined) meta.push(block.summary);
   // Agent con đã xong/đã dừng: số liệu cuối («461,4k token · 12 lệnh») để so sánh các agent với nhau.
   if (block.agent) {
     const s = agentStats(block);
@@ -66,25 +85,35 @@ function ToolRowView({ block, nested = false }: { block: ToolBlock; nested?: boo
   }
   if (block.durationMs !== undefined && block.durationMs >= 400) meta.push(formatDuration(block.durationMs, lang));
 
+  const openFile = desc.file && platform === 'vscode' ? () => post({ type: 'open_file', path: desc.file!.path, line: desc.file!.line }) : undefined;
+  const pathLike = d.kind === 'path' && !!desc.file;
+
   const head = (
     <>
-      <span class={cx('act-icon', tone)}>{running ? <Spinner size={14} /> : <Icon name={icon} size={15} />}</span>
+      <span class="act-icon">
+        <StatusDot tone={dot} />
+      </span>
       <span class="tool-text">
-        <span class="tool-label">
+        <span class="cc-tool-line">
           {block.step !== undefined && (
             <span class="tool-step" title={t('tool.step', { n: block.step })} aria-label={t('tool.step', { n: block.step })}>
               {block.step}
             </span>
           )}
-          {desc.label}
-          {stateText && <span class={cx('tool-state', tone)}>{stateText}</span>}
+          <b class={cx('cc-action', cls)}>{name}</b>
+          {d.text &&
+            (pathLike ? (
+              // Đường dẫn đầy đủ màu liên kết; bấm mở tệp (VS Code). Không cắt — xuống dòng như ảnh mẫu.
+              <span class="cc-desc cc-path" title={openFile ? `${t('cc.openFile')}: ${d.text}` : d.text}>
+                {d.text}
+              </span>
+            ) : (
+              <span class={cx('cc-desc', (d.kind === 'command' || d.kind === 'url') && 'is-code')} title={d.text}>
+                {d.text}
+              </span>
+            ))}
+          {stateText && <span class={cx('tool-state', cls)}>{stateText}</span>}
         </span>
-        {desc.detail && !(open && fullCommand) && (
-          <span class={cx('tool-detail', `detail-${desc.detailKind}`)}>
-            {desc.detailKind === 'command' && <span class="prompt">$ </span>}
-            {desc.detailKind === 'text' ? `“${desc.detail}”` : desc.detail}
-          </span>
-        )}
       </span>
       <span class="tool-meta">
         {block.diff && (
@@ -93,14 +122,15 @@ function ToolRowView({ block, nested = false }: { block: ToolBlock; nested?: boo
             <span class="diff-stat-del">−{block.diff.removed}</span>
           </span>
         )}
+        {lineCount !== undefined && !block.diff && <span class="tool-meta-text cc-lines">{t('cc.lines', { n: formatInt(lineCount, lang) })}</span>}
         {meta.length > 0 && <span class="tool-meta-text">{meta.join(' · ')}</span>}
-        {expandable && <Icon name={open ? 'chevron-down' : 'chevron-right'} size={14} class="tool-chevron" />}
+        {expandable && <Icon name={open ? 'chevron-up' : 'chevron-down'} size={14} class="tool-chevron" />}
       </span>
     </>
   );
 
   return (
-    <div class={cx('act-row', 'tool-row', nested && 'is-nested', `state-${block.state}`)} role="listitem">
+    <div class={cx('act-row', 'tool-row', 'cc-tool', nested && 'is-nested', `state-${block.state}`, running && 'is-running')} role="listitem">
       <div class="tool-line">
         {expandable ? (
           <button type="button" class="tool-head" aria-expanded={open} onClick={() => setUserOpen(!open)}>
@@ -109,14 +139,8 @@ function ToolRowView({ block, nested = false }: { block: ToolBlock; nested?: boo
         ) : (
           <div class="tool-head is-static">{head}</div>
         )}
-        {desc.file && (
-          <button
-            type="button"
-            class="tool-open"
-            title={t('tool.openFile')}
-            aria-label={`${t('tool.openFile')}: ${desc.file.path}`}
-            onClick={() => post({ type: 'open_file', path: desc.file!.path, line: desc.file!.line })}
-          >
+        {openFile && (
+          <button type="button" class="tool-open" title={t('tool.openFile')} aria-label={`${t('tool.openFile')}: ${desc.file!.path}`} onClick={openFile}>
             <Icon name="external" size={13} />
           </button>
         )}
@@ -135,20 +159,16 @@ function ToolRowView({ block, nested = false }: { block: ToolBlock; nested?: boo
       )}
       {open && (
         <div class="tool-body">
-          {fullCommand && (
-            <pre class="tool-pre tool-cmd">
-              <span class="prompt">$ </span>
-              {fullCommand}
-            </pre>
-          )}
-          {block.diff && <DiffView diff={block.diff} callId={block.id} />}
+          {fullCommand && <CmdInOut command={fullCommand} output={block.output} error={block.state === 'error'} running={running} />}
+          {content && block.state !== 'error' && <FilePreview content={content} path={desc.file?.path ?? ''} />}
+          {block.diff && <DiffView diff={block.diff} callId={block.id} collapsedRows={nested ? 10 : 18} />}
           {showArgs && (
             <div class="tool-section">
               <div class="tool-section-title">{t('tool.args')}</div>
               <pre class="tool-pre">{argsJson(block.args)}</pre>
             </div>
           )}
-          {hasOutput && (
+          {hasOutput && !fullCommand && (
             <div class="tool-section">
               <div class="tool-section-title">{t('tool.output')}</div>
               <pre class={cx('tool-pre', block.state === 'error' && 'is-error')}>{block.output || t('tool.noOutput')}</pre>
@@ -163,24 +183,26 @@ function ToolRowView({ block, nested = false }: { block: ToolBlock; nested?: boo
 
 export const ToolRow = memo(ToolRowView);
 
-function ToolGroupView({ name, blocks }: { name: string; blocks: ToolBlock[] }) {
+/** Nhóm cùng tên («Đã đọc 5 tệp») / nhóm sửa tệp («Đã sửa 3 tệp»): trong một nhóm NGƯỜI DÙNG VỪA MỞ (`defaultOpen`) thì bày sẵn từng dòng như Claude Code. */
+function ToolGroupView({ name, blocks, defaultOpen = false }: { name: string; blocks: ToolBlock[]; defaultOpen?: boolean }) {
   const { t, lang } = useApp();
-  const [open, setOpen] = useState(false);
+  const [userOpen, setUserOpen] = useState<boolean | null>(null);
+  const open = userOpen ?? defaultOpen;
+  const setOpen = (v: boolean | ((prev: boolean) => boolean)) => setUserOpen(typeof v === 'function' ? v(open) : v);
   const errors = blocks.filter((b) => b.state === 'error').length;
-  const icon = describeTool(lang, name, {}, 'done').icon;
 
   return (
-    <div class={cx('act-row', 'tool-group')} role="listitem">
+    <div class={cx('act-row', 'tool-group', 'cc-group', errors > 0 && 'has-fail')} role="listitem">
       <button type="button" class="tool-head" aria-expanded={open} onClick={() => setOpen((v) => !v)}>
         <span class="act-icon">
-          <Icon name={icon} size={15} />
+          <StatusDot tone={errors > 0 ? 'fail' : 'ok'} />
         </span>
         <span class="tool-text">
           <span class="tool-label">{groupLabel(lang, name, blocks.length)}</span>
         </span>
         <span class="tool-meta">
-          {errors > 0 && <span class="tool-state tone-danger">{t('tool.failed')} ×{errors}</span>}
-          <Icon name={open ? 'chevron-down' : 'chevron-right'} size={14} class="tool-chevron" />
+          {errors > 0 && <span class="tool-state tone-danger">{t('par.failed', { n: formatInt(errors, lang) })}</span>}
+          <Icon name={open ? 'chevron-up' : 'chevron-down'} size={14} class="tool-chevron" />
         </span>
       </button>
       {open && (
@@ -195,25 +217,29 @@ function ToolGroupView({ name, blocks }: { name: string; blocks: ToolBlock[] }) 
   );
 }
 
-function EditGroupView({ blocks }: { blocks: ToolBlock[] }) {
+function EditGroupView({ blocks, defaultOpen = false }: { blocks: ToolBlock[]; defaultOpen?: boolean }) {
   const { t, lang } = useApp();
-  const [open, setOpen] = useState(false);
+  const [userOpen, setUserOpen] = useState<boolean | null>(null);
+  const open = userOpen ?? defaultOpen;
+  const setOpen = (v: boolean | ((prev: boolean) => boolean)) => setUserOpen(typeof v === 'function' ? v(open) : v);
   const added = blocks.reduce((n, b) => n + (b.diff?.added ?? 0), 0);
   const removed = blocks.reduce((n, b) => n + (b.diff?.removed ?? 0), 0);
   const errors = blocks.filter((b) => b.state === 'error').length;
   const running = blocks.some((b) => b.state === 'running');
   return (
-    <div class={cx('act-row', 'tool-group', 'tool-edits')} role="listitem">
+    <div class={cx('act-row', 'tool-group', 'tool-edits', 'cc-group', errors > 0 && 'has-fail')} role="listitem">
       <button type="button" class="tool-head" aria-expanded={open} onClick={() => setOpen((v) => !v)} title={t('tool.group.edits', { n: blocks.length })}>
-        <span class="act-icon">{running ? <Spinner size={14} /> : <Icon name="pencil" size={15} />}</span>
+        <span class="act-icon">
+          <StatusDot tone={errors > 0 ? 'fail' : running ? 'live' : 'ok'} />
+        </span>
         <span class="tool-text">
           <span class="tool-label">{t('tool.group.edits', { n: blocks.length })}</span>
         </span>
         <span class="tool-meta">
           {added > 0 && <span class="diff-stat-add">+{added}</span>}
           {removed > 0 && <span class="diff-stat-del">−{removed}</span>}
-          {errors > 0 && <span class="tool-state tone-danger">{t('tool.failed')} ×{errors}</span>}
-          <Icon name={open ? 'chevron-down' : 'chevron-right'} size={14} class="tool-chevron" />
+          {errors > 0 && <span class="tool-state tone-danger">{t('par.failed', { n: formatInt(errors, lang) })}</span>}
+          <Icon name={open ? 'chevron-up' : 'chevron-down'} size={14} class="tool-chevron" />
         </span>
       </button>
       {open && (

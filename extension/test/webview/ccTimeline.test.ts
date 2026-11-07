@@ -1,16 +1,21 @@
 import { describe, expect, it } from 'vitest';
 import type { TItem, ToolBlock } from '../../src/shared/protocol';
+import { activityStats, buildSegments } from '../../webview/src/timeline';
 import {
   actionName,
+  agentRowsOf,
   backgroundOf,
+  formatElapsedShort,
   countLines,
   firstLines,
   formatClock,
   formatDayLabel,
+  formatDurationShort,
   formatSeconds,
   hasProcess,
   langOfPath,
   runTone,
+  runningSince,
   sameLocalDay,
   thinkingDuration,
   timelineMarks,
@@ -141,6 +146,43 @@ describe('suy nghĩ và nhóm', () => {
     expect(runTone({ failed: 2 }, true)).toBe('fail');
     expect(runTone({ failed: 0 }, true)).toBe('live');
     expect(runTone({ failed: 0 }, false)).toBe('ok');
+  });
+
+  it('formatDurationShort: giây dưới 1 phút, chỉ phút từ 1 phút, giờ + phút từ 1 giờ', () => {
+    expect(formatDurationShort(48_000, 'vi')).toBe('48 giây');
+    expect(formatDurationShort(23 * 60_000 + 58_000, 'vi')).toBe('23 phút');
+    expect(formatDurationShort(23 * 60_000 + 58_000, 'en')).toBe('23m');
+    expect(formatDurationShort(72 * 60_000, 'vi')).toBe('1 giờ 12 phút');
+    expect(formatDurationShort(72 * 60_000, 'en')).toBe('1h 12m');
+  });
+
+  it('formatElapsedShort: «48s» · «59m» · «1h 12m»', () => {
+    expect(formatElapsedShort(48_000)).toBe('48s');
+    expect(formatElapsedShort(59 * 60_000 + 30_000)).toBe('59m');
+    expect(formatElapsedShort(72 * 60_000)).toBe('1h 12m');
+    expect(formatElapsedShort(3_600_000)).toBe('1h');
+    expect(formatElapsedShort(-5)).toBe('0s');
+  });
+
+  it('agentRowsOf: lấy mọi agent trong cụm (trong dòng tóm tắt lẫn dòng sống), không trùng; cụm gộp KHÔNG đếm agent sống hai lần', () => {
+    const ag = (id: string, state: ToolBlock['state'], tools: number): ToolBlock => tool('agent', { description: id }, { id, state, agent: { tokens: 1000, tools } });
+    const blocks = [tool('read_file', {}, { id: 'r1' }), tool('grep', {}, { id: 'r2' }), tool('run_command', {}, { id: 'r3' }), ag('a1', 'done', 10), ag('a2', 'running', 5), ag('a3', 'running', 7)];
+    const rows = buildSegments(blocks, false, true, true).flatMap((s) => (s.kind === 'activity' ? s.rows : []));
+    expect(rows.map((r) => r.kind)).toEqual(['toolsum', 'agent', 'agent']);
+    expect(agentRowsOf(rows).map((b) => b.id)).toEqual(['a1', 'a2', 'a3']);
+    // 3 lệnh + 3 agent = 6 (lệnh bên trong agent hiện trên dòng agent); a2/a3 vừa nằm trong tổng của dòng tóm tắt vừa có dòng riêng nhưng không đếm hai lần
+    expect(activityStats(rows).calls).toBe(6);
+  });
+
+  it('runningSince: lượt đang chạy → ts của lượt; không chạy / lượt đã xong / ts hỏng → undefined', () => {
+    const user: TItem = { kind: 'user', id: 'u', text: 'x', attachments: [], ts: 5000 };
+    const open: TItem = { kind: 'assistant', id: 'a', provider: 'p', model: 'm', ts: 7000, done: false, blocks: [] };
+    expect(runningSince({ running: true, transcript: [user, open] })).toBe(7000);
+    expect(runningSince({ running: true, transcript: [user] })).toBe(5000); // lượt chưa mở: tính từ lúc gửi
+    expect(runningSince({ running: false, transcript: [user, open] })).toBeUndefined();
+    expect(runningSince({ running: true, transcript: [user, { ...open, done: true }] })).toBeUndefined();
+    expect(runningSince({ running: true, transcript: [user, { ...open, ts: 0 }] })).toBeUndefined();
+    expect(runningSince({ running: true, transcript: [] })).toBeUndefined();
   });
 
   it('backgroundOf: chỉ khi model đặt run_in_background/background = true', () => {
