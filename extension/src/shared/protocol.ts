@@ -159,6 +159,29 @@ export interface CompactInfo {
   summary?: string;
 }
 
+/**
+ * (lane:blind-verifier) Kết quả KIỂM TRA ĐỘC LẬP (reviewer mù) gắn vào một thông báo `notice`. Trường tuỳ chọn trên loại sẵn có
+ * → đi qua relay nguyên vẹn; bản Remote cũ không biết trường này vẫn hiện `text` (đã mang đủ nội dung).
+ */
+export interface VerifyInfo {
+  /** Khoá để cập nhật tại chỗ: cùng khoá trong cùng lượt → thay dòng cũ (đang chạy → kết quả). */
+  key: string;
+  state: 'running' | 'pass' | 'fail' | 'uncertain' | 'skipped';
+  /** Vòng kiểm tra (1-based) / tối đa. */
+  round: number;
+  maxRounds: number;
+  missing?: string[];
+  defects?: string[];
+  unverifiedClaims?: string[];
+  /** Hết vòng mà vẫn còn mục chưa xử lý: danh sách trên là TỒN ĐỌNG đã báo cho người dùng. */
+  outstanding?: boolean;
+  /** Vì sao không kiểm tra được (skipped) — chữ ngắn cho người dùng. */
+  reason?: string;
+  durationMs?: number;
+  model?: string;
+  tokens?: number;
+}
+
 export type ABlock =
   | { type: 'text'; id: string; text: string }
   /** Văn bản suy luận thật do hãng trả (nếu có) — hiển thị trong khối thu gọn. */
@@ -171,7 +194,7 @@ export type ABlock =
   | { type: 'skill'; id: string; skill: string; unlocked: string[] }
   | ToolBlock
   | ({ type: 'artifact'; id: string; state: 'writing' | 'ready'; sizeChars?: number } & ArtifactRef)
-  | { type: 'notice'; id: string; level: 'info' | 'warn' | 'error'; text: string; compact?: CompactInfo };
+  | { type: 'notice'; id: string; level: 'info' | 'warn' | 'error'; text: string; compact?: CompactInfo; verify?: VerifyInfo /* (lane:blind-verifier) */ };
 
 /** Tệp người dùng tải lên (PDF, Word, Excel, HTML, CSV, TXT) sau khi đã được đọc thành chữ. */
 export interface DocInfo {
@@ -242,6 +265,8 @@ export interface NoticeItem {
   text: string;
   ts: number;
   compact?: CompactInfo;
+  /** (lane:blind-verifier) Kết quả kiểm tra độc lập chạy tay (/verify) — thông báo độc lập. */
+  verify?: VerifyInfo;
 }
 
 export type TItem = UserItem | AssistantItem | NoticeItem;
@@ -282,7 +307,7 @@ export type UiEvent =
   | { t: 'usage'; id: string; usage: Usage; contextTokens?: number }
   | { t: 'assistant_end'; id: string; stopReason: string }
   /** Có id → gắn vào lượt trả lời đó; không có → thành NoticeItem độc lập. */
-  | { t: 'notice'; id?: string; level: 'info' | 'warn' | 'error'; text: string; compact?: CompactInfo }
+  | { t: 'notice'; id?: string; level: 'info' | 'warn' | 'error'; text: string; compact?: CompactInfo; verify?: VerifyInfo /* (lane:blind-verifier) */ }
   | { t: 'run_state'; running: boolean }
   | { t: 'mode'; mode: PermissionMode }
   /** Cập nhật bảng tác vụ cố định phía trên ô nhập. */

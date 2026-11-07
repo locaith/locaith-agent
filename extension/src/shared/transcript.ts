@@ -3,7 +3,7 @@
  * Thuần tuý, bất biến (không sửa mảng đầu vào), không phụ thuộc môi trường chạy.
  */
 
-import type { ABlock, AgentProgress, AssistantItem, TItem, ToolBlock, UiEvent, ViewState } from './protocol';
+import type { ABlock, AgentProgress, AssistantItem, NoticeItem, TItem, ToolBlock, UiEvent, ViewState } from './protocol';
 import { UI_TOOL_OUTPUT_LIMIT } from './protocol';
 
 function findLastIndex<T>(arr: readonly T[], pred: (x: T) => boolean): number {
@@ -243,14 +243,28 @@ export function applyEvent(items: readonly TItem[], ev: UiEvent): TItem[] {
         if (idx >= 0) {
           return updateAssistant(items, targetId, (a) => {
             const blocks = deactivatePills(a.blocks.slice());
-            blocks.push({ type: 'notice', id: blockId(a, blocks, 'n'), level: ev.level, text: ev.text, ...(ev.compact ? { compact: ev.compact } : {}) });
+            // (lane:blind-verifier) Kiểm tra độc lập: cùng `verify.key` trong cùng lượt → cập nhật TẠI CHỖ (đang chạy → kết quả), không thêm dòng mới.
+            const vk = ev.verify?.key;
+            const prev = vk ? findLastIndex(blocks, (b) => b.type === 'notice' && b.verify?.key === vk) : -1;
+            const block = { type: 'notice' as const, id: prev >= 0 ? blocks[prev].id : blockId(a, blocks, 'n'), level: ev.level, text: ev.text, ...(ev.compact ? { compact: ev.compact } : {}), ...(ev.verify ? { verify: ev.verify } : {}) };
+            if (prev >= 0) blocks[prev] = block;
+            else blocks.push(block);
             return { ...a, blocks };
           });
         }
       }
+      // (lane:blind-verifier) Thông báo độc lập mang `verify` cùng khoá (lệnh /verify): thay tại chỗ.
+      const vk = ev.verify?.key;
+      const prev = vk ? findLastIndex(items, (it) => it.kind === 'notice' && it.verify?.key === vk) : -1;
+      if (prev >= 0) {
+        const old = items[prev] as NoticeItem;
+        const next = items.slice();
+        next[prev] = { ...old, level: ev.level, text: ev.text, verify: ev.verify };
+        return next;
+      }
       return [
         ...items,
-        { kind: 'notice', id: `notice:${items.length}:${Date.now()}`, level: ev.level, text: ev.text, ts: Date.now(), ...(ev.compact ? { compact: ev.compact } : {}) },
+        { kind: 'notice', id: `notice:${items.length}:${Date.now()}`, level: ev.level, text: ev.text, ts: Date.now(), ...(ev.compact ? { compact: ev.compact } : {}), ...(ev.verify ? { verify: ev.verify } : {}) },
       ];
     }
 

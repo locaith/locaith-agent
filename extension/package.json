@@ -461,6 +461,27 @@
           "default": true,
           "markdownDescription": "%cfg.parallelToolCalls%"
         },
+        "locaithAgent.agent.verify": {
+          "type": "string",
+          "enum": [
+            "off",
+            "auto",
+            "always"
+          ],
+          "enumDescriptions": [
+            "%cfg.verify.off%",
+            "%cfg.verify.auto%",
+            "%cfg.verify.always%"
+          ],
+          "default": "auto",
+          "markdownDescription": "%cfg.verify%"
+        },
+        "locaithAgent.agent.verifyModel": {
+          "type": "string",
+          "default": "",
+          "scope": "machine",
+          "markdownDescription": "%cfg.verifyModel%"
+        },
         "locaithAgent.agent.autoCompact": {
           "type": "boolean",
           "default": true,

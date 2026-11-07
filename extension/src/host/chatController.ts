@@ -2,6 +2,7 @@ import * as vscode from 'vscode';
 import { AgentEngine, type QueuedMessage, type QueueState, type RunResult } from '../core/engine/engine';
 import { coreRunExtensions } from '../core/engine/extensions';
 import { hostRunExtensions } from './hostExtensions';
+import { registerVerifySlash } from './extensions/verifier'; // (lane:blind-verifier)
 import { SlashRegistry, type SlashContext } from './slashRegistry';
 import { loadProjectInstructions } from '../core/engine/instructions';
 import { resumeInstruction } from '../core/engine/resume';
@@ -280,7 +281,7 @@ export class ChatController implements vscode.Disposable {
     this.detachMcp = d.mcp.attach(this.registry);
     // ── Lệnh gạch chéo của từng tính năng: MỖI LANE MỘT DÒNG RIÊNG (bỏ dấu // ở dòng của mình + thêm import). Xem slashRegistry.ts. ──
     // registerCompactSlash(this.slash, this); // (lane:ctx-compaction)  /compact <hướng dẫn>
-    // registerVerifySlash(this.slash, this); // (lane:blind-verifier)  /verify
+    registerVerifySlash(this.slash, { host: this.host, registry: this.registry, deps: this.d, session: () => this.session, emit: (ev) => this.emit(ev), runTurn: (fn) => this.runVerifyTurn(fn) }); // (lane:blind-verifier)  /verify
     // registerRewindSlash(this.slash, this); // (lane:checkpoints-rewind)  /rewind
     // registerPermissionsSlash(this.slash, this); // (lane:perm-rules)  /permissions
     // registerHooksSlash(this.slash, this); // (lane:hooks)  /hooks
@@ -1535,6 +1536,24 @@ export class ChatController implements vscode.Disposable {
     const others = await this.d.pool.rank(own.tier, { prefer: { providerId: s.provider }, exclude: [s.provider] });
     if (others.length === 0) return base;
     return new FailoverProvider([own, ...others], this.d.pool, { onSwitch: (i) => this.announceSwitch(i, false), log: (l, m) => this.d.logger.log(l, m) });
+  }
+
+  // ── (lane:blind-verifier) Lượt "kiểm tra độc lập" chạy tay (/verify): dùng khoá lượt, cờ đang chạy và nút Dừng y như một lượt agent, không ghi gì vào lịch sử. ──
+  private runVerifyTurn(fn: (signal: AbortSignal) => Promise<void>): Promise<void> {
+    return this.runAgentTurn(async () => {
+      this.setRunning(true);
+      const abort = new AbortController();
+      this.abort = abort;
+      try {
+        await fn(abort.signal);
+        this.lastStop = 'end_turn';
+      } catch (err) {
+        this.emit({ t: 'notice', level: 'error', text: err instanceof Error ? err.message : String(err) });
+      } finally {
+        this.abort = null;
+        this.setRunning(false);
+      }
+    });
   }
 
   private async execute(content: ContentBlock[], abort: AbortController): Promise<void> {

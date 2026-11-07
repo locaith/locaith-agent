@@ -41,6 +41,8 @@ const SECURE_KEYS = new Set([
   'remote.allowBypass',
   // Khoá của việc «đúng tài khoản là vào được»: một kho mã lạ không được tự bật/tắt hộ chủ máy.
   'remote.trustAccount',
+  // (lane:blind-verifier) Model của agent kiểm tra quyết định mã nguồn được gửi tới hãng nào → chỉ từ cài đặt người dùng.
+  'agent.verifyModel',
 ]);
 
 const UI_KEYS: Record<keyof UiSettings, string> = {

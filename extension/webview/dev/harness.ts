@@ -23,6 +23,7 @@ import {
   settingsState,
   type Step,
   SESSIONS,
+  verifyScene, // (lane:blind-verifier)
 } from './scenarios';
 import { promoReply } from './promo';
 
@@ -967,6 +968,14 @@ function initialView(): ViewState {
     case 'media':
     case 'media-live':
       v = mediaScene(scenario === 'media-live');
+      break;
+    // (lane:blind-verifier)
+    case 'verify':
+    case 'verify-pass':
+    case 'verify-outstanding':
+    case 'verify-running':
+    case 'verify-skipped':
+      v = verifyScene(scenario === 'verify' ? 'fail' : (scenario.slice(7) as 'pass' | 'outstanding' | 'running' | 'skipped'));
       break;
     case 'history-other':
       v = { ...baseState(), screen: 'history', sessions: [...SESSIONS.slice(0, 2), { id: 's_o1', title: 'Sửa lỗi thanh toán trang bán hàng', updatedAt: Date.now() - 3 * 3600_000, provider: 'anthropic', model: 'claude-sonnet-5', messageCount: 64, other: true, workspaceName: 'web-ban-hang' }, { id: 's_o2', title: 'Viết tài liệu API', updatedAt: Date.now() - 30 * 3600_000, provider: 'deepseek', model: 'deepseek-chat', messageCount: 22, other: true, workspaceName: 'api-docs' }] };

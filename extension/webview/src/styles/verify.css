@@ -1,0 +1,82 @@
+/* ── (lane:blind-verifier) Dòng «Kiểm tra độc lập» — tái dùng đường ray hoạt động (.act, .act-row, .tool-head, .tool-group-body).
+   Một dòng gọn, không khung kín, không tô nền; màu chỉ ở chấm trạng thái và (nhẹ) ở nhãn. ── */
+.verify {
+  margin: 2px 0;
+}
+.verify-standalone {
+  padding: 2px 0;
+}
+.verify-row .tool-head:disabled {
+  cursor: default;
+}
+.verify-dot {
+  width: 8px;
+  height: 8px;
+  background: var(--fg-faint);
+}
+.verify-row.is-ok .verify-dot {
+  background: var(--ok-text);
+}
+.verify-row.is-danger .verify-dot {
+  background: var(--danger);
+}
+.verify-row.is-warn .verify-dot {
+  background: var(--warn);
+}
+.verify-row.is-running .verify-dot {
+  background: var(--nd-working);
+}
+.verify-row.is-ok .tool-label {
+  color: color-mix(in srgb, var(--ok-text) 70%, var(--fg-muted));
+}
+.verify-row.is-danger .tool-label {
+  color: color-mix(in srgb, var(--danger) 75%, var(--fg));
+}
+.verify-row.is-warn .tool-label {
+  color: color-mix(in srgb, var(--warn) 75%, var(--fg));
+}
+.verify-row .tool-detail {
+  white-space: normal;
+}
+.verify-body {
+  flex-basis: 100%;
+  margin-left: 8px;
+  gap: 6px;
+}
+.verify-section {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.verify-list {
+  margin: 0;
+  padding-left: 1.6em;
+  font-size: var(--nd-fs-sm);
+  line-height: var(--nd-lh-ui);
+  color: var(--fg-muted);
+}
+.verify-item {
+  overflow-wrap: anywhere;
+  padding-block: 1px;
+}
+.verify-item::marker {
+  color: var(--fg-faint);
+  font-variant-numeric: tabular-nums;
+}
+.verify-note {
+  font-size: var(--nd-fs-xs);
+  line-height: var(--nd-lh-ui);
+  color: var(--fg-faint);
+}
+/* Tương phản cao: màu hệ thống thay cho color-mix. */
+@media (forced-colors: active) {
+  .verify-dot {
+    background: CanvasText;
+    forced-color-adjust: none;
+  }
+  .verify-row.is-danger .tool-label,
+  .verify-row.is-warn .tool-label,
+  .verify-row.is-ok .tool-label {
+    color: CanvasText;
+  }
+}

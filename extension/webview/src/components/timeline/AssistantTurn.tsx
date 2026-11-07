@@ -18,6 +18,7 @@ import { ActivitySegment } from './Activity';
 import { ArtifactCard } from './ArtifactCard';
 import { CollapseFoot } from './CollapseFoot';
 import { PermissionCard } from './PermissionCard';
+import { VerifyRow } from './VerifyRow'; // (lane:blind-verifier)
 
 export function NoticeView({
   level,
@@ -45,6 +46,7 @@ export function NoticeView({
 }
 
 export function StandaloneNotice({ item, canRetry }: { item: NoticeItem; canRetry: boolean }) {
+  if (item.verify) return <VerifyRow verify={item.verify} standalone />; // (lane:blind-verifier) /verify
   return (
     <div class="turn turn-notice">
       <NoticeView level={item.level} text={item.text} onRetry={canRetry && item.level === 'error' ? () => post({ type: 'retry' }) : undefined} />
@@ -249,6 +251,7 @@ function AssistantTurnView({ item, live, isLast }: { item: AssistantItem; live: 
         return <PermissionCard key={seg.key} block={seg.block} />;
       case 'notice': {
         const b: NoticeBlockT = seg.block;
+        if (b.verify) return <VerifyRow key={seg.key} verify={b.verify} />; // (lane:blind-verifier)
         return (
           <NoticeView
             key={seg.key}
