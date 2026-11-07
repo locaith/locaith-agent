@@ -11,6 +11,7 @@ You use your own API key with the model provider you choose, or sign in with a p
 Privacy:
 • On first use the extension tells you exactly what data goes where, and only runs after you agree.
 • Your API key is kept in the extension's own storage on this device (not encrypted) and is only sent to the provider it belongs to.
+• Only when you tap a star in the rating prompt is the star count (and your comment, if you type one) sent, anonymously, to Locaith — never page content, conversations or keys.
 • The extension reads a page only when you ask or give a command. Access to all sites is optional, requested only when you press a button in Settings, and can be revoked at any time.
 • No remote code, no ads, no browsing-history tracking, no selling of data.
 

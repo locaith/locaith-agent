@@ -11,6 +11,7 @@ Bạn dùng khoá API của riêng mình với nhà cung cấp mô hình AI mìn
 Quyền riêng tư:
 • Ở lần mở đầu tiên, tiện ích nêu rõ dữ liệu nào được gửi tới đâu và chỉ chạy sau khi bạn đồng ý.
 • Khoá API lưu trong bộ nhớ riêng của tiện ích trên máy này (không mã hoá), chỉ gửi tới đúng nhà cung cấp của khoá.
+• Chỉ khi bạn tự chạm một ngôi sao trong lời mời đánh giá, số sao (và nhận xét nếu bạn gõ) mới được gửi ẩn danh tới Locaith — không kèm nội dung trang, hội thoại hay khoá.
 • Tiện ích chỉ đọc trang khi bạn hỏi hoặc ra lệnh. Quyền đọc mọi trang là tuỳ chọn, chỉ xin khi bạn bấm nút trong Cài đặt, và thu hồi được bất cứ lúc nào.
 • Không tải mã từ internet, không quảng cáo, không theo dõi lịch sử duyệt web, không bán dữ liệu.
 
