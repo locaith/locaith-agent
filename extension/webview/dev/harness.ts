@@ -843,6 +843,15 @@ function initialView(): ViewState {
     case 'high-context':
       v = { ...longConversation(), context: { usedTokens: 188_000, limitTokens: 200_000 } };
       break;
+    case 'bg-tasks': // (lane:bg-tasks)
+      v = {
+        ...longConversation(),
+        bgTasks: [
+          { id: 'bg1', command: 'npm run dev -- --port 5173', cwd: '.', status: 'running', startedAt: Date.now() - 95_000, ready: 'http://localhost:5173/', tail: ['VITE v6.0.1  ready in 412 ms', '  ➜  Local:   http://localhost:5173/', '  ➜  press h + enter to show help', '[vite] hmr update /src/App.tsx', '[vite] hmr update /src/App.css'] },
+          { id: 'bg2', command: 'npm test -- --watch', description: 'Chạy test ở chế độ theo dõi', cwd: 'web', status: 'failed', startedAt: Date.now() - 300_000, endedAt: Date.now() - 120_000, exitCode: 1, tail: ['FAIL src/cart.test.ts', '  expected 3 to equal 4', 'Tests: 1 failed, 12 passed'] },
+        ],
+      };
+      break;
     case 'market':
       v = { ...baseState(), screen: 'market' };
       break;

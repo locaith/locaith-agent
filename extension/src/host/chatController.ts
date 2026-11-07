@@ -485,6 +485,7 @@ export class ChatController implements vscode.Disposable {
       this.notifyLocal('warn', this.lang === 'vi' ? 'Một thiết bị từ xa vừa thử đổi sang chế độ «Bỏ qua mọi xác nhận» — bị chặn (cài đặt locaithAgent.remote.allowBypass đang tắt).' : 'A remote device just tried to switch to “Bypass all prompts” — blocked (locaithAgent.remote.allowBypass is off).');
       return Promise.reject(new Error('bypass_not_allowed'));
     }
+    if (m.type === 'bg_task' && m.action !== 'stop') return Promise.reject(new Error('bad_action')); // (lane:bg-tasks) từ xa chỉ được Dừng
     if (via && (m.type === 'send' || m.type === 'permission_response' || m.type === 'stop' || m.type === 'set_mode' || m.type === 'new_session' || m.type === 'load_session')) {
       const what: Record<string, [string, string]> = {
         send: ['gửi tin nhắn', 'sent a message'],
