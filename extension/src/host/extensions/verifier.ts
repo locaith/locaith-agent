@@ -4,6 +4,7 @@
  */
 
 import type { UiEvent } from '../../shared/protocol';
+import { newId } from '../../shared/transcript';
 import { Semaphore } from '../../core/agents/semaphore';
 import type { RunExtension } from '../../core/engine/seams';
 import { t } from '../../core/engine/strings';
@@ -118,9 +119,13 @@ export function registerVerifySlash(slash: SlashRegistry, c: VerifySlashHost): v
       const key = `vm${Date.now().toString(36)}`;
       await c.runTurn(async (signal) => {
         state.busy = true;
+        const session = c.session();
+        // Một "lượt trả lời" riêng cho lần kiểm tra: dòng «Kiểm tra độc lập» và thẻ xin phép (nếu agent kiểm tra cần chạy lệnh) có chỗ để hiện.
+        const id = newId('a');
+        c.emit({ t: 'assistant_start', id, provider: session.provider, model: session.model, ts: Date.now() });
+        let stop = 'end_turn';
         try {
-          c.emit(verifyNotice({ key, round: 1, maxRounds: 1, outcome: 'running', lang }));
-          const session = c.session();
+          c.emit(verifyNotice({ id, key, round: 1, maxRounds: 1, outcome: 'running', lang }));
           const outcome = await runVerification({
             bundle: last.bundle,
             registry: c.registry,
@@ -128,18 +133,20 @@ export function registerVerifySlash(slash: SlashRegistry, c: VerifySlashHost): v
             session,
             signal,
             emit: (ev) => c.emit(ev),
-            assistantId: '',
+            assistantId: id,
             callId: `verify:${key}`,
             lang,
             model: settings.model,
             run: runnerFor(c.deps, c.host),
           });
           if (outcome.tokens > 0) session.usageTotals.input += outcome.tokens;
+          if (outcome.kind === 'skipped' && outcome.reason === 'aborted') stop = 'aborted';
           // Chạy tay chỉ có MỘT vòng và không buộc model chính làm tiếp: kết quả là báo cáo cho người dùng (tồn đọng nếu không đạt).
           const outstanding = outcome.kind === 'verdict' && outcome.verdict.verdict !== 'pass';
-          c.emit(verifyNotice({ key, round: 1, maxRounds: 1, outcome, outstanding, lang }));
+          c.emit(verifyNotice({ id, key, round: 1, maxRounds: 1, outcome, outstanding, lang }));
         } finally {
           state.busy = false;
+          c.emit({ t: 'assistant_end', id, stopReason: stop });
         }
       });
     },

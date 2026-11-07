@@ -5,7 +5,8 @@ import type { AgentServices } from '../src/core/agents/runner';
 import { coreRunExtensions } from '../src/core/engine/extensions';
 import type { RunScope } from '../src/core/engine/seams';
 import { DEFAULT_ENGINE_SETTINGS } from '../src/core/engine/types';
-import type { ToolDef, ToolRegistry } from '../src/core/engine/types';
+import type { ToolDef } from '../src/core/engine/types';
+import type { ToolRegistry } from '../src/core/engine/toolRegistry';
 import {
   buildBundle,
   buildVerifierTask,
