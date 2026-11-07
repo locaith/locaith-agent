@@ -76,6 +76,8 @@ export type RemoteToolBlock = Omit<ToolBlock, 'images'> & { imageCount?: number 
 
 const AGENT_ACTIVITY_CAP = 120;
 const wholeNumber = (v: unknown): number => (typeof v === 'number' && Number.isFinite(v) ? Math.min(1e12, Math.max(0, Math.floor(v))) : 0);
+/** (lane:cc-timeline-ui) Số nguyên không âm hợp lệ, hoặc undefined để bỏ trường (không bịa 0 cho dấu thời gian). */
+const whole = (v: unknown): number | undefined => (typeof v === 'number' && Number.isFinite(v) && v >= 0 ? Math.min(1e13, Math.floor(v)) : undefined);
 
 /** Tiến độ agent con: chỉ số nguyên không âm và một dòng chữ ngắn (dữ liệu từ máy khách/tệp sao lưu không được tin). */
 export function sanitizeAgent(a: AgentProgress): AgentProgress {
@@ -134,8 +136,12 @@ function sanitizeBlock(b: ABlock): ABlock {
   switch (b.type) {
     case 'tool':
       return sanitizeTool(b) as unknown as ABlock;
-    case 'thinking':
-      return b.text.length > THINK_CAP ? { ...b, text: capTail(b.text, THINK_CAP) } : b;
+    case 'thinking': {
+      // (lane:cc-timeline-ui) mốc/thời lượng suy nghĩ là số nguyên không âm; giá trị lạ bị bỏ (trang Remote cũ không có trường này vẫn chạy).
+      const { startedAt, durationMs, ...rest } = b;
+      const timing = { ...(whole(startedAt) !== undefined ? { startedAt: whole(startedAt) } : {}), ...(whole(durationMs) !== undefined ? { durationMs: whole(durationMs) } : {}) };
+      return { ...rest, ...timing, text: b.text.length > THINK_CAP ? capTail(b.text, THINK_CAP) : b.text };
+    }
     case 'notice':
       return b.compact ? { ...b, compact: sanitizeCompact(b.compact) } : b;
     default:
@@ -223,6 +229,15 @@ export function sanitizeEvent(ev: UiEvent): UiEvent {
       return { ...ev, args: capArgs(ev.args) };
     case 'tool_progress':
       return ev.output.length > 4000 ? { ...ev, output: capTail(ev.output, 4000) } : ev;
+    case 'thinking': {
+      // (lane:cc-timeline-ui) giữ `ts` nếu là số hợp lệ, bỏ nếu lạ; không có ts thì trả nguyên sự kiện.
+      if (ev.ts === undefined) return ev;
+      const ts = whole(ev.ts);
+      if (ts === ev.ts) return ev;
+      const { ts: _drop, ...rest } = ev;
+      void _drop;
+      return ts === undefined ? rest : { ...rest, ts };
+    }
     case 'agent_progress':
       return { ...ev, ...sanitizeAgent(ev) };
     case 'tool_permission':

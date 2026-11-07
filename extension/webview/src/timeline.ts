@@ -34,6 +34,8 @@ export interface ToolSummaryInfo {
   running: boolean;
   /** LÃ¡Â»â€¡nh Ã„â€˜ang chÃ¡ÂºÂ¡y mÃ¡Â»â€ºi nhÃ¡ÂºÂ¥t (Ã„â€˜Ã¡Â»Æ’ hiÃ¡Â»â€¡n Ã‚Â«Ã„Âang Ã„â€˜Ã¡Â»Âc src/a.tsÃ¢â‚¬Â¦Ã‚Â» ngay trÃƒÂªn dÃƒÂ²ng tÃƒÂ³m tÃ¡ÂºÂ¯t). */
   latest?: ToolBlock;
+  /** (lane:cc-timeline-ui) Phần của `total` thuộc agent đang chạy (có dòng riêng bên dưới) — để dòng gộp cả cụm không đếm hai lần. */
+  liveCalls?: number;
 }
 
 export interface WorkStats {
@@ -89,21 +91,20 @@ export function agentStats(b: ToolBlock): { tokens: number; tools: number; faile
 /** TÃƒÂ³m tÃ¡ÂºÂ¯t mÃ¡Â»â„¢t chuÃ¡Â»â€”i lÃ¡Â»â€¡nh: `rest` lÃƒÂ  cÃƒÂ¡c lÃ¡Â»â€¡nh sÃ¡ÂºÂ½ nÃ¡ÂºÂ±m trong dÃƒÂ²ng tÃƒÂ³m tÃ¡ÂºÂ¯t, `live` lÃƒÂ  agent Ã„â€˜ang chÃ¡ÂºÂ¡y (chÃ¡Â»â€° Ã„â€˜Ã¡Â»Æ’ cÃ¡Â»â„¢ng vÃƒÂ o tÃ¡Â»â€¢ng). */
 export function summarizeTools(rest: readonly ToolBlock[], live: readonly ToolBlock[] = [], turnLive = true): ToolSummaryInfo {
   const all = [...rest, ...live];
-  let subTools = 0;
-  let subFailed = 0;
-  for (const b of all) {
-    const a = agentStats(b);
-    subTools += a.tools;
-    subFailed += a.failed;
-  }
+  // (lane:cc-timeline-ui) Như ảnh Claude Code «54 tool calls · 2 failed» + dòng agent «249 tools» riêng: tổng của dòng nhóm chỉ đếm lệnh
+  // CỦA LƯỢT (agent con = 1 lệnh); số lệnh/lỗi bên trong agent hiện trên dòng agent, không cộng dồn vào đây nữa.
+  const subTools = 0;
+  const subFailed = 0;
   // LÃ†Â°Ã¡Â»Â£t khÃƒÂ´ng cÃƒÂ²n chÃ¡ÂºÂ¡y (phiÃƒÂªn lÃ†Â°u giÃ¡Â»Â¯a chÃ¡Â»Â«ng): khÃ¡Â»â€˜i cÃƒÂ²n ghi 'running' lÃƒÂ  dÃ¡Â»Â¯ liÃ¡Â»â€¡u cÃ…Â© Ã¢â‚¬â€ khÃƒÂ´ng vÃƒÂ²ng quay, khÃƒÂ´ng Ã‚Â«Ã„â€˜ang lÃƒÂ mÃ‚Â».
   const running = turnLive ? rest.filter((b) => b.state === 'running') : [];
+  const liveCalls = live.length;
   return {
     blocks: rest.slice(),
     total: all.length + subTools,
     failed: all.filter((b) => b.state === 'error').length + subFailed,
     running: running.length > 0,
     latest: running[running.length - 1],
+    ...(liveCalls ? { liveCalls } : {}),
   };
 }
 
@@ -349,16 +350,16 @@ function rowStats(r: ActivityRow, s: WorkStats): void {
       s.edits += r.blocks.filter(isFileChange).length;
       return;
     case 'toolsum':
-      s.calls += r.info.total;
+      // (lane:cc-timeline-ui) agent đang chạy có dòng 'agent' riêng trong cùng cụm → đã đếm ở đó, không cộng lại ở đây.
+      s.calls += r.info.total - (r.info.liveCalls ?? 0);
       s.failed += r.info.failed;
       s.edits += r.info.blocks.filter(isFileChange).length;
       return;
-    case 'agent': {
-      const a = agentStats(r.block);
-      s.calls += 1 + a.tools;
-      s.failed += (r.block.state === 'error' ? 1 : 0) + a.failed;
+    case 'agent':
+      // (lane:cc-timeline-ui) agent con = MỘT lệnh của lượt; lệnh/lỗi bên trong hiện trên dòng agent riêng.
+      s.calls += 1;
+      s.failed += r.block.state === 'error' ? 1 : 0;
       return;
-    }
     case 'editgroup':
       s.calls += r.blocks.length;
       s.edits += r.blocks.length;

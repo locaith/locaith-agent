@@ -18,6 +18,7 @@ import { AttachmentChip, attachmentText } from '../Chips';
 import { Icon } from '../Icons';
 import { Spinner } from '../ui';
 import { AgentChip } from './AgentChip';
+import { RunClock } from './RunClock'; // (lane:cc-timeline-ui)
 import { ContextMeter, ModelPicker, ModePicker, SwarmToggle, ThinkingPicker } from './Pickers';
 
 const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
@@ -794,6 +795,7 @@ export function Composer({ view }: { view: ViewState }) {
             <ThinkingPicker view={view} open={picker === 'think'} onToggle={() => togglePicker('think')} onClose={closePicker} />
             <SwarmToggle view={view} />
             <AgentChip view={view} />
+            <RunClock view={view} /> {/* (lane:cc-timeline-ui) đồng hồ + thời gian chạy của lượt, chỉ khi đang chạy */}
           </div>
           <div class="bar-right">
             <ContextMeter view={view} open={picker === 'ctx'} onToggle={() => togglePicker('ctx')} onClose={closePicker} />

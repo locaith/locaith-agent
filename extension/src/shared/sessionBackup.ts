@@ -68,6 +68,8 @@ export function backupFileName(scope: 'one' | 'all', title: string | undefined, 
 const isObj = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v);
 const str = (v: unknown, max = 1_000_000): string | undefined => (typeof v === 'string' ? v.slice(0, max) : undefined);
 const num = (v: unknown): number | undefined => (typeof v === 'number' && Number.isFinite(v) ? v : undefined);
+/** Dấu thời gian hợp lệ cho Date (0 ≤ ts ≤ 8,64e15); ngoài dải → undefined. */
+const tsNum = (v: unknown): number | undefined => (typeof v === 'number' && Number.isFinite(v) && v >= 0 && v <= 8.64e15 ? v : undefined);
 const small = (v: unknown, max = 200): string => str(v, max) ?? '';
 
 function sanitizeBlock(b: unknown): ContentBlock | null {
@@ -112,7 +114,7 @@ function sanitizeMessage(m: unknown): ChatMessage | null {
     content,
     ...(m.role === 'assistant' ? { provider: str(m.provider, 100), model: str(m.model, 200) } : {}),
     ...(m.synthetic === true ? { synthetic: true } : {}),
-    ...(num(m.ts) !== undefined ? { ts: num(m.ts) } : {}),
+    ...(tsNum(m.ts) !== undefined ? { ts: tsNum(m.ts) } : {}),
   };
 }
 
@@ -143,14 +145,14 @@ function sanitizeTranscript(v: unknown): TItem[] {
   for (const t of v.slice(0, MAX_MESSAGES)) {
     if (!isObj(t) || typeof t.id !== 'string') continue;
     if (t.kind === 'user' && typeof t.text === 'string') {
-      out.push({ kind: 'user', id: t.id.slice(0, 80), text: t.text.slice(0, MAX_BLOCK_CHARS), ts: num(t.ts) ?? 0, ...(t.steer === true ? { steer: true } : {}), attachments: (Array.isArray(t.attachments) ? t.attachments.slice(0, 30) : []).map(sanitizeAttachment).filter((a): a is AttachmentInfo => a !== null) });
+      out.push({ kind: 'user', id: t.id.slice(0, 80), text: t.text.slice(0, MAX_BLOCK_CHARS), ts: tsNum(t.ts) ?? 0, ...(t.steer === true ? { steer: true } : {}), attachments: (Array.isArray(t.attachments) ? t.attachments.slice(0, 30) : []).map(sanitizeAttachment).filter((a): a is AttachmentInfo => a !== null) });
     } else if (t.kind === 'assistant' && Array.isArray(t.blocks)) {
       const blocks = t.blocks
         .filter((b): b is Record<string, unknown> => isObj(b) && typeof b.type === 'string')
         .map((b) => (b.type === 'tool' && (b.state === 'running' || b.state === 'awaiting_permission') ? { ...b, state: 'cancelled', permission: undefined } : b));
-      out.push({ ...(t as unknown as AssistantItem), blocks: blocks as unknown as AssistantItem['blocks'], done: true });
+      out.push({ ...(t as unknown as AssistantItem), ts: tsNum(t.ts) ?? 0, ...(t.endedAt !== undefined ? { endedAt: tsNum(t.endedAt) } : {}), blocks: blocks as unknown as AssistantItem['blocks'], done: true });
     } else if (t.kind === 'notice' && typeof t.text === 'string') {
-      out.push({ kind: 'notice', id: t.id.slice(0, 80), level: t.level === 'warn' || t.level === 'error' ? t.level : 'info', text: t.text.slice(0, 20_000), ts: num(t.ts) ?? 0 });
+      out.push({ kind: 'notice', id: t.id.slice(0, 80), level: t.level === 'warn' || t.level === 'error' ? t.level : 'info', text: t.text.slice(0, 20_000), ts: tsNum(t.ts) ?? 0 });
     }
   }
   return out;

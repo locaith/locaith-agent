@@ -5,6 +5,7 @@ import { cx, memo } from '../../util';
 import { post } from '../../vscode';
 import { AttachmentChip } from '../Chips';
 import { Icon } from '../Icons';
+import { MessageActionSlot } from './MessageActionSlot'; // (lane:cc-timeline-ui)
 
 const CLAMP_CHARS = 900;
 const CLAMP_LINES = 14;
@@ -37,17 +38,20 @@ function UserMessageView({ item, canEdit }: { item: UserItem; canEdit: boolean }
             {expanded ? t('tool.showLess') : t('act.expand')}
           </button>
         )}
-        {canEdit && (
-          <button
-            type="button"
-            class="user-edit"
-            title={t('turn.editLast')}
-            aria-label={t('turn.editLast')}
-            onClick={() => post({ type: 'edit_last' })}
-          >
-            <Icon name="pencil" size={13} />
-          </button>
-        )}
+        {/* (lane:cc-timeline-ui) ô thao tác góc trên-phải: nút sửa (khi có); lane checkpoints-rewind gắn thêm biểu tượng quay lại vào đây. */}
+        <MessageActionSlot>
+          {canEdit && (
+            <button
+              type="button"
+              class="user-edit"
+              title={t('turn.editLast')}
+              aria-label={t('turn.editLast')}
+              onClick={() => post({ type: 'edit_last' })}
+            >
+              <Icon name="pencil" size={13} />
+            </button>
+          )}
+        </MessageActionSlot>
       </div>
     </section>
   );

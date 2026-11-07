@@ -1,10 +1,13 @@
-import { useEffect, useRef, useState } from 'preact/hooks';
+import { Fragment } from 'preact';
+import { useEffect, useMemo, useRef, useState } from 'preact/hooks';
 import type { ViewState } from '../../../src/shared/protocol';
 import { useApp } from '../ctx';
+import { timelineMarks } from '../timelineCc';
 import { Icon } from './Icons';
 import { LocaithConsentCard } from './LocaithConsent';
 import { Welcome } from './Welcome';
 import { AssistantTurn, StandaloneNotice } from './timeline/AssistantTurn';
+import { DayDivider, Stamp } from './timeline/TimeMarks';
 import { UserMessage } from './timeline/UserMessage';
 
 const NEAR_BOTTOM_PX = 56;
@@ -50,6 +53,9 @@ export function ChatView({ view, hasAnyKey }: { view: ViewState; hasAnyKey: bool
     scrollToBottom();
   }, [view.sessionId, view.transcript.length === 0, lastIsUser ? last?.id : undefined]);
 
+  // (lane:cc-timeline-ui) mốc giờ/ngày — O(n) trên số mục (không phải số khối), tính lại khi transcript đổi.
+  const marks = useMemo(() => timelineMarks(view.transcript), [view.transcript]);
+
   const lastUserIdx = (() => {
     for (let i = view.transcript.length - 1; i >= 0; i--) if (view.transcript[i].kind === 'user') return i;
     return -1;
@@ -64,10 +70,34 @@ export function ChatView({ view, hasAnyKey }: { view: ViewState; hasAnyKey: bool
           ) : (
             view.transcript.map((item, i) => {
               const isLast = i === view.transcript.length - 1;
-              if (item.kind === 'user') return <UserMessage key={item.id} item={item} canEdit={i === lastUserIdx && !view.running} />;
+              // (lane:cc-timeline-ui) đường ngăn ngày khi sang ngày mới + giờ nhỏ trên mỗi tin người dùng (giờ của câu trả lời nằm trong AssistantTurn).
+              const mark = marks.get(item.id);
+              const before = mark && (
+                <>
+                  {mark.day !== undefined && <DayDivider ts={mark.day} />}
+                  {item.kind === 'user' && mark.time !== undefined && <Stamp ts={mark.time} />}
+                </>
+              );
+              if (item.kind === 'user')
+                return (
+                  <Fragment key={item.id}>
+                    {before}
+                    <UserMessage item={item} canEdit={i === lastUserIdx && !view.running} />
+                  </Fragment>
+                );
               if (item.kind === 'assistant')
-                return <AssistantTurn key={item.id} item={item} live={view.running && !item.done} isLast={isLast} />;
-              return <StandaloneNotice key={item.id} item={item} canRetry={isLast && !view.running} />;
+                return (
+                  <Fragment key={item.id}>
+                    {before}
+                    <AssistantTurn item={item} live={view.running && !item.done} isLast={isLast} />
+                  </Fragment>
+                );
+              return (
+                <Fragment key={item.id}>
+                  {before}
+                  <StandaloneNotice item={item} canRetry={isLast && !view.running} />
+                </Fragment>
+              );
             })
           )}
           {/* Thông báo dữ liệu của mô hình Locaith: thẻ ở cuối cuộc trò chuyện, không phải hộp thoại. */}

@@ -21,6 +21,9 @@ Mở thủ công `webview/dev/harness.html` bằng Chrome (cần `--allow-file-a
 | `stop=` | Dừng giữa chừng ở mốc: `tasks` · `searching` · `pills` · `fetch` · `writing` · `artifact` · `streaming` · `done` |
 | `expand=1` | Trải toàn bộ dòng thời gian (để chụp cả cuộc trò chuyện) |
 | `lang=en` · `font=manrope\|inter\|system` · `bypass=1` · `w=<px>` | Ngôn ngữ, font, bật chế độ bỏ qua xác nhận, bề rộng |
+| `platform=browser` | Chạy như bản Chrome/Edge (không nút mở tệp, không hàng chờ tin) |
+
+Cảnh `cc-timeline` / `cc-working` (lane cc-timeline-ui) tái hiện ba ảnh mẫu Claude Code: `node webview/dev/shoot.mjs cc-` chụp và KIỂM DOM (dòng nhóm, chấm màu, dòng agent, dòng nén, giờ/ngày, IN/OUT, xem trước tệp).
 
 Gõ vào ô nhập của harness sẽ chạy kịch bản "so sánh Intelligence Index" (nếu có từ khoá) hoặc một câu trả lời mẫu.
 

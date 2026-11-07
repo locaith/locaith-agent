@@ -50,17 +50,29 @@ function blockId(a: AssistantItem, blocks: ABlock[], tag: string): string {
   return `${a.id}:${tag}${blocks.length}`;
 }
 
-function appendStreamText(a: AssistantItem, type: 'text' | 'thinking', delta: string, clearPills: boolean): AssistantItem {
+function appendStreamText(a: AssistantItem, type: 'text' | 'thinking', delta: string, clearPills: boolean, ts?: number): AssistantItem {
   if (!delta) return a;
   const blocks = a.blocks.slice();
   if (clearPills) deactivatePills(blocks);
   const last = blocks[blocks.length - 1];
   if (last && last.type === type) {
-    blocks[blocks.length - 1] = { ...last, text: last.text + delta };
+    blocks[blocks.length - 1] = { ...last, text: last.text + delta, ...thinkingTiming(last, ts) };
   } else {
-    blocks.push({ type, id: blockId(a, blocks, type === 'text' ? 't' : 'k'), text: delta });
+    blocks.push({ type, id: blockId(a, blocks, type === 'text' ? 't' : 'k'), text: delta, ...thinkingTiming(undefined, ts) });
   }
   return { ...a, blocks };
+}
+
+/**
+ * (lane:cc-timeline-ui) Thời lượng suy nghĩ từ dấu thời gian của từng delta: khối mới lấy `startedAt` = ts delta đầu; mỗi delta sau
+ * cập nhật `durationMs` = ts − startedAt. Không có ts (phiên cũ, nhà cung cấp không đóng dấu) → không thêm trường nào.
+ */
+function thinkingTiming(prev: ABlock | undefined, ts: number | undefined): { startedAt?: number; durationMs?: number } {
+  if (typeof ts !== 'number' || !Number.isFinite(ts) || ts <= 0) return {};
+  if (!prev || prev.type !== 'thinking') return { startedAt: ts };
+  const start = prev.startedAt;
+  if (typeof start !== 'number' || !Number.isFinite(start) || start <= 0) return { startedAt: ts };
+  return { startedAt: start, durationMs: Math.max(0, ts - start) };
 }
 
 function patchTool(blocks: ABlock[], callId: string, patch: (t: ToolBlock) => ToolBlock): ABlock[] | null {
@@ -96,7 +108,7 @@ export function applyEvent(items: readonly TItem[], ev: UiEvent): TItem[] {
       return updateAssistant(items, ev.id, (a) => appendStreamText(a, 'text', ev.delta, true));
 
     case 'thinking':
-      return updateAssistant(items, ev.id, (a) => appendStreamText(a, 'thinking', ev.delta, false));
+      return updateAssistant(items, ev.id, (a) => appendStreamText(a, 'thinking', ev.delta, false, ev.ts));
 
     case 'pill':
       return updateAssistant(items, ev.id, (a) => {

@@ -1,0 +1,564 @@
+/* ── (lane:cc-timeline-ui) Dòng thời gian GỌN kiểu Claude Code ─────────────────────────────────────────────────────────────
+   Nạp CUỐI CÙNG (main.css) để thắng các kiểu cũ. Nguyên tắc: một thứ = MỘT dòng [chấm] + chữ xám nhạt cỡ nhỏ + (⌄);
+   không khung kín, không tô nền cả khối, không biểu tượng thừa; mở ra thì thanh dọc mảnh bên trái + nút Thu gọn ở cuối.
+   Tôn trọng prefers-reduced-motion, tương phản cao, khung hẹp ~260–320 px. */
+
+/* ── chấm trạng thái ── */
+.cc-dot {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex: none;
+  background: color-mix(in srgb, var(--fg) 34%, transparent);
+}
+.cc-dot.is-ok {
+  background: var(--ok-text);
+}
+.cc-dot.is-fail {
+  background: var(--danger);
+}
+.cc-dot.is-warn {
+  background: var(--warn);
+}
+.cc-dot.is-live {
+  background: color-mix(in srgb, var(--fg) 50%, transparent);
+  animation: cc-breathe 1.6s ease-in-out infinite;
+}
+@keyframes cc-breathe {
+  0%,
+  100% {
+    opacity: 0.45;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+/* ── dòng nhóm (RunHead) ── */
+.cc-head {
+  align-items: flex-start;
+}
+.cc-line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  column-gap: 0;
+  min-width: 0;
+  font-size: var(--nd-fs-sm);
+  line-height: var(--nd-lh-ui);
+  color: var(--fg-muted);
+}
+.cc-line > * + *::before {
+  content: '·';
+  margin: 0 6px;
+  color: var(--fg-faint);
+}
+.cc-now {
+  color: var(--fg);
+}
+.cc-count {
+  white-space: nowrap;
+}
+.cc-fail {
+  color: var(--danger);
+}
+.cc-edits {
+  color: var(--ok-text);
+}
+.cc-sub {
+  display: block;
+  font-size: var(--nd-fs-xs);
+  line-height: var(--nd-lh-ui);
+  color: var(--fg-faint);
+}
+.cc-dur {
+  font-variant-numeric: tabular-nums;
+}
+/* Nhóm gập: bỏ các thanh màu/viền trái cũ của tool-group, task-group, tool-edits, work-row (chỉ còn chấm + chữ). */
+.cc-group,
+.cc-group.tool-group:not(.tool-edits),
+.cc-group.tool-edits,
+.cc-group.task-group,
+.work-row.has-fail,
+.run-group.has-fail {
+  border-left: 0;
+  padding-left: 0;
+  box-shadow: none;
+  border-radius: 0;
+}
+.cc-group .tool-label {
+  color: var(--fg-muted);
+  font-weight: 400;
+}
+/* Mở ra: thanh dọc mảnh bên trái nối các chấm, thân xếp dọc. */
+.cc-group > .tool-group-body,
+.cc-group > .task-group-body,
+.work-body {
+  margin-left: 8px;
+  padding-left: 12px;
+  border-left: 1px solid var(--line);
+}
+.cc-group .tool-group-body .tool-group-body {
+  margin-left: 8px;
+}
+/* Dòng agent ngay dưới nhóm gập. */
+.cc-agents {
+  margin-left: 0;
+}
+
+/* ── dòng công cụ ── */
+.cc-tool-line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0 6px;
+  min-width: 0;
+  font-size: var(--nd-fs-sm);
+  line-height: var(--nd-lh-ui);
+  color: var(--fg-muted);
+}
+.cc-action {
+  font-weight: 600;
+  color: var(--fg);
+  white-space: nowrap;
+}
+.cc-desc {
+  flex: 1 1 0;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--fg-muted);
+}
+.cc-desc.is-code {
+  font-family: var(--nd-font-code);
+  font-size: var(--nd-fs-code);
+}
+/* Đường dẫn: màu liên kết, xuống dòng (không cắt) như ảnh mẫu. */
+.cc-desc.cc-path {
+  flex: 1 1 auto;
+  white-space: normal;
+  overflow: visible;
+  overflow-wrap: anywhere;
+  font-family: var(--nd-font-code);
+  font-size: var(--nd-fs-code);
+  color: var(--vscode-textLink-foreground, var(--accent-text));
+}
+.cc-desc.cc-path[role="link"] {
+  cursor: pointer;
+}
+.cc-desc.cc-path[role="link"]:hover {
+  text-decoration: underline;
+}
+.cc-tool .tool-state {
+  margin-left: 0;
+}
+.cc-tool.state-error .cc-action {
+  color: var(--danger);
+}
+.cc-tool .tool-body {
+  margin-left: 26px;
+}
+.cc-tool.is-nested .tool-body {
+  margin-left: 26px;
+}
+.cc-lines {
+  white-space: nowrap;
+}
+
+/* ── IN / OUT ── */
+.cc-inout {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+.cc-io {
+  display: grid;
+  grid-template-columns: 30px minmax(0, 1fr);
+  align-items: start;
+  gap: 6px;
+  min-width: 0;
+}
+.cc-io-label {
+  padding-top: 6px;
+  font-size: var(--nd-fs-xs);
+  line-height: 1;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--fg-faint);
+  user-select: none;
+}
+.cc-io-main {
+  position: relative;
+  min-width: 0;
+}
+.cc-io-pre {
+  margin: 0;
+  padding: 6px 8px;
+  border: 1px solid var(--line-soft);
+  border-radius: 8px;
+  background: var(--code-bg);
+  font-family: var(--nd-font-code);
+  font-size: var(--nd-fs-code);
+  line-height: 1.55;
+  font-variant-ligatures: none;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  overflow: auto;
+  max-height: 320px;
+  color: var(--fg);
+}
+.cc-io.is-in .cc-io-pre {
+  color: var(--fg-muted);
+}
+/* Trong nhóm đã mở, dòng tóm tắt trung gian bị bỏ: các lệnh bày phẳng cùng cấp. */
+.cc-flat {
+  display: contents;
+}
+/* Cắt ~4 dòng, phần cuối mờ dần (gradient) báo còn tiếp. */
+.cc-io-pre.is-clamped {
+  max-height: calc(1.55em * 4 + 12px);
+  overflow: hidden;
+  -webkit-mask-image: linear-gradient(#000 52%, transparent 100%);
+  mask-image: linear-gradient(#000 52%, transparent 100%);
+}
+.cc-io-pre.is-toggle {
+  cursor: pointer;
+}
+.cc-io-pre.is-toggle:focus-visible {
+  outline: 1px solid var(--focus);
+}
+/* Đầu ra lỗi: chữ đỏ, KHÔNG tô nền đỏ. */
+.cc-io.is-error .cc-io-pre {
+  color: color-mix(in srgb, var(--danger) 78%, var(--fg));
+}
+.cc-io.is-error .cc-io-label {
+  color: var(--danger);
+}
+.cc-io-copy {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 5px;
+  border-radius: 6px;
+  font-size: var(--nd-fs-xs);
+  color: var(--fg-faint);
+  background: var(--pop-bg, var(--surface-2));
+  opacity: 0;
+  transition: opacity 0.12s;
+}
+.cc-io-main:hover .cc-io-copy,
+.cc-io-copy:focus-visible {
+  opacity: 1;
+}
+.cc-io-copy:hover {
+  color: var(--fg);
+}
+
+/* ── xem trước tệp vừa ghi ── */
+.cc-preview {
+  position: relative;
+  min-width: 0;
+}
+.cc-preview-pre {
+  margin: 0;
+  padding: 6px 8px;
+  border: 1px solid var(--line-soft);
+  border-radius: 8px;
+  background: var(--code-bg);
+  font-family: var(--nd-font-code);
+  font-size: var(--nd-fs-code);
+  line-height: 1.55;
+  font-variant-ligatures: none;
+  white-space: pre;
+  overflow: auto;
+  max-height: 520px;
+  color: var(--fg-muted);
+}
+.cc-preview.is-clamped .cc-preview-pre {
+  overflow: hidden;
+  -webkit-mask-image: linear-gradient(#000 45%, transparent 100%);
+  mask-image: linear-gradient(#000 45%, transparent 100%);
+}
+.cc-preview-more {
+  position: absolute;
+  inset: 0;
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+}
+.cc-preview-more:focus-visible {
+  outline: 1px solid var(--focus);
+  border-radius: 8px;
+}
+
+/* ── suy nghĩ ── */
+.cc-think {
+  font-weight: 400;
+}
+.act-thinking .tool-text {
+  column-gap: 8px;
+}
+/* Đang suy nghĩ: vệt sáng lướt qua chữ (shimmer), không dấu «…». */
+.cc-shimmer {
+  background: linear-gradient(90deg, var(--fg-muted) 0%, var(--fg) 45%, var(--fg-muted) 90%);
+  background-size: 200% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: cc-shimmer 2.2s linear infinite;
+}
+@keyframes cc-shimmer {
+  from {
+    background-position: 200% 0;
+  }
+  to {
+    background-position: -200% 0;
+  }
+}
+
+/* ── thông báo ── */
+.cc-notice {
+  padding: 2px 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  gap: 8px;
+}
+.cc-notice .notice-icon {
+  width: 18px;
+  justify-content: center;
+}
+.cc-notice.notice-info .notice-text {
+  font-style: italic;
+  color: var(--fg-faint);
+  font-size: var(--nd-fs-sm);
+}
+.cc-notice.notice-warn,
+.cc-notice.notice-error {
+  padding-left: 0;
+}
+.cc-notice.notice-warn .notice-text {
+  color: color-mix(in srgb, var(--warn) 70%, var(--fg));
+}
+.cc-notice.notice-error .notice-text {
+  color: color-mix(in srgb, var(--danger) 78%, var(--fg));
+}
+
+/* ── nén ngữ cảnh ── */
+.cc-compact {
+  min-width: 0;
+}
+.cc-compact-head {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 100%;
+  padding: 2px 0;
+  color: var(--fg-faint);
+  font-size: var(--nd-fs-sm);
+  font-style: italic;
+  text-align: left;
+}
+.cc-compact-head:hover {
+  color: var(--fg-muted);
+}
+.cc-compact-text {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.cc-compact-body {
+  margin: 2px 0 4px 8px;
+  padding-left: 12px;
+  border-left: 1px solid var(--line);
+  font-size: var(--nd-fs-sm);
+  color: var(--fg-muted);
+}
+.cc-compact-meta {
+  font-size: var(--nd-fs-xs);
+  color: var(--fg-faint);
+  margin-bottom: 4px;
+}
+.cc-compact-title {
+  font-size: var(--nd-fs-xs);
+  color: var(--fg-faint);
+  margin-bottom: 2px;
+}
+.cc-compact-summary {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  max-height: 320px;
+  overflow: auto;
+}
+
+/* ── giờ & ngày ── */
+.cc-stamp {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: -12px;
+  font-size: var(--nd-fs-xs);
+  line-height: 1.2;
+  color: var(--fg-faint);
+  font-variant-numeric: tabular-nums;
+}
+.turn-assistant .cc-stamp {
+  margin-bottom: -4px;
+}
+.cc-day {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: -6px 0;
+  color: var(--fg-faint);
+  font-size: var(--nd-fs-xs);
+}
+.cc-day-line {
+  flex: 1;
+  height: 6px;
+  background-color: var(--line);
+  -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='6' viewBox='0 0 16 6'%3E%3Cpath d='M0 3 Q4 0 8 3 T16 3' fill='none' stroke='%23000' stroke-width='1'/%3E%3C/svg%3E");
+  mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='6' viewBox='0 0 16 6'%3E%3Cpath d='M0 3 Q4 0 8 3 T16 3' fill='none' stroke='%23000' stroke-width='1'/%3E%3C/svg%3E");
+  -webkit-mask-repeat: repeat-x;
+  mask-repeat: repeat-x;
+  -webkit-mask-size: 16px 6px;
+  mask-size: 16px 6px;
+}
+.cc-day-label {
+  white-space: nowrap;
+}
+
+/* ── tin người dùng: ô thao tác góc trên-phải ── */
+.msg-actions {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+.msg-actions:empty {
+  display: none;
+}
+.msg-actions .user-edit {
+  position: static;
+}
+
+/* ── chân lượt trả lời: gọn — nút chép chỉ hiện khi rê chuột / focus, không chiếm chiều cao thừa ── */
+.turn-footer {
+  min-height: 20px;
+  margin-top: -6px;
+}
+.turn-footer .turn-action {
+  opacity: 0;
+  transition: opacity 0.12s;
+}
+.turn-assistant:hover .turn-footer .turn-action,
+.turn-footer .turn-action:focus-visible,
+.turn-notice .turn-action {
+  opacity: 1;
+}
+
+/* ── nhãn đang chạy cuối lượt ── */
+.cc-working {
+  gap: 8px;
+  color: var(--fg-muted);
+}
+.cc-working-label {
+  font-weight: 600;
+  color: var(--fg);
+}
+
+/* ── chip đồng hồ dưới ô nhập ── */
+.cc-clock {
+  gap: 4px;
+  cursor: default;
+  font-variant-numeric: tabular-nums;
+}
+.cc-clock-text {
+  font-size: var(--nd-fs-xs);
+}
+
+/* ── dòng agent: bộ số in đậm nhẹ ── */
+.cc-agent .par-agent-stats {
+  font-weight: 600;
+  color: var(--fg-muted);
+}
+.cc-agent .par-st-time {
+  font-weight: 400;
+  color: var(--fg-faint);
+}
+.cc-agent .par-agent-title {
+  color: var(--fg-muted);
+}
+.cc-agent .par-agent-activity.is-empty {
+  display: none;
+}
+@container app (max-width: 520px) {
+  .cc-agent .par-agent-activity.is-empty {
+    display: block;
+    height: auto;
+  }
+}
+
+/* ── khung hẹp ── */
+@container app (max-width: 320px) {
+  .cc-io {
+    grid-template-columns: 1fr;
+    gap: 2px;
+  }
+  .cc-io-label {
+    padding-top: 0;
+  }
+  .cc-dur {
+    display: none;
+  }
+}
+
+/* ── tương phản cao: chữ phụ đậm hơn, chấm có viền ── */
+body.vscode-high-contrast .cc-line,
+body.vscode-high-contrast .cc-tool-line,
+body.vscode-high-contrast .cc-notice.notice-info .notice-text,
+body.vscode-high-contrast .cc-compact-head,
+body.vscode-high-contrast .cc-stamp,
+body.vscode-high-contrast .cc-day,
+body.vscode-high-contrast-light .cc-line,
+body.vscode-high-contrast-light .cc-tool-line,
+body.vscode-high-contrast-light .cc-notice.notice-info .notice-text,
+body.vscode-high-contrast-light .cc-compact-head,
+body.vscode-high-contrast-light .cc-stamp,
+body.vscode-high-contrast-light .cc-day {
+  color: var(--fg);
+}
+body.vscode-high-contrast .cc-dot,
+body.vscode-high-contrast-light .cc-dot {
+  box-shadow: 0 0 0 1px var(--fg);
+}
+body.vscode-high-contrast .cc-shimmer,
+body.vscode-high-contrast-light .cc-shimmer {
+  animation: none;
+  background: none;
+  color: var(--fg);
+  -webkit-text-fill-color: currentColor;
+}
+
+/* ── giảm chuyển động ── */
+@media (prefers-reduced-motion: reduce) {
+  .cc-dot.is-live {
+    animation: none;
+    opacity: 1;
+  }
+  .cc-shimmer {
+    animation: none;
+    background: none;
+    color: var(--fg);
+  }
+  .cc-io-copy,
+  .cc-compact-head {
+    transition: none;
+  }
+}

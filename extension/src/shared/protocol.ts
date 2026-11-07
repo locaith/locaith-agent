@@ -161,8 +161,12 @@ export interface CompactInfo {
 
 export type ABlock =
   | { type: 'text'; id: string; text: string }
-  /** Văn bản suy luận thật do hãng trả (nếu có) — hiển thị trong khối thu gọn. */
-  | { type: 'thinking'; id: string; text: string }
+  /**
+   * Văn bản suy luận thật do hãng trả (nếu có) — hiển thị trong khối thu gọn.
+   * (lane:cc-timeline-ui) `startedAt`/`durationMs` TUỲ CHỌN: mốc delta đầu và khoảng tới delta cuối (từ `ts` của sự kiện `thinking`),
+   * để vẽ «Đã suy nghĩ 14 giây». Phiên cũ không có → chỉ «Đã suy nghĩ».
+   */
+  | { type: 'thinking'; id: string; text: string; startedAt?: number; durationMs?: number }
   /** Dòng trạng thái chạy trực tiếp ("Đang đối chiếu điểm số…"): chấm cam khi đang chạy, xám khi xong. */
   | { type: 'pill'; id: string; text: string; kind: PillKind; active: boolean }
   /** "Đã thêm tác vụ: …" */
@@ -255,7 +259,8 @@ export type UiEvent =
   | { t: 'assistant_start'; id: string; provider: string; model: string; ts: number }
   /** Nối vào khối văn bản cuối của lượt trả lời `id` (hoặc mở khối mới nếu khối cuối không phải văn bản). */
   | { t: 'text'; id: string; delta: string }
-  | { t: 'thinking'; id: string; delta: string }
+  /** (lane:cc-timeline-ui) `ts` tuỳ chọn: lúc delta này được phát (engine đóng dấu) → reducer tính thời lượng suy nghĩ. */
+  | { t: 'thinking'; id: string; delta: string; ts?: number }
   /** Tạo mới hoặc cập nhật dòng trạng thái: cùng pillId và dòng đó còn active → thay chữ; ngược lại mở dòng mới, các dòng active cũ chuyển xám. */
   | { t: 'pill'; id: string; pillId: string; text: string; kind: PillKind }
   /** Danh sách tác vụ hiện tại (ảnh chụp đầy đủ) + những tiêu đề vừa được thêm lần này. */
