@@ -335,3 +335,56 @@ describe('mã hoá + hết giờ + PowerShell thật', () => {
     240000,
   );
 });
+
+describe('agent con + tác vụ nền', () => {
+  it('tác vụ nền do agent con khởi chạy bị dọn khi agent con xong (không mồ côi dưới phiên chết)', async () => {
+    const { AgentRegistry } = await import('../src/core/agents/definitions');
+    const { Semaphore } = await import('../src/core/agents/semaphore');
+    const { DEFAULT_ENGINE_SETTINGS } = await import('../src/core/engine/types');
+    const { ModelPool } = await import('../src/core/orchestration/pool');
+    const { builtinSkills } = await import('../src/core/skills/builtin');
+    const { SkillRegistry } = await import('../src/core/skills/registry');
+    const { FakeProvider } = await import('./helpers/fakeProvider');
+    let hostRef: NodeToolHost | undefined;
+    let seen: { status: string; session: string; pid?: number } | undefined;
+    const provider = new FakeProvider([
+      () => toolTurn([{ id: 'ag1', name: 'agent', input: { description: 'Chạy server', prompt: 'Chạy tick.js nền', agent_type: 'general' } }]),
+      () => toolTurn([{ name: 'run_command', input: { command: 'node tick.js', background: true } }]),
+      () => {
+        const t = getTaskManager(hostRef!).list()[0]!;
+        seen = { status: t.status, session: t.sessionId, pid: t.handle?.pid };
+        return textTurn('Đã chạy server.');
+      },
+      () => textTurn('Xong.'),
+    ]);
+    const h = makeHarness([], {
+      provider,
+      files: { 'tick.js': TICK },
+      shellPreference: SHELL,
+      decide: () => 'allow',
+      agents: {
+        pool: new ModelPool({ summaries: async () => [], get: () => provider }),
+        agents: new AgentRegistry(),
+        skills: new SkillRegistry(builtinSkills()),
+        mode: () => 'off',
+        engineSettings: () => ({ ...DEFAULT_ENGINE_SETTINGS }),
+        provider: () => provider,
+        contextWindow: () => 128_000,
+        log: () => {},
+        limiter: new Semaphore(4),
+        writeLock: new Semaphore(1),
+      },
+    });
+    hostRef = h.host;
+    const mgr = getTaskManager(h.host);
+    managers.push(mgr);
+    await h.run('nhờ agent con chạy server');
+    // Lúc agent con còn sống: tác vụ chạy, gắn với phiên của agent con (không phải phiên chính).
+    expect(seen?.status).toBe('running');
+    expect(seen?.session.startsWith('sa')).toBe(true);
+    // Agent con xong → tác vụ của nó đã bị dừng + quên, tiến trình không còn.
+    expect(mgr.list()).toEqual([]);
+    expect(mgr.running()).toEqual([]);
+    if (seen?.pid) expect(alive(seen.pid)).toBe(false);
+  }, 60000);
+});

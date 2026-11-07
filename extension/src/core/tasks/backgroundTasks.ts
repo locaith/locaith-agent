@@ -75,7 +75,12 @@ export class OutputBuffer {
 
   /** `n` dòng cuối (không tính dòng trống ở cuối). */
   lastLines(n: number): string[] {
-    const src = (this.tail || this.head).replace(/\r\n?/g, '\n');
+    // Ghép đầu + đuôi: ngay sau khi vượt phần đầu thì đuôi mới có vài ký tự, các dòng thật nằm ở cuối `head`.
+    // Khi đã lược ở giữa (dropped > 0) hai đoạn không liền nhau, nên chỉ bù từ `head` nếu đuôi chưa đủ `n` dòng.
+    let raw = this.tail;
+    if (this.dropped === 0) raw = this.head + this.tail;
+    else if (raw.split('\n').length <= n) raw = this.head.slice(-4000) + raw;
+    const src = raw.replace(/\r\n?/g, '\n');
     // Thanh tiến trình kiểu `\r` đè dòng: chỉ giữ phần sau `\r` cuối của mỗi dòng (đã đổi ở trên) — đủ cho hiển thị.
     const lines = stripAnsi(src).split('\n');
     while (lines.length && !lines[lines.length - 1]!.trim()) lines.pop();

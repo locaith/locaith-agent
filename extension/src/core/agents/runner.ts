@@ -12,6 +12,7 @@ import type { AgentProgress, UiEvent } from '../../shared/protocol';
 import { newId } from '../../shared/transcript';
 import { agentActivity, agentPhase, streamTokenEstimate } from './activity';
 import { createProgressReporter } from './progress';
+import { getTaskManager } from '../tasks/backgroundTasks'; // lane:bg-tasks
 import { AgentEngine } from '../engine/engine';
 import { ToolRegistry, isPlanSafe } from '../engine/toolRegistry';
 import { newSession, type EngineSettings, type SessionState, type ToolContext } from '../engine/types';
@@ -181,6 +182,7 @@ export async function runSubAgent(svc: AgentServices, ctx: ToolContext, o: RunAg
   const provider: LLMProvider = chain.length > 1 ? new FailoverProvider(chain, svc.pool, { onSwitch: svc.onSwitch, log: svc.log }) : first.provider;
 
   const releases: Array<() => void> = [];
+  let subSessionId: string | undefined; // lane:bg-tasks
   let progressRef: { dispose(): void } | undefined;
   try {
     releases.push(await svc.limiter.acquire(ctx.signal));
@@ -191,8 +193,9 @@ export async function runSubAgent(svc: AgentServices, ctx: ToolContext, o: RunAg
     if (registry.all().some((d) => d.risk === 'write' || d.risk === 'exec' || d.risk === 'act')) releases.push(await svc.writeLock.acquire(ctx.signal));
 
     const maxTurns = Math.max(1, Math.min(40, o.maxTurns ?? o.def.maxTurns));
+    subSessionId = newId('sa');
     const session = newSession({
-      id: newId('sa'),
+      id: subSessionId,
       provider: first.providerId,
       model: first.model,
       title: label,
@@ -323,6 +326,15 @@ export async function runSubAgent(svc: AgentServices, ctx: ToolContext, o: RunAg
     if (ctx.signal.aborted) return { ...empty('Đã dừng.'), stopReason: 'aborted' };
     return empty(err instanceof Error ? err.message : String(err));
   } finally {
+    // lane:bg-tasks: tác vụ nền do agent con khởi chạy gắn với phiên 'sa…' (agent cha không thấy/dừng được) → dọn khi agent con xong,
+    // kẻo dev server thành tiến trình mồ côi tới khi đóng cửa sổ.
+    if (subSessionId) {
+      try {
+        await getTaskManager(ctx.host).disposeSession(subSessionId);
+      } catch {
+        /* dọn nền không được làm hỏng kết quả agent con */
+      }
+    }
     progressRef?.dispose();
     for (const r of releases.reverse()) r();
   }
