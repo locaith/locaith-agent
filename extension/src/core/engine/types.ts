@@ -241,6 +241,8 @@ export interface SessionState {
   /** Kích thước ngữ cảnh thực của lần gọi gần nhất (token). */
   lastContextTokens: number;
   usageTotals: { input: number; output: number };
+  /** (lane:ctx-compaction) Đếm việc giữ ngữ cảnh gọn của phiên — thanh đo ngữ cảnh đọc. Tuỳ chọn: phiên cũ không có. */
+  contextStats?: { clearedResults: number; compactions: number };
 }
 
 export function newSession(partial: Partial<SessionState> & Pick<SessionState, 'id' | 'provider' | 'model'>): SessionState {
@@ -282,6 +284,15 @@ export interface EngineSettings {
    * Khách báo nén ở ~100k là quá sớm với model cửa sổ lớn → nâng lên 0,9 để giữ ngữ cảnh lâu hơn.
    */
   compactAt?: number;
+  // ── (lane:ctx-compaction) tham số giữ ngữ cảnh gọn — xem compactTuning.ts ──
+  /** Bắt đầu lược kết quả công cụ cũ khi ngữ cảnh vượt phần trăm này của cửa sổ (0 = tắt; mặc định 40). */
+  clearToolResultsAtPercent?: number;
+  /** Số tin nhắn gần nhất giữ nguyên khi tóm tắt toàn bộ (mặc định 20; không cắt đôi cặp tool_use/tool_result). */
+  keepRecentMessages?: number;
+  /** Trần tuyệt đối (token) cho ngưỡng nén; 0 = tự động (300k cho cửa sổ > 400k khi người dùng không tự đặt compactAtPercent). */
+  compactAtTokens?: number;
+  /** Người dùng đã tự đặt compactAtPercent (tắt trần tự động). */
+  compactAtUserSet?: boolean;
   /** Tên các tệp hướng dẫn dự án cần nạp, theo thứ tự ưu tiên. */
   instructionFiles: string[];
   /** Gom delta suy nghĩ/mã: số ký tự tối thiểu hoặc khoảng thời gian trước khi tóm tắt. */
@@ -299,6 +310,10 @@ export const DEFAULT_ENGINE_SETTINGS: EngineSettings = {
   language: 'vi',
   autoCompact: true,
   contextWindow: 200_000,
+  // (lane:ctx-compaction)
+  clearToolResultsAtPercent: 40,
+  keepRecentMessages: 20,
+  compactAtTokens: 0,
   instructionFiles: ['LOCAITH.md', 'AGENTS.md', 'CLAUDE.md'],
   summarizeEveryChars: 700,
   summarizeEveryMs: 1500,
