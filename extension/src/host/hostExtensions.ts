@@ -17,7 +17,7 @@ import type { ControllerDeps } from './chatController';
 // import { backgroundTasksExtension } from './extensions/backgroundTasks'; // (lane:bg-tasks)
 // import { ideDiagnosticsExtension } from './extensions/ideDiagnostics'; // (lane:ide-context)
 // import { instructionsExtension } from './extensions/instructions'; // (lane:instructions-memory)
-// import { permissionRulesExtension } from './extensions/permissionRules'; // (lane:perm-rules)
+import { permissionRulesExtension } from './extensions/permissionRules'; // (lane:perm-rules)
 // import { checkpointsExtension } from './extensions/checkpoints'; // (lane:checkpoints-rewind)
 
 /** Mọi thứ một extension phía host có thể cần. Cần thêm gì thì lấy từ `deps` (ControllerDeps) — đừng sửa interface này. */
@@ -32,7 +32,7 @@ export interface HostExtensionContext {
 export function hostRunExtensions(ctx: HostExtensionContext): RunExtension[] {
   void ctx;
   return [
-    // permissionRulesExtension(ctx), // (lane:perm-rules)
+    permissionRulesExtension(ctx), // (lane:perm-rules)
     // hooksExtension(ctx), // (lane:hooks)
     // ideDiagnosticsExtension(ctx), // (lane:ide-context)
     // instructionsExtension(ctx), // (lane:instructions-memory)

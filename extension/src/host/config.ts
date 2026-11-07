@@ -17,6 +17,9 @@ const SECTION = 'locaithAgent';
 const SECURE_KEYS = new Set([
   'agent.permissionMode',
   'agent.allowBypassPermissions',
+  // (lane:perm-rules) luật «cho phép» làm LỎNG bảo mật → chỉ từ cài đặt người dùng (luật allow của workspace đi đường xác nhận riêng, xem permissionRulesService.ts).
+  'permissions.allow',
+  'permissions.trustedWorkspaceAllow',
   'agent.instructionFiles',
   'fetch.allowPrivateNetwork',
   'search.searxngUrl',
