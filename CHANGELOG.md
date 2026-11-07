@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.6.31 - 2026-11-07
+
+- **"Continue" after Stop picks up exactly where it stopped.** Pressing Stop in the middle of a tool round used to leave tool calls with no result in the history, so the next message replayed the old commands ("it runs in both places"). Interrupted calls are now closed as cancelled before the new message is added, runs are strictly serialized (two runs can never write to one history), and a bare "continue" is expanded into a clear instruction — resume from the exact stopping point, work through everything still pending, do not re-run what was cancelled — while the box and the transcript keep the words you typed.
+- **The model is told where it is in the loop.** Every request now carries `[turn N/M · X left]`; with 3 or fewer turns left it becomes an explicit order to wrap up — no new exploration, finish and report what is left and how to continue. The line lives only in the request (never in your history, the transcript, token counts or compaction summaries) and is folded into the last tool result, so providers that treat a trailing user message as a turn boundary (DeepSeek, Gemini 3) keep the reasoning of the earlier tool rounds, and Anthropic's prompt cache still hits.
+- **The completion gate can no longer end a run silently.** Pending tasks are re-nagged with labelled reminders (`[reminder 1]`, `[reminder 2]`); on the third intervention it stops nagging and tells you exactly what is left. Plan mode is exempt (a plan is supposed to be unfinished), and the labels follow your language.
+- **The three bouncing robots are gone.** The "working" line while the assistant thinks no longer plays the little robot animation — just one small spinner, the label, and the token/seconds counter.
+- **The "Tasks" panel above the box is gone**, as requested — the list still drives the completion gate and survives compaction; it just no longer takes screen space.
+- **Fixes found while verifying all of this:** a run that threw (for example a consent or key error) no longer jams every later run until you reload the window; the resume instruction no longer shows up inside your own message when a conversation is rebuilt; old conversations keep their "cancelled" markers when reopened.
+- **Under the hood:** the engine gained extension points (`RunExtension`: before-model, before/after-tool, finalize, end) and a slash-command registry, so features no longer have to be wired into the main loop. The public source repo now includes `src/core/market`, which a broad ignore rule had been silently dropping — a fresh clone can build again.
+
 ## 0.6.30 - 2026-11-07
 
 - **Rows no longer get a full background fill.** A task row used to paint its whole block violet (and red when a step failed), which tinted every line inside it. Now only the left bar and the label keep the colour, so the timeline stays on your editor's background.
