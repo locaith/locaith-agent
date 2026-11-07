@@ -175,15 +175,19 @@ describe('OpenAI Chat Completions', () => {
     ['Locaith (cổng dùng giao thức + suy luận kiểu DeepSeek)', () => deepseek('locaith'), 'locaith'],
     ['generic (Ollama / LM Studio / OpenRouter…)', generic, 'openrouter'],
   ] as const) {
-    it(`${name}: tool_calls ↔ tool khớp từng id, dòng ngân sách là tin user cuối duy nhất`, async () => {
+    it(`${name}: tool_calls ↔ tool khớp từng id; dòng ngân sách GỘP vào cuối tin tool cuối (không có tin user cuối làm đổi ranh giới lượt)`, async () => {
       server.reply({ sse: chatOk });
       await run(make(), req({ model: 'm', messages: withNote(history(pid)), tools: [searchTool] }));
       const msgs = lastBody().messages as Array<Record<string, any>>;
-      expect(msgs.map((m) => m.role)).toEqual(['system', 'user', 'assistant', 'tool', 'tool', 'user']);
+      // Tin cuối là `tool` (đang giữa vòng công cụ), KHÔNG phải `user`: DeepSeek coi tin user cuối là ranh giới lượt và bỏ suy luận các vòng trước.
+      expect(msgs.map((m) => m.role)).toEqual(['system', 'user', 'assistant', 'tool', 'tool']);
       const calls = msgs[2].tool_calls.map((c: any) => c.id);
       expect(calls).toEqual(['call_a', 'call_b']);
       expect(msgs.slice(3, 5).map((m) => m.tool_call_id)).toEqual(calls); // mỗi lệnh gọi có kết quả ngay sau
-      expect(msgs[5]).toEqual({ role: 'user', content: NOTE });
+      expect(msgs[3].content).toBe('kết quả A'); // kết quả KHÔNG phải cuối: nguyên vẹn
+      expect(msgs[4].content).toBe(`kết quả B
+
+${NOTE}`); // dòng ngân sách đứng sau kết quả cuối
       noLeak();
     });
   }
@@ -197,23 +201,24 @@ describe('OpenAI Chat Completions', () => {
     expect(alternates(msgs.map((m) => m.role))).toBe(true);
   });
 
-  it('DeepSeek/Locaith: suy luận (reasoning_content) của vòng công cụ phía trước vẫn được phát lại — dòng ngân sách không đổi ranh giới lượt', async () => {
+  it('DeepSeek/Locaith: suy luận (reasoning_content) của vòng công cụ phía trước được phát lại VÀ không có tin user nào đứng sau chuỗi tool (ranh giới lượt không đổi)', async () => {
     server.reply({ sse: chatOk });
     const h = history('locaith', [{ type: 'thinking', text: 'cần tra hai nguồn', provider: 'locaith' }]);
     await run(deepseek('locaith'), req({ messages: withNote(h), tools: [searchTool] }));
     const asst = (lastBody().messages as Array<Record<string, any>>)[2];
     expect(asst.reasoning_content).toBe('cần tra hai nguồn');
-    // và tin user cuối cùng vẫn là tin kết quả + ghi chú, không có tin user nào chen giữa các tin `tool`
+    // tin cuối là `tool` mang ghi chú; sau tin user mở đầu (chỉ số 1) không còn tin user nào
     const roles = (lastBody().messages as Array<{ role: string }>).map((m) => m.role);
-    expect(roles.lastIndexOf('user')).toBe(roles.length - 1);
-    expect(roles.indexOf('user', 2)).toBe(roles.length - 1);
+    expect(roles[roles.length - 1]).toBe('tool');
+    expect(roles.indexOf('user', 2)).toBe(-1);
+    expect((lastBody().messages as Array<Record<string, any>>).at(-1)!.content).toContain(NOTE);
   });
 });
 
 describe('OpenAI Responses', () => {
   const openai = () => new OpenAIResponsesProvider(runtimeConfig(server, { id: 'openai', label: 'ChatGPT', kind: 'openai-responses', flavor: 'openai' }));
 
-  it('function_call ↔ function_call_output khớp call_id; dòng ngân sách là item user cuối cùng', async () => {
+  it('function_call ↔ function_call_output khớp call_id; dòng ngân sách GỘP vào cuối function_call_output cuối (không thêm item user cuối)', async () => {
     server.reply({ sse: responsesOk });
     await run(openai(), req({ model: 'gpt-x', messages: withNote(history('openai')), tools: [searchTool] }));
     const input = lastBody().input as Array<Record<string, any>>;
@@ -221,10 +226,14 @@ describe('OpenAI Responses', () => {
     const outs = input.filter((i) => i.type === 'function_call_output');
     expect(calls.map((c) => c.call_id)).toEqual(['call_a', 'call_b']);
     expect(outs.map((o) => o.call_id)).toEqual(['call_a', 'call_b']);
-    // mọi function_call_output đứng SAU lệnh gọi của nó và trước dòng ngân sách
+    // mọi function_call_output đứng SAU lệnh gọi của nó; item cuối là function_call_output mang dòng ngân sách
     const last = input[input.length - 1];
-    expect(last).toEqual({ role: 'user', content: [{ type: 'input_text', text: NOTE }] });
-    expect(input.indexOf(outs[1])).toBeLessThan(input.length - 1);
+    expect(last.type).toBe('function_call_output');
+    expect(last.output).toBe(`kết quả B
+
+${NOTE}`);
+    expect(outs[0].output).toBe('kết quả A');
+    expect(input.some((i) => i.role === 'user' && JSON.stringify(i).includes(NOTE))).toBe(false);
     expect(input.indexOf(calls[1])).toBeLessThan(input.indexOf(outs[0]));
     noLeak();
   });
@@ -233,7 +242,7 @@ describe('OpenAI Responses', () => {
 describe('Gemini', () => {
   const gemini = () => new GeminiProvider(runtimeConfig(server, { id: 'gemini', label: 'Gemini', kind: 'gemini', flavor: 'gemini' }));
 
-  it('functionResponse khớp số lượng functionCall ngay sau lượt gọi; dòng ngân sách là phần chữ cuối cùng của CÙNG tin user (không có hai tin user liền nhau)', async () => {
+  it('functionResponse khớp số lượng functionCall ngay sau lượt gọi; dòng ngân sách GỘP vào functionResponse cuối (không thêm phần chữ làm đổi ranh giới lượt, không có hai tin user liền nhau)', async () => {
     server.reply({ sse: geminiOk });
     await run(gemini(), req({ model: 'gemini-3.8-flash', messages: withNote(history('gemini')), tools: [searchTool] }));
     const contents = lastBody().contents as Array<{ role: string; parts: Array<Record<string, any>> }>;
@@ -243,8 +252,11 @@ describe('Gemini', () => {
     const resps = contents[2].parts.filter((p) => p.functionResponse);
     expect(calls).toHaveLength(2);
     expect(resps).toHaveLength(2);
-    expect(contents[2].parts.map((p) => (p.functionResponse ? 'fr' : 'text'))).toEqual(['fr', 'fr', 'text']);
-    expect(contents[2].parts[2]).toEqual({ text: NOTE });
+    expect(contents[2].parts.map((p) => (p.functionResponse ? 'fr' : 'text'))).toEqual(['fr', 'fr']);
+    expect(contents[2].parts[0].functionResponse.response).toEqual({ result: 'kết quả A' });
+    expect(contents[2].parts[1].functionResponse.response).toEqual({ result: `kết quả B
+
+${NOTE}` });
     noLeak();
   });
 });

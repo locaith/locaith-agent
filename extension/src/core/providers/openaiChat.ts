@@ -178,17 +178,27 @@ export function toChatMessages(
   for (const m of normalizeHistory(history)) {
     if (m.role === 'user') {
       const toolImages: ContentBlock[] = [];
+      let lastTool = -1;
       for (const b of m.content) {
         if (b.type !== 'tool_result') continue;
         const text = isBlank(b.content) ? (b.isError ? '(lỗi, không có thông điệp)' : '(không có đầu ra)') : b.content;
         out.push({ role: 'tool', tool_call_id: safeToolId(b.toolUseId), content: text });
+        lastTool = out.length - 1;
         if (b.images) toolImages.push(...b.images);
       }
       const texts: string[] = [];
+      const volatile: string[] = [];
       const images: ContentBlock[] = [...toolImages];
       for (const b of m.content) {
-        if (b.type === 'text' && !isBlank(b.text)) texts.push(b.text);
+        if (b.type === 'text' && !isBlank(b.text)) (b.volatile ? volatile : texts).push(b.text);
         else if (b.type === 'image') images.push(b);
+      }
+      // Dòng ngân sách vòng lặp (`volatile`, đổi ở MỖI lần gọi): nếu tin có kết quả công cụ thì GỘP vào cuối tin `tool` cuối cùng — không tạo tin `user`
+      // cuối cùng, vì DeepSeek (và vài máy chủ khác) coi tin user cuối là RANH GIỚI LƯỢT và bỏ suy luận của các vòng công cụ phía trước.
+      // Tiền tố lịch sử không đổi (ghi chú chỉ nằm ở tin cuối của payload) nên bộ nhớ đệm tiền tố của máy chủ vẫn dùng được.
+      if (volatile.length > 0) {
+        if (lastTool >= 0) out[lastTool].content = `${String(out[lastTool].content)}\n\n${volatile.join('\n\n')}`;
+        else texts.push(...volatile);
       }
       if (images.length === 0) {
         if (texts.length > 0) out.push({ role: 'user', content: texts.join('\n\n') });

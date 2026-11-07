@@ -284,6 +284,7 @@ export function toGeminiContents(history: readonly ChatMessage[], opts: { provid
     if (m.role === 'user') {
       const parts: Part[] = [];
       const extra: Part[] = [];
+      let lastFr: Part | undefined;
       for (const b of m.content) {
         if (b.type === 'tool_result') {
           const text = isBlank(b.content) ? (b.isError ? '(lỗi, không có thông điệp)' : '(không có đầu ra)') : b.content;
@@ -293,13 +294,26 @@ export function toGeminiContents(history: readonly ChatMessage[], opts: { provid
           };
           if (apiIds.has(b.toolUseId)) fr.id = b.toolUseId;
           parts.push({ functionResponse: fr });
+          lastFr = fr;
           for (const img of b.images ?? []) extra.push({ inlineData: { mimeType: img.mediaType, data: img.data } });
         }
       }
       parts.push(...extra);
+      const volatile: string[] = [];
       for (const b of m.content) {
-        if (b.type === 'text' && !isBlank(b.text)) parts.push({ text: b.text });
-        else if (b.type === 'image') parts.push({ inlineData: { mimeType: b.mediaType, data: b.data } });
+        if (b.type === 'text' && !isBlank(b.text)) {
+          if (b.volatile) volatile.push(b.text);
+          else parts.push({ text: b.text });
+        } else if (b.type === 'image') parts.push({ inlineData: { mimeType: b.mediaType, data: b.data } });
+      }
+      // Dòng ngân sách vòng lặp (`volatile`): gộp vào cuối kết quả của lời gọi hàm cuối thay vì thêm một phần chữ trong tin user — Gemini 3 coi tin có
+      // chữ là ranh giới lượt (chữ ký suy luận của các vòng trước không còn được đòi/dùng).
+      if (volatile.length > 0) {
+        const note = volatile.join('\n\n');
+        const resp = lastFr && isObject(lastFr.response) ? (lastFr.response as Record<string, unknown>) : undefined;
+        const key = resp && typeof resp.result === 'string' ? 'result' : resp && typeof resp.error === 'string' ? 'error' : undefined;
+        if (resp && key) resp[key] = `${String(resp[key])}\n\n${note}`;
+        else parts.push({ text: note });
       }
       if (parts.length > 0) out.push({ role: 'user', parts });
     } else {

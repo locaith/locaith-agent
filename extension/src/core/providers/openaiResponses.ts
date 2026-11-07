@@ -258,6 +258,7 @@ export function toResponsesInput(
   const items: Item[] = [];
   for (const m of normalizeHistory(history)) {
     if (m.role === 'user') {
+      let lastOut = -1;
       for (const b of m.content) {
         if (b.type !== 'tool_result') continue;
         const text = isBlank(b.content) ? (b.isError ? '(lỗi, không có thông điệp)' : '(không có đầu ra)') : b.content;
@@ -266,11 +267,23 @@ export function toResponsesInput(
             ? [{ type: 'input_text', text }, ...b.images.map((img) => ({ type: 'input_image', image_url: dataUrl(img.mediaType, img.data) }))]
             : text;
         items.push({ type: 'function_call_output', call_id: safeCallId(b.toolUseId), output });
+        lastOut = items.length - 1;
       }
       const parts: Item[] = [];
+      const volatile: string[] = [];
       for (const b of m.content) {
-        if (b.type === 'text' && !isBlank(b.text)) parts.push({ type: 'input_text', text: b.text });
-        else if (b.type === 'image') parts.push({ type: 'input_image', image_url: dataUrl(b.mediaType, b.data) });
+        if (b.type === 'text' && !isBlank(b.text)) {
+          if (b.volatile) volatile.push(b.text);
+          else parts.push({ type: 'input_text', text: b.text });
+        } else if (b.type === 'image') parts.push({ type: 'input_image', image_url: dataUrl(b.mediaType, b.data) });
+      }
+      // Dòng ngân sách vòng lặp (`volatile`): gộp vào cuối kết quả công cụ cuối thay vì thêm một item user cuối (xem openaiChat.ts).
+      if (volatile.length > 0) {
+        const note = volatile.join('\n\n');
+        const target = lastOut >= 0 ? items[lastOut] : undefined;
+        if (target && typeof target.output === 'string') target.output = `${target.output}\n\n${note}`;
+        else if (target && Array.isArray(target.output)) (target.output as Item[]).push({ type: 'input_text', text: note });
+        else parts.push({ type: 'input_text', text: note });
       }
       if (parts.length > 0) items.push({ role: 'user', content: parts });
     } else {
