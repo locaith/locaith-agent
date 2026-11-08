@@ -28,6 +28,16 @@ def _warn(msg: str) -> None:
     sys.stderr.write("[locaith] %s\n" % msg)
 
 
+def _utf8_stderr() -> None:
+    """Ghi stderr bằng UTF-8 ngay cả khi bị chuyển hướng (ống, tệp, CI): trên Windows nó mặc định là bảng mã ANSI nên chữ có dấu bị thoát thành mã số; lõi Node luôn ghi UTF-8."""
+    try:
+        enc = (getattr(sys.stderr, "encoding", "") or "").lower().replace("-", "")
+        if enc != "utf8":
+            sys.stderr.reconfigure(encoding="utf-8", errors="replace")  # type: ignore[attr-defined]
+    except Exception:  # noqa: BLE001 - không phải luồng văn bản có reconfigure (kiểm thử, bị thay thế): bỏ qua
+        pass
+
+
 def _is_windows() -> bool:
     return os.name == "nt"
 
@@ -253,6 +263,7 @@ def _run_node(argv_child: List[str], env: dict) -> int:
 def main(argv: Optional[List[str]] = None) -> int:
     """Chạy CLI. Trả mã thoát của chính CLI (0 xong, 1 lỗi, 2 sai cú pháp, 127 thiếu Node, 130 bị ngắt)."""
     args = list(sys.argv[1:] if argv is None else argv)
+    _utf8_stderr()
 
     node, source, major = find_node()
     if not node:

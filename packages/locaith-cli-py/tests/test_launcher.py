@@ -116,6 +116,25 @@ class FindNodeTests(unittest.TestCase):
         self.assertEqual((node, source), ("/site/nodejs_wheel/bin/node", "bundled"))
 
 
+
+class Utf8StderrTests(unittest.TestCase):
+    """(0.4.4) stderr bị chuyển hướng trên Windows là bảng mã ANSI: «không phải một tệp» ra thành chuỗi thoát. Launcher phải ghi UTF-8 như lõi Node."""
+
+    def test_redirected_ansi_stderr_is_switched_to_utf8(self):
+        raw = io.BytesIO()
+        fake = io.TextIOWrapper(raw, encoding="cp1252", errors="backslashreplace", newline="\n", write_through=True)  # newline="\n": không đổi \n thành \r\n trên Windows
+        with mock.patch.object(sys, "stderr", new=fake):
+            cli._utf8_stderr()
+            cli._warn("không phải một tệp")
+        self.assertEqual(raw.getvalue().decode("utf-8"), "[locaith] không phải một tệp\n")
+
+    def test_stream_without_reconfigure_is_left_alone(self):
+        with mock.patch.object(sys, "stderr", new=io.StringIO()) as buf:
+            cli._utf8_stderr()  # StringIO không có reconfigure: không được ném lỗi
+            cli._warn("ok")
+        self.assertEqual(buf.getvalue(), "[locaith] ok\n")
+
+
 class MainTests(unittest.TestCase):
     def test_missing_node_exit_127(self):
         with mock.patch.object(cli, "find_node", return_value=(None, "none", None)), mock.patch.object(sys, "stderr", new=mock.MagicMock()):

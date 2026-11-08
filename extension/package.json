@@ -2,7 +2,7 @@
   "name": "locaith-agent",
   "displayName": "Locaith AI Agent",
   "description": "%ext.description%",
-  "version": "0.7.4",
+  "version": "0.7.5",
   "publisher": "LocaithAI",
   "license": "SEE LICENSE IN LICENSE.txt",
   "engines": {
