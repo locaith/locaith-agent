@@ -93,6 +93,8 @@ export interface EngineDeps {
   takeQueued?(): QueuedMessage[];
   /** Chỉ dẫn do các server MCP đang chạy cung cấp (đưa vào system prompt kèm nhãn nguồn). */
   mcpInstructions?(): { server: string; text: string }[];
+  /** (lane:cli-rt) Đoạn chỉ dẫn thêm do host cung cấp, nối vào cuối system prompt (CLI: --append-system-prompt). Gọi mỗi vòng; null/rỗng = không thêm. */
+  extraSystemPrompt?(): string | null;
   /** (lane:commands-agents) Phong cách đầu ra mặc định (cài đặt `agent.outputStyle`) khi phiên chưa tự chọn — xem core/commands/outputStyles.ts. */
   outputStyle?(): import('../commands/outputStyles').SessionOutputStyle | null;
   /** Gọi sau khi một lần nén ngữ cảnh thành công, kèm bản tóm tắt (ví dụ để lưu vào bộ nhớ dài hạn). Lỗi của hook không làm hỏng lượt chạy. */
@@ -369,6 +371,7 @@ export class AgentEngine {
           mcpInstructions: this.d.mcpInstructions?.(),
           providerId: session.provider,
           outputStyle: session.outputStyle ?? this.d.outputStyle?.() ?? null, // (lane:commands-agents)
+          extraSystemPrompt: this.d.extraSystemPrompt?.() ?? null, // (lane:cli-rt)
         });
         recordPromptStats(session, system, specs, memory); // (lane:sessions-ux) số đo cho /context — chỉ hiển thị
 
