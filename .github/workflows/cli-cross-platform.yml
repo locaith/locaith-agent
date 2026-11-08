@@ -1,0 +1,104 @@
+name: CLI cross-platform check
+
+# Checks the Locaith CLI on Linux, macOS and Windows: the CLI test suites (including a real pseudo-terminal), a smoke test of the bundle
+# as a user runs it, and the pip package (clean virtualenv, also with NO Node on the machine so the Node bundled in the wheel is used).
+# Run it by hand (Actions → "CLI cross-platform check" → Run workflow) or by pushing a branch named `ci/<anything>`.
+
+on:
+  workflow_dispatch:
+  push:
+    branches: ['ci/**']
+
+permissions:
+  contents: read
+
+concurrency:
+  group: cli-cross-platform-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  tests:
+    name: tests · ${{ matrix.os }} · node ${{ matrix.node }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 40
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        node: ['22']
+        include:
+          - os: ubuntu-latest
+            node: '20'
+    defaults:
+      run:
+        shell: bash
+        working-directory: extension
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: |
+            extension
+            packages
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
+          cache-dependency-path: extension/package-lock.json
+      - name: Install
+        run: npm ci --no-audit --no-fund
+      - name: Build the CLI bundle
+        run: npm run build:cli
+      - name: Smoke test (the bundle, as a user runs it)
+        run: node scripts/cli-smoke.mjs --bundle dist-cli/locaith.cjs
+      - name: CLI test suites (including a real pseudo-terminal)
+        env:
+          LOCAITH_E2E_PTY: '1'
+        run: npx vitest run test/cli test/cli.test.ts test/cli.e2e.test.ts test/cliAccount.test.ts test/cliBrowserLogin.test.ts test/typewriter.test.ts test/webview/typedVerb.test.ts
+
+  wheel:
+    name: pip package · ${{ matrix.os }} · python ${{ matrix.python }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 40
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        python: ['3.9', '3.13']
+        include:
+          - os: ubuntu-22.04
+            python: '3.8'
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: |
+            extension
+            packages
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: extension/package-lock.json
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+      - name: Build the wheel from source
+        run: |
+          (cd extension && npm ci --no-audit --no-fund)
+          python -m pip install --quiet build twine
+          node packages/locaith-cli-py/build.mjs --extension extension --python python
+      - name: Launcher unit tests
+        run: python -m unittest discover -s packages/locaith-cli-py/tests -v
+      - name: Install the wheel in a clean virtualenv
+        run: |
+          python -m venv "$RUNNER_TEMP/venv"
+          if [ "$RUNNER_OS" = "Windows" ]; then BIN="$RUNNER_TEMP/venv/Scripts"; EXE="$BIN/locaith.exe"; else BIN="$RUNNER_TEMP/venv/bin"; EXE="$BIN/locaith"; fi
+          "$BIN/python" -m pip install --quiet packages/locaith-cli-py/dist/*.whl
+          echo "EXE=$EXE" >> "$GITHUB_ENV"
+      - name: Smoke test (Node from the system)
+        run: node extension/scripts/cli-smoke.mjs --bin "$EXE"
+      - name: Smoke test (only the Node bundled in the wheel)
+        if: runner.os != 'Windows'
+        run: node extension/scripts/cli-smoke.mjs --bin "$EXE" --no-system-node
