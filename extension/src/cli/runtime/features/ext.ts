@@ -33,6 +33,11 @@ export interface FeatureContextExt extends FeatureContext {
   /** Dịch vụ agent con + kho công cụ của luồng chính — để kiểm chứng độc lập (verifier) chạy agent kiểm tra. Thiếu → dựng tạm từ `RunScope`. */
   agentServices?(): Omit<AgentServices, 'registry'>;
   mainRegistry?(): ToolRegistry;
+  /**
+   * «Luôn cho phép…» trên thẻ xin quyền (`PermissionRequest.suggest`): lõi giữ hàm này và gọi khi người dùng chọn lưu luật; trả về luật đã lưu
+   * (hoặc null nếu quá rộng/không hợp lệ). `scope`: 'user' (mọi dự án) hoặc 'local' (`.locaith/settings.local.json`).
+   */
+  registerAlwaysAllow?(fn: (rule: string, scope: 'user' | 'local') => string | null): void;
   /** Đặt chữ vào ô nhập của người dùng (sau /rewind hội thoại: trả lại tin đã quay lại). */
   setDraft?(text: string): void;
 }

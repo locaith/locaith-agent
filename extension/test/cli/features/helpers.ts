@@ -88,6 +88,7 @@ export class FakeFeatureContext implements FeatureContextExt {
   readonly beforeCompact: Array<(trigger: 'auto' | 'manual' | 'overflow', signal: AbortSignal) => Promise<void>> = [];
   readonly drafts: string[] = [];
   saved = 0;
+  alwaysAllow: ((rule: string, scope: 'user' | 'local') => string | null) | undefined;
   adopted: { session: SessionState; transcript: unknown[]; reason: string }[] = [];
 
   /** Trả lời `ask`: hàng đợi giá trị, hoặc hàm. Hết hàng đợi → null (huỷ). */
@@ -198,6 +199,9 @@ export class FakeFeatureContext implements FeatureContextExt {
   }
   onBeforeCompact(fn: (trigger: 'auto' | 'manual' | 'overflow', signal: AbortSignal) => Promise<void>): void {
     this.beforeCompact.push(fn);
+  }
+  registerAlwaysAllow(fn: (rule: string, scope: 'user' | 'local') => string | null): void {
+    this.alwaysAllow = fn;
   }
   async saveSession(): Promise<void> {
     this.saved++;
