@@ -416,3 +416,111 @@ describe('cô lập lỗi của mô-đun tính năng', () => {
     await h.cleanup();
   });
 });
+
+describe('móc bổ sung theo yêu cầu của lane cli-features', () => {
+  it('mô-đun đăng ký extension id "permission-rules" thì lõi KHÔNG lắp thêm bản của mình (cổng duyệt không bị vô hiệu)', async () => {
+    const begins: string[] = [];
+    const mod: FeatureModule = {
+      name: 'perm',
+      attach(ctx) {
+        ctx.addRunExtension({ id: 'permission-rules', begin: () => void begins.push('feature') }, { subAgents: true });
+      },
+    };
+    const h = await harness({ features: [mod], interactive: false, allowedTools: ['run_command(echo *)'], script: [toolTurn([{ name: 'run_command', input: { command: 'echo x' } }]), textTurn('ok')] });
+    await h.rt.submit('chạy');
+    await h.rt.idle();
+    expect(begins.length).toBeGreaterThan(0);
+    // Không còn luật của lõi ⇒ lệnh echo KHÔNG tự được cho phép (mô-đun giả này không làm gì) ⇒ bị từ chối ở chế độ không tương tác.
+    expect(JSON.stringify(h.provider.requests[1].messages)).toMatch(/TỪ CHỐI|DENIED/);
+    await h.cleanup();
+  });
+
+  it('cli.mcpConfig / cli.allowedTools / cli.disallowedTools có trong cài đặt hợp nhất; ctx.options có các cờ', async () => {
+    let opts: unknown;
+    let mcp: unknown;
+    const mod: FeatureModule = { name: 'o', attach: (ctx) => { opts = ctx.options; mcp = ctx.settings.get('cli.mcpConfig', []); } };
+    const h = await harness({ features: [mod], mcpConfig: ['a.json', 'b.json'], allowedTools: ['read_file'], disallowedTools: ['web_search'], addDirs: ['.'], script: [] });
+    expect(mcp).toEqual(['a.json', 'b.json']);
+    expect(h.rt.settings!.get('cli.allowedTools', [])).toEqual(['read_file']);
+    expect(h.rt.settings!.get('cli.disallowedTools', [])).toEqual(['web_search']);
+    expect(opts).toMatchObject({ mcpConfig: ['a.json', 'b.json'], allowedTools: ['read_file'] });
+    await h.cleanup();
+  });
+
+  it('registerAlwaysAllow: respondPermission kèm alwaysAllow gọi hàm lưu luật rồi cho phép', async () => {
+    const saved: Array<[string, string]> = [];
+    const mod: FeatureModule = {
+      name: 'aa',
+      attach: (ctx) => ctx.registerAlwaysAllow?.((rule, scope) => (saved.push([rule, scope]), rule === 'qua-rong(*)' ? null : rule)),
+    };
+    const h = await harness({
+      features: [mod],
+      script: [toolTurn([{ name: 'write_file', input: { path: 'z.txt', content: 'z' } }]), textTurn('xong')],
+    });
+    h.rt.on((e) => {
+      if (e.t === 'permission') queueMicrotask(() => h.rt.respondPermission(e.request.id, { decision: 'allow', alwaysAllow: { rule: 'write_file(z.txt)', scope: 'local' } }));
+    });
+    await h.rt.submit('ghi');
+    await h.rt.idle();
+    expect(saved).toEqual([['write_file(z.txt)', 'local']]);
+    expect(fs.readFileSync(path.join(h.cwd, 'z.txt'), 'utf8')).toBe('z');
+    expect(h.toasts().join(' ')).toContain('write_file(z.txt)');
+    await h.cleanup();
+  });
+
+  it('agentServices() / mainRegistry() có công cụ lõi và công cụ do tính năng đóng góp; slash có signal huỷ khi interrupt', async () => {
+    let svc: unknown;
+    let names: string[] = [];
+    let sig: AbortSignal | undefined;
+    const mod: FeatureModule = {
+      name: 'x',
+      attach(ctx) {
+        ctx.addToolContributor((add) => add({ name: 'cua_toi', description: 'd', inputSchema: { type: 'object', properties: {} }, risk: 'meta', concurrencySafe: true, execute: async () => ({ content: 'ok' }) }));
+        ctx.slash({
+          name: 'dai',
+          description: { vi: 'd', en: 'd' },
+          needsIdle: false,
+          async run(c) {
+            svc = ctx.agentServices?.();
+            names = ctx.mainRegistry?.().all().map((t) => t.name) ?? [];
+            sig = c.signal;
+            await new Promise<void>((r) => c.signal?.addEventListener('abort', () => r(), { once: true }));
+          },
+        });
+      },
+    };
+    const h = await harness({ features: [mod], script: [] });
+    void h.rt.submit('/dai');
+    await new Promise((r) => setTimeout(r, 50));
+    expect(svc).toBeTruthy();
+    expect(names).toEqual(expect.arrayContaining(['read_file', 'agent', 'cua_toi']));
+    expect(sig?.aborted).toBe(false);
+    h.rt.interrupt();
+    await h.rt.idle();
+    expect(sig?.aborted).toBe(true);
+    await h.cleanup();
+  });
+
+  it('~/.locaith/LOCAITH.md (chỉ dẫn cá nhân) được nạp sau chỉ dẫn dự án', async () => {
+    const home = tmpDir('lc-home-');
+    fs.mkdirSync(path.join(home, '.locaith'), { recursive: true });
+    fs.writeFileSync(path.join(home, '.locaith', 'LOCAITH.md'), 'LUẬT-CÁ-NHÂN-XYZ');
+    const h = await harness({ home, files: { 'LOCAITH.md': 'LUẬT-DỰ-ÁN-ABC', 'sample.txt': 'x' }, script: [() => textTurn('ok')] });
+    await h.rt.submit('chào');
+    await h.rt.idle();
+    const sys = h.provider.requests[0].system;
+    expect(sys).toContain('LUẬT-DỰ-ÁN-ABC');
+    expect(sys).toContain('LUẬT-CÁ-NHÂN-XYZ');
+    expect(sys.indexOf('LUẬT-DỰ-ÁN-ABC')).toBeLessThan(sys.indexOf('LUẬT-CÁ-NHÂN-XYZ'));
+    await h.cleanup();
+
+    const home2 = tmpDir('lc-home-');
+    fs.mkdirSync(path.join(home2, '.locaith'), { recursive: true });
+    fs.writeFileSync(path.join(home2, '.locaith', 'LOCAITH.md'), 'CHỈ-CÁ-NHÂN');
+    const h2 = await harness({ home: home2, script: [() => textTurn('ok')] });
+    await h2.rt.submit('chào');
+    await h2.rt.idle();
+    expect(h2.provider.requests[0].system).toContain('CHỈ-CÁ-NHÂN');
+    await h2.cleanup();
+  });
+});

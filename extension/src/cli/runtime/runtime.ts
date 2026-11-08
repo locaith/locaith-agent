@@ -165,6 +165,8 @@ export class Runtime implements CliRuntime {
   private readonly sessionChangeFns: Array<(s: SessionState) => void> = [];
   private readonly beforeSendFns: Array<NonNullable<Parameters<NonNullable<FeatureContext['beforeSend']>>[0]>> = [];
   private readonly beforeCompactFns: Array<NonNullable<Parameters<NonNullable<FeatureContext['onBeforeCompact']>>[0]>> = [];
+  private alwaysAllowFn: ((rule: string, scope: 'user' | 'local') => string | null) | null = null;
+  private readonly slashAborts = new Set<AbortController>();
   private readonly compactedFns: Array<NonNullable<Parameters<NonNullable<FeatureContext['onCompacted']>>[0]>> = [];
   readonly featureErrors: Array<{ name: string; error: string }> = [];
   private startupNotices: string[] = [];
@@ -177,8 +179,15 @@ export class Runtime implements CliRuntime {
     this.logger = new RuntimeLogger(path.join(this.home, '.locaith', 'logs', 'cli.log'), !!opts.verbose || this.env.LOCAITH_DEBUG === '1');
     this.files = new FileIndexer(this.cwd);
     const cli: Record<string, unknown> = {};
-    if (opts.allowedTools?.length) cli['permissions.allow'] = opts.allowedTools;
-    if (opts.disallowedTools?.length) cli['permissions.deny'] = opts.disallowedTools;
+    if (opts.allowedTools?.length) {
+      cli['permissions.allow'] = opts.allowedTools;
+      cli['cli.allowedTools'] = opts.allowedTools;
+    }
+    if (opts.disallowedTools?.length) {
+      cli['permissions.deny'] = opts.disallowedTools;
+      cli['cli.disallowedTools'] = opts.disallowedTools;
+    }
+    if (opts.mcpConfig?.length) cli['cli.mcpConfig'] = opts.mcpConfig;
     this.trusted = typeof opts.trusted === 'boolean' ? opts.trusted : isDirTrusted(this.home, this.cwd);
     this.store = new SettingsStore({ home: this.home, cwd: this.cwd, env: this.env, trusted: () => this.trusted, cli });
   }
@@ -942,13 +951,14 @@ export class Runtime implements CliRuntime {
   extensionsFor(forSub: boolean): RunExtension[] {
     const feats = this.runExts.filter((r) => !forSub || r.subAgents);
     const out: RunExtension[] = forSub ? [] : coreRunExtensions();
-    out.push(this.permissionRulesExt());
+    // Luật quyền do mô-đun tính năng đăng ký (id `permission-rules`, kèm cổng duyệt allow của dự án). Lõi chỉ tự lắp bản dự phòng khi không có mô-đun nào làm việc đó.
+    if (!this.runExts.some((r) => r.ext.id === 'permission-rules')) out.push(this.permissionRulesExt());
     out.push(...feats.filter((r) => !r.last).map((r) => r.ext));
     out.push(...feats.filter((r) => r.last).map((r) => r.ext));
     return out;
   }
 
-  private buildRegistry() {
+  buildRegistry() {
     const registry = createToolRegistry({
       skills: this.skills,
       host: this.host,
@@ -969,6 +979,22 @@ export class Runtime implements CliRuntime {
       }
     }
     return registry;
+  }
+
+  /** Chỉ dẫn dự án (LOCAITH.md/AGENTS.md/CLAUDE.md) + chỉ dẫn cá nhân `~/.locaith/LOCAITH.md` (đứng sau). */
+  private async loadInstructions(names: string[]): Promise<{ file: string; text: string } | null> {
+    const project = await loadProjectInstructions(this.host, names);
+    let personal = '';
+    try {
+      personal = (await fs.promises.readFile(path.join(this.home, '.locaith', 'LOCAITH.md'), 'utf8')).trim();
+    } catch {
+      /* không có chỉ dẫn cá nhân */
+    }
+    if (!personal) return project;
+    if (personal.length > 20_000) personal = personal.slice(0, 20_000) + String.fromCharCode(10) + '[… đã cắt bớt]';
+    if (!project) return { file: '~/.locaith/LOCAITH.md', text: personal };
+    const nl = String.fromCharCode(10);
+    return { file: `${project.file} + ~/.locaith/LOCAITH.md`, text: `${project.text.trim()}${nl}${nl}<!-- ~/.locaith/LOCAITH.md (chỉ dẫn cá nhân của người dùng) -->${nl}${personal}` };
   }
 
   private async loadMemory(): Promise<MemorySnapshot | null> {
@@ -1036,7 +1062,7 @@ export class Runtime implements CliRuntime {
         this.output(this.tr('accountInvalid'), 'error');
         this.scheduleStatus();
       },
-      loadInstructions: (names) => loadProjectInstructions(this.host, names),
+      loadInstructions: (names) => this.loadInstructions(names),
       loadMemory: () => this.loadMemory(),
       extensions: this.extensionsFor(false),
       thinkTags: provider.kind === 'openai-chat' && provider.flavor === 'generic',
@@ -1120,9 +1146,19 @@ export class Runtime implements CliRuntime {
     });
   }
 
-  respondPermission(id: string, d: PermissionDecision): void {
+  respondPermission(id: string, d: PermissionDecision & { alwaysAllow?: { rule: string; scope: 'user' | 'local' } }): void {
     const w = this.permWaiters.get(id);
     if (!w) return;
+    if (d?.alwaysAllow && this.alwaysAllowFn && d.decision !== 'deny') {
+      const { rule, scope } = d.alwaysAllow;
+      try {
+        const saved = this.alwaysAllowFn(String(rule), scope === 'local' ? 'local' : 'user');
+        if (saved) this.toast('info', this.tr('alwaysAllowSaved', { rule: saved }));
+        else this.toast('warn', this.tr('alwaysAllowRejected', { rule: String(rule) }));
+      } catch (err) {
+        this.logger.log('warn', `Lưu luật «Luôn cho phép» lỗi: ${err instanceof Error ? err.message : String(err)}`);
+      }
+    }
     // Chỉ nhận đúng ba quyết định đã định nghĩa; còn lại coi là từ chối.
     if (!d || (d.decision !== 'allow' && d.decision !== 'allow_session' && d.decision !== 'deny')) return w({ decision: 'deny' });
     w({ decision: d.decision, ...(typeof d.feedback === 'string' && d.feedback ? { feedback: d.feedback.slice(0, 2000) } : {}) });
@@ -1146,6 +1182,7 @@ export class Runtime implements CliRuntime {
 
   interrupt(): void {
     if (this.shellAbort) this.shellAbort.abort();
+    for (const c of [...this.slashAborts]) c.abort();
     this.abort?.abort();
     for (const w of [...this.permWaiters.values()]) w({ decision: 'deny', feedback: engineT(this.lang, 'aborted') });
   }
@@ -1202,11 +1239,12 @@ export class Runtime implements CliRuntime {
     return this.slashReg.list(this.lang);
   }
 
-  private makeSlashContext(args: string, detach: () => void): FullSlashContext {
+  private makeSlashContext(args: string, detach: () => void, signal: AbortSignal): FullSlashContext {
     const rt = this;
     return {
       args,
       lang: this.lang,
+      signal,
       output: (text, kind) => this.output(text, kind ?? 'markdown'),
       toast: (level, text) => this.toast(level, text),
       ask: (req) => {
@@ -1237,12 +1275,16 @@ export class Runtime implements CliRuntime {
     }
     let detach!: () => void;
     const detached = new Promise<void>((r) => (detach = r));
+    const slashCtl = new AbortController();
+    this.slashAborts.add(slashCtl);
     const work = (async () => {
       try {
-        await def.run(this.makeSlashContext(args, detach) as never);
+        await def.run(this.makeSlashContext(args, detach, slashCtl.signal) as never);
       } catch (err) {
         this.logger.log('warn', `Lệnh /${name} lỗi: ${err instanceof Error ? (err.stack ?? err.message) : String(err)}`);
         this.output(this.tr('commandFailed', { name, detail: err instanceof Error ? err.message : String(err) }), 'error');
+      } finally {
+        this.slashAborts.delete(slashCtl);
       }
     })();
     this.track(work);
@@ -1475,6 +1517,11 @@ export class Runtime implements CliRuntime {
       },
       onFileWrite: (fn) => this.host.onFileWrite(fn),
       onPermissionRequest: (fn) => this.host.onPermissionRequest(fn),
+      agentServices: () => rt.agentServices,
+      mainRegistry: () => rt.buildRegistry(),
+      registerAlwaysAllow: (fn) => {
+        rt.alwaysAllowFn = fn;
+      },
       transcript: () => rt.transcript,
       saveSession: () => this.saveNow(),
       replaceSession: async (next, o) => {

@@ -18,6 +18,8 @@ import type { PermissionMode, PermissionRequest, SessionSummary, SlashCommandInf
 import type { LLMProvider } from '../../core/types';
 import type { SkillRegistry } from '../../core/skills/registry';
 import type { AgentRegistry } from '../../core/agents/definitions';
+import type { AgentServices } from '../../core/agents/runner';
+import type { ToolRegistry } from '../../core/engine/toolRegistry';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Trạng thái hiển thị ở dải dưới ô nhập
@@ -155,7 +157,8 @@ export interface CliRuntime {
   /** Chờ tới khi không còn lượt chạy nào (dùng cho chế độ in một lần `-p` và kiểm thử). */
   idle(): Promise<void>;
 
-  respondPermission(id: string, d: PermissionDecision): void;
+  /** `alwaysAllow` (tuỳ chọn): người dùng chọn «Luôn cho phép…» — lõi gọi hàm đăng ký bằng `FeatureContext.registerAlwaysAllow` để lưu luật rồi cho phép lần này. */
+  respondPermission(id: string, d: PermissionDecision & { alwaysAllow?: { rule: string; scope: 'user' | 'local' } }): void;
   answer(id: string, value: AskAnswer): void;
 
   setMode(mode: PermissionMode): void;
@@ -254,6 +257,8 @@ export interface SlashRunContext {
   /** Chạy MỘT lượt agent như thể người dùng gõ nội dung này (không lưu dòng lệnh). */
   runPrompt(text: string, opts?: { model?: string }): Promise<void>;
   readonly busy: boolean;
+  /** (cli-rt) Bị huỷ khi người dùng dừng (Esc/Ctrl+C) hoặc đóng runtime — lệnh chạy lâu nên theo dõi. */
+  readonly signal?: AbortSignal;
 }
 
 export interface FeatureSlashDef {
@@ -319,6 +324,12 @@ export interface FeatureContext {
   onFileWrite?(fn: (abs: string, before: string | null | { skipped: 'binary' | 'unreadable' }, after: string) => void): void;
   /** Khi một yêu cầu xin quyền được trình ra (hook Notification). */
   onPermissionRequest?(fn: (req: PermissionRequest) => void): void;
+  /** Dịch vụ agent con của lõi (nhà cung cấp, kho model, hạn mức đồng thời) — cho kiểm chứng độc lập. */
+  agentServices?(): Omit<AgentServices, 'registry'>;
+  /** Kho công cụ của luồng chính (dựng mới theo trạng thái hiện tại, gồm công cụ do tính năng đóng góp). */
+  mainRegistry?(): ToolRegistry;
+  /** «Luôn cho phép…» trên thẻ xin quyền: lõi giữ hàm này, gọi khi người dùng chọn lưu luật; trả luật đã lưu hoặc null nếu bị từ chối. */
+  registerAlwaysAllow?(fn: (rule: string, scope: 'user' | 'local') => string | null): void;
   /** Transcript hiện tại (chỉ đọc). */
   transcript?(): readonly TItem[];
   /** Ghi phiên hiện tại ngay (trước /fork, /rewind…). */
