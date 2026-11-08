@@ -1,0 +1,39 @@
+/** Chuỗi của tầng cửa vào CLI (cờ, in một lần, lệnh con). Đăng ký khi nạp tệp này. */
+import { registerStrings } from './i18n';
+
+registerStrings('cli', {
+  vi: {
+    'print.noPrompt': 'Thiếu nội dung: locaith -p "<việc cần làm>" (hoặc đưa vào stdin: cat tệp | locaith -p "…")',
+    'print.noAnswer': '(không có câu trả lời)',
+    'print.footer': '{turns} vòng · {tokens} token · {secs}s',
+    'print.denied': '! {n} thao tác bị từ chối vì chưa được cấp quyền. Chạy lại với --permission-mode acceptEdits hoặc --allowedTools "…" (xem: locaith help permissions).',
+    'tty.required': 'Phiên tương tác cần một terminal. Dùng chế độ in một lần: locaith -p "<việc cần làm>"',
+    'login.needed': 'Chưa đăng nhập. Chạy `locaith login` (hoặc đặt LOCAITH_API_KEY).',
+    'logout.done': '✔ Đã xoá khoá đã lưu ({file}). Khoá trong biến môi trường (nếu có) vẫn còn hiệu lực.',
+    'logout.none': 'Không có khoá nào được lưu trên máy này.',
+    'update.checking': 'Đang kiểm tra bản mới…',
+    'update.latest': '✔ Đang dùng bản mới nhất ({v}).',
+    'update.available': '↑ Có bản mới {latest} (đang {current}).',
+    'update.offline': 'Không kiểm được bản mới (không có mạng?).',
+    'sessions.none': 'Chưa có phiên nào được lưu.',
+    'sessions.header': 'Phiên đã lưu (mới nhất trước):',
+    'config.title': 'Cấu hình của Locaith CLI',
+  },
+  en: {
+    'print.noPrompt': 'Missing task: locaith -p "<what to do>" (or pipe it in: cat file | locaith -p "…")',
+    'print.noAnswer': '(no answer)',
+    'print.footer': '{turns} turns · {tokens} tokens · {secs}s',
+    'print.denied': '! {n} action(s) were denied because they were not allowed. Re-run with --permission-mode acceptEdits or --allowedTools "…" (see: locaith help permissions).',
+    'tty.required': 'The interactive session needs a terminal. Use print mode: locaith -p "<what to do>"',
+    'login.needed': 'Not signed in. Run `locaith login` (or set LOCAITH_API_KEY).',
+    'logout.done': '✔ Removed the saved key ({file}). A key in the environment (if any) is still active.',
+    'logout.none': 'No key is saved on this machine.',
+    'update.checking': 'Checking for updates…',
+    'update.latest': '✔ You are on the latest version ({v}).',
+    'update.available': '↑ New version {latest} available (you have {current}).',
+    'update.offline': 'Could not check for updates (offline?).',
+    'sessions.none': 'No saved sessions yet.',
+    'sessions.header': 'Saved sessions (newest first):',
+    'config.title': 'Locaith CLI configuration',
+  },
+});
