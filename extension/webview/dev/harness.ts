@@ -38,6 +38,9 @@ const widthParam = params.get('w');
 const langParam = params.get('lang');
 const fontParam = params.get('font');
 const promoKind = params.get('promo') ?? '3d';
+// (0.7.2) khoá cảnh nhân vật chờ để chụp ảnh: actor=dog:char | bot:in | drone:out | rocket:char …
+const actorParam = params.get('actor');
+if (actorParam) (window as unknown as { __LO_ACTOR__?: string }).__LO_ACTOR__ = actorParam;
 
 declare global {
   interface Window {

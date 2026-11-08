@@ -90,6 +90,7 @@ export function sanitizeConfig(raw: unknown): Stored {
       lineHeight: clamp(ui.lineHeight, 1.3, 2.2, dU.lineHeight),
       codeFont: oneOf(ui.codeFont, CODE_FONTS, dU.codeFont),
       showThinking: bool(ui.showThinking, dU.showThinking),
+      workingCharacters: bool(ui.workingCharacters, dU.workingCharacters),
     },
     browser: {
       defaultMode: oneOf(br.defaultMode, PERMISSION_MODES, dB.defaultMode),

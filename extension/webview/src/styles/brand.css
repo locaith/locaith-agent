@@ -140,3 +140,183 @@
 .turn-usage {
   font-variant-numeric: tabular-nums;
 }
+
+/* ─────────────────────────────────────────────────────────────────────────────
+   (0.7.2) Nhân vật chờ ở dòng đang chạy (LoActor): logo Lo → chó robot / robot người / drone / tên lửa.
+   Ô cố định 20×20 px; đệm âm trên/dưới để KHÔNG làm đổi chiều cao dòng (ô chỉ ăn 12 px chiều cao bố cục).
+   Hoạt hoạ thuần CSS: 6 khung bật/tắt trong 0,9 s (steps) + chuyển cảnh clip-path 0,5 s với vệt sáng quét. Chỉ MỘT bộ lọc glow trên ô.
+   ───────────────────────────────────────────────────────────────────────────── */
+.lo-actor {
+  --lo-actor-size: 20px;
+  position: relative;
+  display: block;
+  flex: none;
+  width: var(--lo-actor-size);
+  height: var(--lo-actor-size);
+  margin: -4px 0;
+  filter: drop-shadow(0 0 3px color-mix(in srgb, var(--lo-cyan) 40%, transparent));
+}
+.lo-actor-logo,
+.lo-actor-char,
+.lo-actor-sheen {
+  position: absolute;
+  inset: 0;
+}
+.lo-actor-logo {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+/* bộ lọc glow đã nằm ở ô ngoài — bản logo bên trong không tự thêm nữa (tránh hai lớp lọc chồng nhau) */
+.lo-actor .lo-spin {
+  filter: none;
+}
+.lo-actor-char {
+  display: block;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+/* 6 khung / 0,9 s: mỗi khung hiện đúng 1/6 vòng, khung thứ n bắt đầu sau (n-1)×0,15 s */
+.lo-actor .lo-fr {
+  visibility: hidden;
+  animation: lo-frame 0.9s steps(1, end) infinite;
+}
+.lo-actor .lo-fr:nth-child(2) {
+  animation-delay: 0.15s;
+}
+.lo-actor .lo-fr:nth-child(3) {
+  animation-delay: 0.3s;
+}
+.lo-actor .lo-fr:nth-child(4) {
+  animation-delay: 0.45s;
+}
+.lo-actor .lo-fr:nth-child(5) {
+  animation-delay: 0.6s;
+}
+.lo-actor .lo-fr:nth-child(6) {
+  animation-delay: 0.75s;
+}
+@keyframes lo-frame {
+  0%,
+  16.6% {
+    visibility: visible;
+  }
+  16.7%,
+  100% {
+    visibility: hidden;
+  }
+}
+
+/* chuyển cảnh 0,5 s: vệt sáng quét trái → phải (vào); quét ngược phải → trái (ra). Bên TRÁI vệt là nhân vật, bên PHẢI là logo. */
+.lo-actor.is-in .lo-actor-char {
+  animation: lo-wipe-char-in 0.5s linear both;
+}
+.lo-actor.is-in .lo-actor-logo {
+  animation: lo-wipe-logo-in 0.5s linear both;
+}
+.lo-actor.is-in .lo-actor-sheen {
+  animation: lo-wipe-sheen-in 0.5s linear both;
+}
+.lo-actor.is-out .lo-actor-char {
+  animation: lo-wipe-char-in 0.5s linear reverse both;
+}
+.lo-actor.is-out .lo-actor-logo {
+  animation: lo-wipe-logo-in 0.5s linear reverse both;
+}
+.lo-actor.is-out .lo-actor-sheen {
+  animation: lo-wipe-sheen-in 0.5s linear reverse both;
+}
+.lo-actor-sheen {
+  left: 0;
+  right: auto;
+  width: 6px;
+  top: -2px;
+  bottom: -2px;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.95), transparent);
+  pointer-events: none;
+  transform: translateX(-4.2px);
+}
+@keyframes lo-wipe-char-in {
+  from {
+    clip-path: inset(-12% 106% -12% -12%);
+  }
+  to {
+    clip-path: inset(-12% -6% -12% -12%);
+  }
+}
+@keyframes lo-wipe-logo-in {
+  from {
+    clip-path: inset(-12% -12% -12% -6%);
+  }
+  to {
+    clip-path: inset(-12% -12% -12% 106%);
+  }
+}
+@keyframes lo-wipe-sheen-in {
+  from {
+    transform: translateX(-4.2px);
+  }
+  to {
+    transform: translateX(18.2px);
+  }
+}
+
+/* mắt nằm trên NỀN (lỗ giữa vòng «o»): nền sáng cần mắt tối để thấy; đèn ngực nằm trên thân gradient nên giữ màu sáng */
+body.vscode-light .lo-actor .lo-eye,
+body.vscode-high-contrast-light .lo-actor .lo-eye {
+  fill: #232a66;
+}
+body.vscode-light .lo-actor .lo-eye-ring,
+body.vscode-high-contrast-light .lo-actor .lo-eye-ring {
+  stroke: #232a66;
+}
+/* nền sáng: bớt quầng sáng */
+body.vscode-light .lo-actor,
+body.vscode-high-contrast-light .lo-actor {
+  filter: drop-shadow(0 0 1.5px color-mix(in srgb, var(--lo-cyan) 28%, transparent));
+}
+body.vscode-light .lo-actor-sheen,
+body.vscode-high-contrast-light .lo-actor-sheen {
+  background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--lo-cyan) 70%, #fff), transparent);
+}
+/* tương phản cao (VS Code hc / Windows forced-colors): bỏ quầng sáng; dùng màu hệ thống nhưng vẫn nhận ra hình */
+body.vscode-high-contrast .lo-actor,
+body.vscode-high-contrast-light .lo-actor {
+  filter: none;
+}
+@media (forced-colors: active) {
+  .lo-actor {
+    filter: none;
+    forced-color-adjust: none;
+  }
+  .lo-actor .lo-st,
+  .lo-actor .lo-trace {
+    stroke: Highlight;
+  }
+  .lo-actor .lo-base,
+  .lo-actor .lo-fx,
+  .lo-actor .lo-lamp,
+  .lo-actor .lo-beamp {
+    fill: Highlight;
+  }
+  .lo-actor .lo-eye {
+    fill: CanvasText;
+  }
+  .lo-actor .lo-eye-ring {
+    stroke: CanvasText;
+  }
+  .lo-actor-sheen {
+    background: linear-gradient(90deg, transparent, Highlight, transparent);
+  }
+}
+/* giảm chuyển động: chỉ còn logo (JS cũng không dựng nhân vật) */
+@media (prefers-reduced-motion: reduce) {
+  .lo-actor-char,
+  .lo-actor-sheen {
+    display: none;
+  }
+  .lo-actor .lo-fr {
+    animation: none;
+  }
+}

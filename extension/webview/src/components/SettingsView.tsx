@@ -391,6 +391,11 @@ export function SettingsView({ view, onSetting }: { view: ViewState; onSetting: 
           <Switch checked={s.showThinking} label={t('set.showThinking')} onChange={(v) => onSetting('showThinking', v)} />
         </div>
 
+        <div class="field field-inline">
+          <span class="field-label">{t('set.workingCharacters')}</span>
+          <Switch checked={s.workingCharacters !== false} label={t('set.workingCharacters')} onChange={(v) => onSetting('workingCharacters', v)} />
+        </div>
+
         <div class="preview">
           <div class="preview-title">{t('set.preview')}</div>
           <p class="preview-text">{t('set.previewText')}</p>

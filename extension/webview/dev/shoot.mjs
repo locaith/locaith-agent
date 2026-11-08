@@ -114,6 +114,76 @@ async function assertCcWorking(p) {
   if (!r.label || /…/.test(r.label) || !r.logo || Number(r.weight) < 600) throw new Error(`nhãn đang chạy sai: ${JSON.stringify(r)}`);
 }
 
+/**
+ * (0.7.2) Nhân vật chờ ở dòng đang chạy. Kiểm DOM: ô nhân vật đúng 20×20 px, chiều cao dòng chờ KHÔNG phụ thuộc ô (bằng đúng dòng chữ),
+ * không tràn ngang. `freezeFrame` (0–5) đóng băng hoạt hoạ ở khung đó (tham số truy vấn `actor=` khoá cảnh; xem LoActor.tsx).
+ */
+function assertActor(freezeFrame) {
+  return async (p) => {
+    const r = await p.evaluate(() => {
+      const w = document.querySelector('.cc-working');
+      const a = w && w.querySelector('.lo-actor');
+      const tl = document.querySelector('.timeline');
+      const box = a ? a.getBoundingClientRect() : null;
+      return {
+        has: !!a,
+        wh: w ? w.getBoundingClientRect().height : 0,
+        lh: w ? w.querySelector('.cc-working-label').getBoundingClientRect().height + parseFloat(getComputedStyle(w).paddingTop) + parseFloat(getComputedStyle(w).paddingBottom) : 0,
+        w: box ? Math.round(box.width * 10) / 10 : 0,
+        h: box ? Math.round(box.height * 10) / 10 : 0,
+        overflowX: tl ? tl.scrollWidth - tl.clientWidth : -1,
+        char: !!(a && a.querySelector('.lo-actor-char')),
+        frames: a ? a.querySelectorAll('.lo-fr').length : 0,
+      };
+    });
+    if (!r.has) throw new Error('thiếu .lo-actor ở dòng chờ');
+    if (r.w !== 20 || r.h !== 20) throw new Error(`ô nhân vật phải 20×20: ${r.w}×${r.h}`);
+    if (Math.abs(r.wh - r.lh) > 0.6) throw new Error(`chiều cao dòng chờ (${r.wh}) khác dòng chữ + đệm (${r.lh}) — ô nhân vật làm đổi chiều cao`);
+    if (r.overflowX > 1) throw new Error(`tràn ngang ${r.overflowX}px`);
+    if (r.char && r.frames !== 6) throw new Error(`nhân vật phải có 6 khung: ${r.frames}`);
+    if (freezeFrame !== undefined) {
+      await p.evaluate((k) => {
+        for (const an of document.getAnimations()) {
+          an.pause();
+          an.currentTime = k * 150 + 75;
+        }
+      }, freezeFrame);
+    }
+  };
+}
+
+/**
+ * (0.7.2) Tờ liên hoàn phóng 4,5×: `mode` = 'frames' → 6 khung của vòng lặp; 'wipe' → chuyển cảnh vào ở 0/20/40/60/80/100%; 'wipe-out' → ra.
+ * Mỗi ô là một bản sao của ô thật (cùng CSS) bị đóng băng ở thời điểm cần xem.
+ */
+function actorSheet(mode) {
+  return async (p) => {
+    await assertActor()(p);
+    await p.evaluate((mode) => {
+      const src = document.querySelector('.cc-working .lo-actor');
+      const row = document.createElement('div');
+      row.id = 'actor-sheet';
+      row.style.cssText = 'position:fixed;left:0;right:0;top:80px;z-index:9999;display:flex;gap:4px;flex-wrap:wrap;padding:14px 8px;background:var(--vscode-editor-background);';
+      document.querySelector('.cc-working').after(row);
+      const times = mode === 'frames' ? [0, 1, 2, 3, 4, 5].map((k) => k * 150 + 75) : [0, 0.2, 0.4, 0.6, 0.8, 1].map((q) => q * 500);
+      for (const t of times) {
+        const cell = document.createElement('div');
+        cell.style.cssText = 'width:60px;height:60px;display:flex;align-items:center;justify-content:center;border-radius:10px;background:color-mix(in srgb, var(--fg) 7%, transparent);';
+        const c = src.cloneNode(true);
+        c.style.transform = 'scale(2.7)';
+        cell.appendChild(c);
+        row.appendChild(cell);
+        for (const an of c.getAnimations({ subtree: true })) {
+          an.pause();
+          an.currentTime = t;
+        }
+      }
+      src.style.visibility = 'hidden';
+    }, mode);
+    await wait(150);
+  };
+}
+
 /** Mở nhóm thứ i (0 = «22», 2 = «36 · 2 lỗi» có Write/Edit/Bash) và kiểm cấu trúc bên trong: thanh dọc, IN/OUT, xem trước tệp, nút Thu gọn ở cuối. */
 function expandCcGroup(i) {
   return async (p) => {
@@ -347,6 +417,35 @@ const SHOTS = [
   { name: 'cc-1-collapsed-en-dark-420', q: { scenario: 'cc-timeline', theme: 'dark', expand: '1', lang: 'en' }, w: 420, h: 900, full: true, act: assertCcCollapsed },
   { name: 'cc-1-collapsed-dark-300', q: { scenario: 'cc-timeline', theme: 'dark', expand: '1' }, w: 300, h: 900, full: true, act: assertCcCollapsed },
   { name: 'cc-1-collapsed-browser-dark-420', q: { scenario: 'cc-timeline', theme: 'dark', expand: '1', platform: 'browser' }, w: 420, h: 900, full: true, act: assertCcCollapsed },
+  // ── (0.7.2) nhân vật chờ ──
+  { name: 'actor-dog-frames-dark-420', q: { scenario: 'cc-working', theme: 'dark', actor: 'dog:char' }, w: 420, h: 360, act: actorSheet('frames') },
+  { name: 'actor-dog-frames-light-420', q: { scenario: 'cc-working', theme: 'light', actor: 'dog:char' }, w: 420, h: 360, act: actorSheet('frames') },
+  { name: 'actor-dog-frames-hc-420', q: { scenario: 'cc-working', theme: 'hc', actor: 'dog:char' }, w: 420, h: 360, act: actorSheet('frames') },
+  { name: 'actor-dog-real-dark-300', q: { scenario: 'cc-working', theme: 'dark', actor: 'dog:char' }, w: 300, h: 420, act: assertActor(1) },
+  { name: 'actor-dog-real-light-420', q: { scenario: 'cc-working', theme: 'light', actor: 'dog:char' }, w: 420, h: 420, act: assertActor(2) },
+  { name: 'actor-dog-real-hc-800', q: { scenario: 'cc-working', theme: 'hc', actor: 'dog:char' }, w: 800, h: 420, act: assertActor(4) },
+  { name: 'actor-bot-frames-dark-420', q: { scenario: 'cc-working', theme: 'dark', actor: 'bot:char' }, w: 420, h: 360, act: actorSheet('frames') },
+  { name: 'actor-bot-frames-light-420', q: { scenario: 'cc-working', theme: 'light', actor: 'bot:char' }, w: 420, h: 360, act: actorSheet('frames') },
+  { name: 'actor-bot-frames-hc-420', q: { scenario: 'cc-working', theme: 'hc', actor: 'bot:char' }, w: 420, h: 360, act: actorSheet('frames') },
+  { name: 'actor-bot-real-dark-300', q: { scenario: 'cc-working', theme: 'dark', actor: 'bot:char' }, w: 300, h: 420, act: assertActor(1) },
+  { name: 'actor-bot-real-light-420', q: { scenario: 'cc-working', theme: 'light', actor: 'bot:char' }, w: 420, h: 420, act: assertActor(2) },
+  { name: 'actor-bot-real-hc-800', q: { scenario: 'cc-working', theme: 'hc', actor: 'bot:char' }, w: 800, h: 420, act: assertActor(4) },
+  { name: 'actor-drone-frames-dark-420', q: { scenario: 'cc-working', theme: 'dark', actor: 'drone:char' }, w: 420, h: 360, act: actorSheet('frames') },
+  { name: 'actor-drone-frames-light-420', q: { scenario: 'cc-working', theme: 'light', actor: 'drone:char' }, w: 420, h: 360, act: actorSheet('frames') },
+  { name: 'actor-drone-frames-hc-420', q: { scenario: 'cc-working', theme: 'hc', actor: 'drone:char' }, w: 420, h: 360, act: actorSheet('frames') },
+  { name: 'actor-drone-real-dark-300', q: { scenario: 'cc-working', theme: 'dark', actor: 'drone:char' }, w: 300, h: 420, act: assertActor(1) },
+  { name: 'actor-drone-real-light-420', q: { scenario: 'cc-working', theme: 'light', actor: 'drone:char' }, w: 420, h: 420, act: assertActor(2) },
+  { name: 'actor-drone-real-hc-800', q: { scenario: 'cc-working', theme: 'hc', actor: 'drone:char' }, w: 800, h: 420, act: assertActor(4) },
+  { name: 'actor-rocket-frames-dark-420', q: { scenario: 'cc-working', theme: 'dark', actor: 'rocket:char' }, w: 420, h: 360, act: actorSheet('frames') },
+  { name: 'actor-rocket-frames-light-420', q: { scenario: 'cc-working', theme: 'light', actor: 'rocket:char' }, w: 420, h: 360, act: actorSheet('frames') },
+  { name: 'actor-rocket-frames-hc-420', q: { scenario: 'cc-working', theme: 'hc', actor: 'rocket:char' }, w: 420, h: 360, act: actorSheet('frames') },
+  { name: 'actor-rocket-real-dark-300', q: { scenario: 'cc-working', theme: 'dark', actor: 'rocket:char' }, w: 300, h: 420, act: assertActor(1) },
+  { name: 'actor-rocket-real-light-420', q: { scenario: 'cc-working', theme: 'light', actor: 'rocket:char' }, w: 420, h: 420, act: assertActor(2) },
+  { name: 'actor-rocket-real-hc-800', q: { scenario: 'cc-working', theme: 'hc', actor: 'rocket:char' }, w: 800, h: 420, act: assertActor(4) },
+  { name: 'actor-dog-wipein-dark-420', q: { scenario: 'cc-working', theme: 'dark', actor: 'dog:in' }, w: 420, h: 360, act: actorSheet('wipe') },
+  { name: 'actor-bot-wipein-dark-420', q: { scenario: 'cc-working', theme: 'dark', actor: 'bot:in' }, w: 420, h: 360, act: actorSheet('wipe') },
+  { name: 'actor-rocket-wipeout-light-420', q: { scenario: 'cc-working', theme: 'light', actor: 'rocket:out' }, w: 420, h: 360, act: actorSheet('wipe') },
+  { name: 'actor-logo-dark-420', q: { scenario: 'cc-working', theme: 'dark' }, w: 420, h: 420, act: assertActor() },
   { name: 'cc-working-dark-420', q: { scenario: 'cc-working', theme: 'dark' }, w: 420, h: 820, act: assertCcWorking },
   { name: 'cc-2-expanded-bash-dark-420', q: { scenario: 'cc-timeline', theme: 'dark', expand: '1' }, w: 420, h: 900, full: true, act: expandCcGroup(0) },
   { name: 'cc-3-expanded-write-dark-420', q: { scenario: 'cc-timeline', theme: 'dark', expand: '1' }, w: 420, h: 900, full: true, act: expandCcGroup(2) },

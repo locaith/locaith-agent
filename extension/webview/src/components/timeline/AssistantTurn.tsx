@@ -10,6 +10,8 @@ import { useCountUp, useElapsed } from '../../hooks';
 import { activityStats, buildSegments, groupActivityRuns, latestRunningTool, needsWorkingIndicator, splitWork, turnPlainText, type NoticeBlockT, type Segment, type WorkStats } from '../../timeline';
 import { actionName, agentRowsOf, backgroundOf, formatSeconds } from '../../timelineCc';
 import { LoSpinner } from '../Brand';
+import { LoActor } from '../LoActor';
+import { seedFrom } from '../../brand/actorPlan';
 import { cx, copyText, memo } from '../../util';
 import { post } from '../../vscode';
 import { Icon } from '../Icons';
@@ -68,8 +70,9 @@ export function StandaloneNotice({ item, canRetry }: { item: NoticeItem; canRetr
 }
 
 /** Nhãn đang chạy cuối lượt (như «Actualizing…» của Claude Code): logo «Lo» nhỏ xoay nhẹ + từ trạng thái đậm, không dấu «…». */
-function WorkingIndicator({ empty, blocks }: { empty: boolean; blocks: readonly ABlock[] }) {
-  const { t, lang } = useApp();
+function WorkingIndicator({ empty, blocks, turnId }: { empty: boolean; blocks: readonly ABlock[]; turnId: string }) {
+  const { t, lang, settings } = useApp();
+  const seed = useMemo(() => seedFrom(turnId), [turnId]); // (0.7.2) hạt giống cố định theo lượt → thứ tự nhân vật không đổi khi render lại
   // Token đã sinh trong lượt này (chữ trả lời + suy nghĩ), ước lượng từ nội dung đang stream; số chạy mượt, kèm số giây đã trôi.
   const tokens = useMemo(() => {
     let n = 0;
@@ -81,7 +84,7 @@ function WorkingIndicator({ empty, blocks }: { empty: boolean; blocks: readonly 
   const stat = [tokens > 0 ? t('act.thinkTokens', { n: shown.toLocaleString(lang === 'vi' ? 'vi-VN' : 'en-US') }) : '', secs !== null && secs >= 1 ? formatSeconds(secs * 1000, lang) : ''].filter(Boolean).join(' · ');
   return (
     <div class="working cc-working" role="status">
-      <LoSpinner size={15} />
+      {settings.workingCharacters !== false ? <LoActor seed={seed} /> : <LoSpinner size={15} />}
       <span class="cc-working-label">{empty ? t('turn.preparing') : t('act.working')}</span>
       {stat && <span class="work-stat">{stat}</span>}
     </div>
@@ -285,7 +288,7 @@ function AssistantTurnView({ item, live, isLast }: { item: AssistantItem; live: 
           ),
         )
       )}
-      {live && needsWorkingIndicator(item.blocks) && <WorkingIndicator empty={item.blocks.length === 0} blocks={item.blocks} />}
+      {live && needsWorkingIndicator(item.blocks) && <WorkingIndicator empty={item.blocks.length === 0} blocks={item.blocks} turnId={item.id} />}
       {item.done && <TurnFooter item={item} isLast={isLast} />}
     </section>
   );

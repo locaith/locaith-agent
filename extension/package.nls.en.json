@@ -26,6 +26,7 @@
   "cfg.fontSize": "Chat font size (px).",
   "cfg.lineHeight": "Line height. Vietnamese stacks diacritics, so keep it at 1.6 or above.",
   "cfg.codeFont": "Font for code blocks.",
+  "cfg.workingCharacters": "When a wait runs long, the Lo logo turns into a small character (robot dog, robot, drone, rocket) on the working line. Turn off to keep just the logo. Off automatically when the OS asks for reduced motion.",
   "cfg.showThinking": "Show the \"Thinking\" block when the provider returns reasoning content.",
   "cfg.permissionMode": "Default permission mode for new conversations.",
   "cfg.hooks": "Your hooks: shell commands attached to the assistant lifecycle (SessionStart, UserPromptSubmit, PreToolUse, PostToolUse, Stop, PreCompact, SessionEnd, Notification), same format as Claude Code: `{ \"PreToolUse\": [{ \"matcher\": \"run_command|edit_file\", \"hooks\": [{ \"type\": \"command\", \"command\": \"...\", \"timeout\": 60 }] }] }`. User-level hooks always run; project hooks live in `.locaith/settings.json` and run only when the workspace is trusted and you have approved them. Type `/hooks` in the chat to inspect.",

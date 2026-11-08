@@ -413,6 +413,8 @@ export interface UiSettings {
   codeFont: UiCodeFont;
   /** Hiện khối "Suy nghĩ" thô khi hãng trả về. */
   showThinking: boolean;
+  /** (0.7.2) Dòng chờ: logo Lo biến hình thành nhân vật nhỏ khi chờ lâu. Tắt = chỉ logo như cũ. */
+  workingCharacters: boolean;
 }
 
 export interface SessionSummary {
@@ -1188,6 +1190,7 @@ export const DEFAULT_UI_SETTINGS: UiSettings = {
   lineHeight: 1.65,
   codeFont: 'jetbrains-mono',
   showThinking: true,
+  workingCharacters: true,
 };
 
 export const THINKING_LEVELS: ThinkingLevel[] = ['off', 'low', 'medium', 'high', 'max', 'swarm'];
