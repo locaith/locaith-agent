@@ -334,6 +334,8 @@ export interface EngineSettings {
   modelStallSeconds?: 'auto' | number;
   /** Trần tổng thời gian hoạt động của một lần gọi model (giây; mặc định 600). */
   modelCallMaxSeconds?: number;
+  /** (0.7.2) Số ảnh gần nhất được gửi cho model mỗi lượt; ảnh cũ hơn thành dòng chữ trong BẢN GỬI (lịch sử giữ nguyên). 0 = không giới hạn; mặc định 8. */
+  maxImagesInContext?: number;
 }
 
 export const DEFAULT_ENGINE_SETTINGS: EngineSettings = {
@@ -353,4 +355,5 @@ export const DEFAULT_ENGINE_SETTINGS: EngineSettings = {
   summarizeEveryChars: 700,
   summarizeEveryMs: 1500,
   maxPillsPerReply: 14,
+  maxImagesInContext: 8,
 };

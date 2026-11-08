@@ -131,6 +131,7 @@ export class ConfigService {
       adaptiveOutputTokens: c.get<boolean>('agent.adaptiveOutputTokens', true) !== false,
       modelStallSeconds: stallSetting(c.get<unknown>('agent.modelStallSeconds', 'auto')),
       modelCallMaxSeconds: clamp(Number(c.get<number>('agent.modelCallMaxSeconds', 600)), 30, 3600),
+      maxImagesInContext: clamp(Math.floor(Number(c.get<number>('agent.maxImagesInContext', 8))) || 0, 0, 100), // (0.7.2) 0 = không giới hạn
     };
   }
 
