@@ -111,6 +111,8 @@ export interface EngineDeps {
   onConsentRequired?(): void;
   /** Cổng Locaith báo token đăng nhập không còn hợp lệ (401): host kiểm tra lại tài khoản (bị thu hồi thì khoá extension và đòi đăng nhập lại). */
   onAccountInvalid?(): void;
+  /** Câu hướng dẫn sửa khoá API theo từng host (CLI: «locaith provider key …» — nó không có màn Cài đặt). Không khai báo / trả undefined = câu mặc định «Mở Cài đặt». */
+  authHint?(providerId: string): string | undefined;
   /**
    * Các tính năng gắn quanh vòng lặp (cổng hoàn thành, kiểm tra độc lập, hook…) — xem `seams.ts`. Không khai báo = chỉ các extension dùng chung
    * (`coreRunExtensions()`, hiện là cổng hoàn thành). Host VS Code truyền `[...coreRunExtensions(), ...hostRunExtensions(...)]`.
@@ -887,9 +889,11 @@ export class AgentEngine {
         if (!ctx.compactedForOverflow && (await this.compact(ctx.session, ctx.signal, ctx.id, true))) return 'retry';
         ctx.notice('error', t(lang, 'contextTooLong'));
         return 'error';
-      case 'auth':
-        ctx.notice('error', t(lang, 'authError', { provider: providerLabel }));
+      case 'auth': {
+        const hint = this.d.authHint?.(ctx.session.provider);
+        ctx.notice('error', hint ? t(lang, 'authErrorHint', { provider: providerLabel, hint }) : t(lang, 'authError', { provider: providerLabel }));
         return 'error';
+      }
       case 'consent_required':
         // Cổng Locaith chưa có bản ghi đồng ý của tài khoản (hoặc đã đổi phiên bản thông báo): mở lại thẻ trong khung chat; sau khi đồng ý, nút «Thử lại» chạy lại.
         this.d.onConsentRequired?.();

@@ -1074,6 +1074,7 @@ export class Runtime implements CliRuntime {
         this.output(this.tr('accountInvalid'), 'error');
         this.scheduleStatus();
       },
+      authHint: (id) => (id === LOCAITH_PROVIDER_ID ? this.tr('authHintLogin') : this.tr('authHint', { id })),
       loadInstructions: (names) => this.loadInstructions(names),
       loadMemory: () => this.loadMemory(),
       extensions: this.extensionsFor(false),

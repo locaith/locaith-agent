@@ -231,6 +231,10 @@ export class Conversation {
           break;
         }
         case 'pill':
+          // Dòng trạng thái ĐANG chạy là tạm thời: khi chữ/công cụ thật tới, reducer gỡ hẳn dòng «working» («Đang suy nghĩ…», «thử lại sau…»,
+          // hàng chờ) và trimTail bỏ dòng ở đuôi — các khối sau dồn lên đúng chỗ của nó. Bước qua nó thì con trỏ vượt quá khối chữ đầu tiên
+          // và CẢ câu trả lời không bao giờ được in (model/cổng ra token đầu chậm hơn ~0,7 giây = màn hình im lặng hoàn toàn).
+          if (b.active && !final) stop = true;
           break;
         case 'tasks':
           this.flushGroup();

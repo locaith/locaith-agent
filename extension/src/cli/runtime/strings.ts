@@ -88,6 +88,8 @@ export const RUNTIME_STRINGS: { vi: Record<string, string>; en: Record<string, s
     // tài khoản
     consentRequired: 'Tài khoản chưa đồng ý thông báo dữ liệu của Locaith. Chạy `locaith consent --yes` (một lần, bằng chủ tài khoản) rồi thử lại.',
     accountInvalid: 'Phiên đăng nhập Locaith không còn hiệu lực. Chạy /login (hoặc `locaith login`) để đăng nhập lại.',
+    authHint: 'Nhập lại khoá bằng `locaith provider key {id}` (hoặc gõ /provider).',
+    authHintLogin: 'Chạy /login (hoặc `locaith login`) để đăng nhập lại.',
     loginNeedsTty: 'Đăng nhập cần giao diện tương tác. Chạy `locaith login` trong terminal.',
     loginMethodTitle: 'Đăng nhập Locaith',
     loginBrowser: 'Mở trình duyệt (khuyên dùng)',
@@ -264,6 +266,8 @@ export const RUNTIME_STRINGS: { vi: Record<string, string>; en: Record<string, s
     queueRestored: 'Moved {n} queued message(s) back to the input box — edit or resend when ready.',
     consentRequired: "This account has not accepted Locaith's data notice. Run `locaith consent --yes` (once, by the account owner) and try again.",
     accountInvalid: 'Your Locaith sign-in is no longer valid. Run /login (or `locaith login`) to sign in again.',
+    authHint: 'Re-enter the key with `locaith provider key {id}` (or type /provider).',
+    authHintLogin: 'Run /login (or `locaith login`) to sign in again.',
     loginNeedsTty: 'Signing in needs an interactive terminal. Run `locaith login` in your shell.',
     loginMethodTitle: 'Sign in to Locaith',
     loginBrowser: 'Open the browser (recommended)',

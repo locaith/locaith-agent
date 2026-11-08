@@ -1,5 +1,10 @@
 # Changelog
 
+## locaith-cli 0.4.3 - 2026-11-08 (PyPI)
+
+- **A reply no longer vanishes when the model is slow to start.** If the first word took longer than about 0.7 s — Claude after a long prompt, a busy gateway, a retry after "server busy", a queue — the terminal showed the "thinking" line and then nothing: neither the answer nor the error, even though the reply was saved in the session. The temporary status line was being stepped over, and everything printed after it was skipped. Replies and error messages now always appear (checked in a real terminal against a local server that answers after 1.8 s, with and without an error).
+- **A wrong key tells you how to fix it in the terminal.** "The Claude (Anthropic) API key is invalid or expired" used to end with "Open Settings", which the terminal does not have; it now says to re-enter the key with `locaith provider key <id>` (or type `/provider`). The extension keeps its own wording.
+
 ## 0.7.4 - 2026-11-08
 
 - **A restart brings your conversation back.** After "Restart Extension Host", "Reload Window" or reopening VS Code, the side panel now opens the conversation you were in (remembered per workspace) instead of an empty chat that sends you to History. It happens quietly: if that conversation no longer exists you just get the empty chat, "New chat" stays the empty chat you asked for, and a chat opened in an editor tab never moves the pointer.

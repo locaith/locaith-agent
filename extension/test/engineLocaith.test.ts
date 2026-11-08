@@ -191,6 +191,30 @@ describe('engine — lời của cổng hiện nguyên văn; token tài khoản 
     expect(rechecks).toBe(0);
     expect(eventsOf(h.events, 'notice').at(-1)!.text).toMatch(/Khóa API/);
   });
+
+  it('host có authHint (CLI): khoá hãng khác sai → chỉ lệnh sửa của host, KHÔNG bảo «Mở Cài đặt» (CLI không có màn Cài đặt)', async () => {
+    const seen: string[] = [];
+    const h = makeHarness(failWith(new ProviderError('401', { kind: 'auth', providerId: 'anthropic', status: 401, retryable: false })), {
+      sessionProvider: 'anthropic',
+      engineDeps: {
+        authHint: (id) => {
+          seen.push(id);
+          return `Nhập lại khoá bằng \`locaith provider key ${id}\`.`;
+        },
+      },
+    });
+    await h.run('hi');
+    const text = eventsOf(h.events, 'notice').at(-1)!.text;
+    expect(seen).toEqual(['anthropic']);
+    expect(text).toMatch(/Khóa API của .* không hợp lệ hoặc đã hết hạn\. Nhập lại khoá bằng `locaith provider key anthropic`\./);
+    expect(text).not.toMatch(/Cài đặt/);
+  });
+
+  it('host KHÔNG có authHint (VS Code, Chrome): giữ câu «Mở Cài đặt để nhập lại»', async () => {
+    const h = makeHarness(failWith(new ProviderError('401', { kind: 'auth', providerId: 'anthropic', status: 401, retryable: false })), { sessionProvider: 'anthropic' });
+    await h.run('hi');
+    expect(eventsOf(h.events, 'notice').at(-1)!.text).toMatch(/Mở Cài đặt để nhập lại/);
+  });
 });
 
 // ── (lane:gateway-client) nhóm thông điệp lỗi cổng: hiện qua handleProviderError thật ──

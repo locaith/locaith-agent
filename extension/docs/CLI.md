@@ -1,4 +1,4 @@
-# Locaith CLI — hướng dẫn sử dụng (0.4.2)
+# Locaith CLI — hướng dẫn sử dụng (0.4.3)
 
 Trợ lý lập trình Locaith ngay trong terminal. **Cùng lõi** với extension VS Code: cùng engine, công cụ, kỹ năng, hooks, checkpoints/rewind,
 tác vụ nền, MCP, luật quyền, nén ngữ cảnh. Model chạy ở cổng Locaith (`locaith-v5-flash`, `locaith-v5-si`) hoặc khoá hãng khác của bạn
