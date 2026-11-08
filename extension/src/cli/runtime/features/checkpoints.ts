@@ -17,7 +17,7 @@ import { CheckpointStore, sessionKey, type Snapshot, type StoredTurn } from '../
 import type { ToolHost } from '../../../core/engine/types';
 import type { RunExtension } from '../../../core/engine/seams';
 import type { FeatureContext, FeatureModule, SlashRunContext } from '../contract';
-import { asExt, askSlash, makeTr, oneLine } from './ext';
+import { asExt, askSlash, isSubAgentScope, makeTr, oneLine } from './ext';
 
 const tr = makeTr('rewind', {
   disabled: ['Chưa bật checkpoint (cài đặt `checkpoints.enabled`).', 'Checkpoints are off (setting `checkpoints.enabled`).'],
@@ -414,7 +414,7 @@ export const checkpointsFeature: FeatureModule = {
     const ext: RunExtension = {
       id: 'checkpoints',
       begin(scope) {
-        if (scope.session !== ctx.session()) return undefined; // agent con: ghi tệp của nó đi vào lượt hiện tại của luồng chính
+        if (isSubAgentScope(ctx, scope)) return undefined; // agent con: ghi tệp của nó đi vào lượt hiện tại của luồng chính
         const text = scope.input.map((b) => (b.type === 'text' ? b.text : '')).join('\n');
         feature.beginTurn(newId('u'), stripWrappers(text) || text);
         return undefined;

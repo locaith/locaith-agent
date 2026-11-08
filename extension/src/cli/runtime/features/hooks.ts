@@ -17,7 +17,7 @@ import { HookService } from '../../../core/hooks/service';
 import { HookSources, type HookConfirmRequest } from '../../../core/hooks/sources';
 import type { RunExtension, RunHooks, RunScope } from '../../../core/engine/seams';
 import type { FeatureContext, FeatureModule } from '../contract';
-import { asExt, askUser } from './ext';
+import { asExt, askUser, isSubAgentScope } from './ext';
 import { getPath, readJsonFile, strList } from './settingsFile';
 
 registerStrings('features', {
@@ -141,7 +141,7 @@ export const hooksFeature: FeatureModule = {
     const combined: RunExtension = {
       id: 'hooks',
       begin(scope: RunScope) {
-        const isSub = scope.session !== ctx.session();
+        const isSub = isSubAgentScope(ctx, scope);
         if (isSub) return sub.begin(scope);
         const hooks = main.begin(scope);
         if (!hooks || wired) return hooks;

@@ -73,3 +73,6 @@ export function oneLine(s: string, n = 80): string {
   const x = s.replace(/\s+/g, ' ').trim();
   return x.length > n ? `${x.slice(0, n - 1)}…` : x;
 }
+
+/** `scope` là của agent con (phiên con có id riêng) chứ không phải luồng chính. So theo id để không phụ thuộc lõi trả đúng MỘT đối tượng phiên. */
+export const isSubAgentScope = (ctx: Pick<FeatureContext, 'session'>, scope: { session: { id: string } }): boolean => scope.session.id !== ctx.session().id;

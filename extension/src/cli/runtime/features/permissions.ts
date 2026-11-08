@@ -11,6 +11,7 @@
 
 import * as fs from 'node:fs';
 import * as path from 'node:path';
+import type { RunExtension } from '../../../core/engine/seams';
 import { permissionRulesExtension, type RuleSnapshot } from '../../../core/engine/extensions/permissionRules';
 import { resolveUserPathReal } from '../../../core/fsutil/paths';
 import { buildRules, evaluateRules, formatRule, hashRules, parseRule, type Rule, type RuleAction } from '../../../shared/permissionRules';
@@ -267,17 +268,21 @@ async function setMode(ctx: FeatureContext, c: SlashRunContext, mode: Permission
   c.output(tr(c.lang, 'modeSet', { mode }), 'plain');
 }
 
+/** RunExtension luật quyền (dùng cho engine chính, agent con và agent kiểm tra độc lập). */
+export function makeRulesExtension(ctx: FeatureContext): RunExtension {
+  return permissionRulesExtension({
+    source: () => ruleView(ctx).snapshot,
+    resolvePath: async (host, raw) => {
+      const r = await resolveUserPathReal(host, raw);
+      return { rel: r.rel, abs: r.abs, inWorkspace: r.zone === 'workspace' && !r.suspicious };
+    },
+  });
+}
+
 export const permissionsFeature: FeatureModule = {
   name: 'permissions',
   attach(ctx) {
-    const ext = permissionRulesExtension({
-      source: () => ruleView(ctx).snapshot,
-      resolvePath: async (host, raw) => {
-        const r = await resolveUserPathReal(host, raw);
-        return { rel: r.rel, abs: r.abs, inWorkspace: r.zone === 'workspace' && !r.suspicious };
-      },
-    });
-    ctx.addRunExtension(ext, { subAgents: true });
+    ctx.addRunExtension(makeRulesExtension(ctx), { subAgents: true });
     asExt(ctx).registerAlwaysAllow?.((rule, scope) => addAlwaysAllow(ctx, rule, scope));
 
     ctx.slash({
