@@ -1,4 +1,4 @@
-# Locaith CLI — hướng dẫn sử dụng (0.4.0)
+# Locaith CLI — hướng dẫn sử dụng (0.4.1)
 
 Trợ lý lập trình Locaith ngay trong terminal. **Cùng lõi** với extension VS Code: cùng engine, công cụ, kỹ năng, hooks, checkpoints/rewind,
 tác vụ nền, MCP, luật quyền, nén ngữ cảnh. Model chạy ở cổng Locaith (`locaith-v5-flash`, `locaith-v5-si`) hoặc khoá hãng khác của bạn
@@ -66,7 +66,7 @@ Mọi dòng đã xong được **in thẳng vào scrollback** của terminal (cu
 
 `/help` `/clear` (= `/new`) `/compact [giữ gì]` `/context` `/cost` `/status` `/model [id]` `/mode [tên]` `/thinking [mức]` `/resume [id]` `/sessions`
 `/rewind` `/fork` `/tasks` `/hooks` `/permissions` `/agents` `/mcp` `/memory` `/init` `/skills` `/plugins` `/review` `/simplify` `/security-review` `/verify`
-`/output-style` `/config` `/theme` `/login` `/logout` `/whoami` `/doctor` `/update` `/export` `/copy` `/exit`.
+`/output-style` `/config` `/theme` `/login` `/logout` `/whoami` `/provider` `/doctor` `/update` `/export` `/copy` `/exit`.
 Lệnh tuỳ chỉnh: tạo `.locaith/commands/ten.md` (dự án) hoặc `~/.locaith/commands/ten.md` (cá nhân), dùng `$ARGUMENTS`, `@tệp`, `` !`lệnh` ``.
 Lệnh do máy chủ MCP cung cấp cũng hiện trong menu.
 
@@ -79,6 +79,7 @@ Lệnh do máy chủ MCP cung cấp cũng hiện trong menu.
 | `locaith doctor [--json]` | kiểm Node, git, ffmpeg, khoá, kết nối thật tới cổng, bản mới — và nói cách sửa |
 | `locaith login [--no-browser]` · `logout` · `whoami` | đăng nhập / xoá khoá đã lưu / xem tài khoản, gói, model |
 | `locaith consent --yes` | ghi nhận đồng ý thông báo dữ liệu (một lần, bởi chủ tài khoản) |
+| `locaith provider [add\|key\|list\|test\|remove]` | nhà cung cấp mô hình: thêm API tuỳ chỉnh (OpenRouter, Ollama…), lưu khoá hãng khác, thử kết nối — xem mục «Nhà cung cấp mô hình» |
 | `locaith sessions [--all]` | liệt kê phiên đã lưu (mở lại bằng `-r <id>` hoặc `-c`) |
 | `locaith config` | chỉ ra nơi đặt cài đặt, khoá, phiên, MCP, bộ nhớ |
 | `locaith update [--check]` · `help [chủ đề]` · `version` | nâng cấp · hướng dẫn chi tiết · phiên bản |
@@ -88,7 +89,7 @@ Tuỳ chọn thường dùng: `-p/--print` · `--output-format text|json|stream-
 `--append-system-prompt <chữ>` · `--max-turns <n>` · `--timeout <giây>` · `--cwd <thư mục>` · `--mcp-config <tệp>` · `--no-session-persistence` · `--verbose` · `--no-color` · `--lang vi|en`.
 Cờ cũ của 0.3.x vẫn chạy: `--allow none|reads|all` (= plan / default / bypassPermissions), `--json`, `--quiet`.
 
-`locaith help <commands|shortcuts|print|settings|permissions|hooks|mcp|sessions|memory|troubleshooting>` in hướng dẫn từng chủ đề ngay trong terminal.
+`locaith help <commands|shortcuts|print|settings|permissions|providers|hooks|mcp|sessions|memory|troubleshooting>` in hướng dẫn từng chủ đề ngay trong terminal.
 
 ## Chế độ in một lần (script/CI)
 
@@ -105,6 +106,50 @@ locaith -p --allowedTools "Bash(npm test:*)" "chạy test và sửa" # cho đún
 - Có câu lệnh trong đối số thì stdin chỉ là dữ liệu phụ: chờ tối đa 3 giây cho byte đầu rồi chạy tiếp (một ống mở nhưng im lặng không làm treo). Không có câu lệnh thì stdin LÀ việc cần làm.
 - Mã thoát: **0** xong · **1** lỗi / chưa xong (hết giờ, hết vòng, model lỗi, `doctor` còn mục ✘) · **2** dùng sai · **127** thiếu Node · **130** bị ngắt (Ctrl+C).
 - Lỗi mạng: dùng cùng bộ thử lại với extension (4 lần, 1+2+4+8 giây) trước khi báo lỗi.
+
+## Nhà cung cấp mô hình — khoá hoặc API của hãng khác
+
+Locaith chạy bằng mô hình Locaith qua tài khoản **hoặc** bằng khoá/API của chính bạn. Hai cách cùng tồn tại; đổi lúc nào cũng được (`/model`, `--model`).
+
+| Loại | Có sẵn |
+|---|---|
+| Hãng dựng sẵn (chỉ cần khoá) | Anthropic (Claude) · OpenAI · Gemini · DeepSeek · xAI (Grok) |
+| API tương thích OpenAI (mẫu thêm nhanh) | OpenRouter · Ollama · LM Studio · Groq · Together · Mistral · Fireworks |
+| Địa chỉ bất kỳ | máy chủ riêng, proxy, vLLM, LiteLLM… — chỉ cần địa chỉ gốc (thường kết thúc bằng `/v1`) |
+
+```bash
+locaith provider add                       # trình hướng dẫn: chọn hãng/mẫu, dán khoá (ô ẩn), thử kết nối
+locaith provider add openrouter            # mẫu đã có địa chỉ; khoá nhập ở ô ẩn
+locaith provider add ollama --models qwen3-coder                                   # máy cục bộ, không cần khoá
+locaith provider add my-llm --url https://llm.example.com/v1 --key-env MY_LLM_KEY  # API riêng, khoá lấy từ biến môi trường
+echo "$GROQ_KEY" | locaith provider add groq --key-stdin                           # cho script/CI
+locaith provider key anthropic             # lưu/đổi khoá của một hãng (ô ẩn; hoặc --key-stdin · --key-env TÊN · --remove để xoá)
+locaith provider list [--json]             # nhà cung cấp, địa chỉ, khoá đến từ đâu, điều gì cấu hình sai
+locaith provider test [id]                 # thử kết nối thật (GET /models), nói đúng nguyên nhân khi hỏng
+locaith provider remove <id>               # gỡ API tuỳ chỉnh và khoá đã lưu của nó
+```
+
+Trong phiên tương tác gõ `/provider` (cùng trình hướng dẫn; nhà cung cấp vừa thêm **dùng được ngay**, không cần khởi động lại). Rồi chọn model:
+`/model openrouter:anthropic/claude-sonnet-5-5` · `locaith --model ollama:qwen3-coder` · hoặc `"model": "ollama:qwen3-coder"` trong cài đặt.
+Lần chạy đầu, bước «dùng khoá hãng khác» cũng mở đúng trình hướng dẫn này thay vì bắt thoát ra tự đặt biến môi trường.
+
+**Khoá**
+- Biến môi trường **thắng** khoá đã lưu: `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `GEMINI_API_KEY` (hoặc `GOOGLE_API_KEY`), `DEEPSEEK_API_KEY`, `XAI_API_KEY`, và `<ID>_API_KEY` cho API tuỳ chỉnh (`OPENROUTER_API_KEY`, `MY_LLM_API_KEY`…).
+- Khoá đã lưu nằm ở `~/.locaith/provider-keys.json` (quyền 600, ghi nguyên tử) và **gắn với địa chỉ lúc lưu**: nếu địa chỉ của nhà cung cấp bị đổi (sửa `baseUrls`/`customProviders`), khoá **ngừng được gửi đi** —
+  để một cấu hình bị sửa không hứng được khoá của bạn. `locaith provider list` và `/doctor` báo rõ; lưu lại bằng `locaith provider key <id>`.
+- **Không nhập khoá ở dòng lệnh** (lộ trong lịch sử shell và danh sách tiến trình): chỉ ô ẩn, `--key-stdin` hoặc `--key-env`. `--key sk-…` bị từ chối và không bị in lại; khoá được che khỏi nhật ký. Lỡ gõ khoá vào dòng lệnh: thu hồi khoá đó ở trang của hãng rồi tạo khoá mới.
+
+**Địa chỉ**: `https://` luôn được. `http://` chỉ cho máy này (`localhost`, `127.0.0.1`), hoặc mạng nội bộ (`192.168.x`, `10.x`, `*.local`…) khi API **không cần khoá**. `http://` tới máy công cộng, hay địa chỉ có `user:mật-khẩu@`, bị từ chối kèm lý do.
+
+**Cấu hình tay** — chỉ trong `~/.locaith/settings.json` của bạn. Cài đặt nằm trong kho mã **không** thêm được nhà cung cấp hay đổi địa chỉ (để một kho lạ không chuyển hướng yêu cầu hoặc khoá của bạn):
+
+```json
+{ "customProviders": [ { "id": "ollama", "label": "Ollama", "baseUrl": "http://localhost:11434/v1", "models": ["qwen3-coder"], "requiresKey": false } ],
+  "baseUrls": { "deepseek": "https://proxy.example.com/v1" } }
+```
+
+`kind` (tuỳ chọn): `openai-chat` (mặc định) · `openai-responses` · `anthropic` · `gemini`. Mục sai bị bỏ qua và được báo ở `locaith provider list`, `/doctor`, `locaith doctor` — CLI không sập vì chúng.
+Nhiều máy chủ OpenAI-compatible không có `/models`: khai `models` để dùng được và chọn được trong `/model`.
 
 ## Cài đặt, quyền, tin cậy
 
@@ -167,5 +212,6 @@ Gói PyPI: [packages/locaith-cli-py](../../packages/locaith-cli-py/README.md) �
 - Install: `pip install locaith-cli` (or `pipx install locaith-cli`), then run `locaith`. It uses your Node 20+ or the bundled one. First run walks you through language → sign-in → data notice → trusting the folder.
 - Interactive: `locaith`, `locaith "task"`, `locaith -c` (continue), `locaith -r [id]` (resume). Type `/` for commands, `@` for files, `!` for shell, `Shift+Tab` to change the permission mode, `Esc` to stop, `Ctrl+O` to expand tool results, `?` for shortcuts.
 - Print mode: `locaith -p "task"` (also reads stdin), `--output-format text|json|stream-json`, `--permission-mode`, `--allowedTools`. Without a terminal, anything not allowed is denied immediately; exit codes 0 / 1 / 2 / 127 / 130.
+- Other vendors' keys and APIs (0.4.1): `locaith provider add|key|list|test|remove` (and `/provider` in a session) — Anthropic, OpenAI, Gemini, DeepSeek, xAI, plus OpenAI-compatible presets (OpenRouter, Ollama, LM Studio, Groq, Together, Mistral, Fireworks) or any address. Keys are typed at a hidden prompt, `--key-stdin` or `--key-env` — never on the command line — and saved to `~/.locaith/provider-keys.json` (mode 600), bound to the address they were saved for. A repository cannot add providers or change addresses; only your own `~/.locaith/settings.json` can. `locaith help providers`.
 - Settings: `~/.locaith/settings.json` < `.locaith/settings.json` < `.locaith/settings.local.json` < environment < flags. Untrusted folders can only add `ask`/`deny` rules; hooks, MCP and project commands do not run there.
 - `locaith doctor` checks your setup; `locaith help <topic>` prints detailed guides; `LOCAITH_LANG=en` or `--lang en` switches the language.

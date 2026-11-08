@@ -6,6 +6,7 @@
 
 import { loginCmd, type AccountDeps } from '../account';
 import { setLang, t as tr, type Lang } from '../i18n';
+import { wizardIoFromUi, type WizardIO } from '../providerWizard';
 import type { PickItem } from '../runtime/contract';
 import { ConfirmDialog, InputDialog, PickDialog, type Dialog } from './dialogs';
 import type { Key, KeyEvent } from './keys';
@@ -49,6 +50,10 @@ export interface OnboardingOptions {
   /** Nội dung thông báo dữ liệu (mặc định dùng chuỗi dựng sẵn). */
   consentText?: string;
   saveLang?: (l: Lang) => void;
+  /** Nhà cung cấp hãng khác ĐÃ dùng được sẵn (khoá đã lưu, API tuỳ chỉnh không cần khoá): tên để hiện. Có phần tử → bước «khoá hãng khác» chấp nhận luôn. */
+  byokKnown?: () => string[];
+  /** Trình hướng dẫn thêm khoá/nhà cung cấp (bước «dùng khoá hãng khác» khi chưa có gì). Trả true nếu đã thiết lập được một nhà cung cấp dùng được. */
+  byokSetup?: (io: WizardIO) => Promise<boolean>;
   saveTrust?: (trusted: boolean) => void;
   /** Tiêm giao diện (kiểm thử logic). */
   ui?: OnboardingUi;
@@ -67,7 +72,7 @@ export interface OnboardingResult {
 export interface OnboardingUi {
   pick(title: string, items: PickItem[], hint?: string): Promise<string | null>;
   confirm(title: string, detail: string, o?: { yes?: string; no?: string; danger?: boolean }): Promise<boolean | null>;
-  input(title: string, detail: string, secret?: boolean): Promise<string | null>;
+  input(title: string, detail: string, secret?: boolean, o?: { initial?: string; placeholder?: string }): Promise<string | null>;
   say(kind: 'info' | 'ok' | 'warn' | 'error' | 'text', text: string): void;
   /** Hiện dòng «đang chờ…» cho tới khi gọi hàm trả về; promise `cancelled` giải quyết khi người dùng nhấn Ctrl+C. */
   wait(text: string): { stop(): void; cancelled: Promise<void> };
@@ -114,13 +119,22 @@ export async function runOnboardingFlow(o: OnboardingOptions, ui: OnboardingUi):
       if (how === null) return cancel('cancelled');
       if (how === 'skip') break;
       if (how === 'byok') {
-        const found = detectByokKeys(o.env ?? process.env);
+        const found = [...detectByokKeys(o.env ?? process.env), ...(o.byokKnown?.() ?? [])];
         ui.say('info', tr('tui.ob.byok.title'));
         if (found.length) {
           ui.say('ok', tr('tui.ob.byok.found', { list: found.join(', ') }));
           res.loggedIn = true;
           res.consented = true; // khoá riêng: không đi qua cổng Locaith
           break;
+        }
+        if (o.byokSetup) {
+          // Chưa có gì: dẫn người dùng chọn hãng + dán khoá ngay tại đây (lưu ở ~/.locaith, quyền 600) thay vì bắt thoát ra đặt biến môi trường.
+          if (await o.byokSetup(wizardIoFromUi(ui))) {
+            res.loggedIn = true;
+            res.consented = true;
+            break;
+          }
+          continue; // huỷ/chưa xong → cho chọn lại cách đăng nhập
         }
         ui.say('warn', tr('tui.ob.byok.none'));
         return cancel('byok-missing');
@@ -311,15 +325,16 @@ export class TerminalUi implements OnboardingUi {
   }
 
   pick(title: string, items: PickItem[], hint?: string): Promise<string | null> {
-    return this.run(new PickDialog({ id: 'ob', kind: 'pick', title, items, hint, searchable: false }, this.theme)) as Promise<string | null>;
+    // Danh sách ngắn (ngôn ngữ, cách đăng nhập) không cần ô tìm; danh sách dài (trình hướng dẫn nhà cung cấp: 13 mục) tự có ô tìm (PickDialog: > 10 mục).
+    return this.run(new PickDialog({ id: 'ob', kind: 'pick', title, items, hint, ...(items.length <= 10 ? { searchable: false } : {}) }, this.theme)) as Promise<string | null>;
   }
 
   confirm(title: string, detail: string, o?: { yes?: string; no?: string; danger?: boolean }): Promise<boolean | null> {
     return this.run(new ConfirmDialog({ id: 'ob', kind: 'confirm', title, detail, yes: o?.yes, no: o?.no, danger: o?.danger, defaultYes: true }, this.theme)) as Promise<boolean | null>;
   }
 
-  input(title: string, detail: string, secret = false): Promise<string | null> {
-    return this.run(new InputDialog({ id: 'ob', kind: 'input', title, detail, secret }, this.theme)) as Promise<string | null>;
+  input(title: string, detail: string, secret = false, o?: { initial?: string; placeholder?: string }): Promise<string | null> {
+    return this.run(new InputDialog({ id: 'ob', kind: 'input', title, detail, secret, ...(o?.initial ? { initial: o.initial } : {}), ...(o?.placeholder ? { placeholder: o.placeholder } : {}) }, this.theme)) as Promise<string | null>;
   }
 
   say(kind: 'info' | 'ok' | 'warn' | 'error' | 'text', text: string): void {
@@ -354,6 +369,22 @@ export class TerminalUi implements OnboardingUi {
     if (this.ticker) clearInterval(this.ticker);
     this.screen.close();
     this.session.stop();
+  }
+}
+
+/**
+ * Chạy một đoạn hội thoại (hộp chọn / ô nhập / xác nhận) trên giao diện terminal của onboarding — dùng cho `locaith provider add|key`.
+ * Ném nếu không có terminal tương tác; luôn đóng giao diện (khôi phục terminal) khi xong.
+ */
+export async function withTerminalUi<T>(o: OnboardingOptions, fn: (ui: OnboardingUi) => Promise<T>): Promise<T> {
+  const stdin = o.stdin ?? process.stdin;
+  const stdout = o.stdout ?? process.stdout;
+  if (!stdin.isTTY || !stdout.isTTY) throw new Error('Cần terminal tương tác (TTY).');
+  const ui = new TerminalUi(o);
+  try {
+    return await fn(ui);
+  } finally {
+    ui.close();
   }
 }
 

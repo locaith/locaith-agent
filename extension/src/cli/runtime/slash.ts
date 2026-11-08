@@ -20,6 +20,7 @@ import type { Scope } from './config';
 import type { PickItem } from './contract';
 import type { FullSlashContext, Runtime } from './runtime';
 import { isDirTrusted } from './trust';
+import { addProviderFlow, keyFlow, providerMenu, removeFlow, renderList, testFlow, testLine, type WizardDeps, type WizardIO } from '../providerWizard';
 import { writeFileAtomic } from './util';
 
 type Handler = (ctx: FullSlashContext) => Promise<void> | void;
@@ -124,6 +125,82 @@ export function registerBuiltinSlash(rt: Runtime): void {
       if (typeof ans === 'string') await apply(ans);
     },
     { argHint: '[id]' },
+  );
+
+  // ── /provider ── (0.4.1) danh sách · thêm API tuỳ chỉnh · lưu khoá · gỡ · thử kết nối — cùng logic với `locaith provider`
+  reg(
+    'provider',
+    'provider',
+    async (ctx) => {
+      const [sub = '', ...rest] = ctx.args.trim().split(/\s+/).filter(Boolean);
+      const io: WizardIO = {
+        pick: async (title, items, hint) => {
+          const v = await ctx.ask({ kind: 'pick', title, items, ...(hint ? { hint } : {}), allowCancel: true });
+          return typeof v === 'string' ? v : null;
+        },
+        input: async (title, detail, o) => {
+          const v = await ctx.ask({ kind: 'input', title, detail, ...(o?.placeholder ? { placeholder: o.placeholder } : {}), ...(o?.secret ? { secret: true } : {}), ...(o?.initial ? { initial: o.initial } : {}) });
+          return typeof v === 'string' ? v : null;
+        },
+        confirm: async (title, detail, o) => {
+          const v = await ctx.ask({ kind: 'confirm', title, detail, ...(o?.yes ? { yes: o.yes } : {}), ...(o?.no ? { no: o.no } : {}), defaultYes: o?.defaultYes ?? true, ...(o?.danger ? { danger: true } : {}) });
+          return typeof v === 'boolean' ? v : null;
+        },
+        say: (kind, text) => ctx.output(text, kind === 'error' ? 'error' : 'plain'),
+      };
+      const deps: WizardDeps = {
+        home: rt.home,
+        env: rt.env,
+        lang: rt.lang,
+        reload: () => {
+          rt.providers.reload();
+          rt.flushStatus();
+        },
+        test: (id) => rt.providers.test(id),
+        onKey: (k) => rt.logger.registerSecret(k),
+        list: () => renderList(rt.providers.rows(), rt.providers.problems(), rt.lang, 'plain'),
+        testable: () => rt.providers.rows().filter((r) => r.usable && r.id !== 'locaith').map((r) => ({ id: r.id, label: r.label })),
+      };
+      const needUi = () => ctx.output(tr('providerNeedsTty'), 'error');
+      switch (sub.toLowerCase()) {
+        case '':
+          if (!rt.interactive) return ctx.output(renderList(rt.providers.rows(), rt.providers.problems(), rt.lang, 'markdown'), 'markdown');
+          return providerMenu(io, deps);
+        case 'list':
+        case 'ls':
+          return ctx.output(renderList(rt.providers.rows(), rt.providers.problems(), rt.lang, 'markdown'), 'markdown');
+        case 'add':
+          if (!rt.interactive) return needUi();
+          await addProviderFlow(io, deps);
+          return;
+        case 'key':
+          if (!rt.interactive) return needUi();
+          await keyFlow(io, deps, rest[0]);
+          return;
+        case 'remove':
+        case 'rm':
+          if (!rt.interactive) return needUi();
+          await removeFlow(io, deps);
+          return;
+        case 'test': {
+          const ids = rest[0] ? [rest[0]] : rt.providers.rows().filter((r) => r.usable && r.id !== 'locaith').map((r) => r.id);
+          if (ids.length === 0) return testFlow(io, deps);
+          const lines: string[] = [];
+          for (const id of ids) {
+            if (!rt.providers.service.has(id)) {
+              lines.push(`✘ ${cliT('cli.prov.w.unknown', { id }, rt.lang)}`);
+              continue;
+            }
+            const l = testLine(rt.lang, id, await rt.providers.test(id), rt.providers.hasPinnedModels(id));
+            lines.push(`${l.ok ? '✔' : '✘'} ${l.text}`);
+          }
+          return ctx.output(lines.join('\n'), 'plain');
+        }
+        default:
+          return ctx.output(tr('providerUsage'), 'error');
+      }
+    },
+    { argHint: '[list|add|key|remove|test]', needsIdle: true },
   );
 
   // ── /mode ──
@@ -400,6 +477,8 @@ export function registerBuiltinSlash(rt: Runtime): void {
     rows.push([ff.status === 0 ? true : 'warn', 'ffmpeg', ff.status === 0 ? (ff.stdout.split('\n')[0] ?? '').slice(0, 60) : tr('docNoFfmpeg')]);
     const ids = rt.providers.usableIds();
     rows.push([ids.length > 0, tr('docKeys'), ids.length ? ids.join(', ') : tr('docNoKeys')]);
+    const provProblems = rt.providers.problems();
+    if (provProblems.length) rows.push(['warn', tr('docProviders'), provProblems.join('; ')]);
     const lkey = readLocaithKey(rt.home, rt.env);
     if (lkey && !rt.providers.overridden) {
       const t0 = Date.now();

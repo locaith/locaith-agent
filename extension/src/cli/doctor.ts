@@ -9,7 +9,8 @@ import { createProvider } from '../core/providers';
 import { ACCOUNT_PRESETS, BUILTIN_PRESETS } from '../core/providers/presets';
 import { gatewayDiagnosticHeaders } from '../core/providers/gatewayDiagnostics';
 import { LOCAITH_GATEWAY_URL, LOCAITH_MODEL_FLASH, LOCAITH_PROVIDER_ID, LocaithGatewayClient } from '../core/providers/locaithGateway';
-import { configFile, hasByokKey, maskKey, readApiKey } from './credentials';
+import { configFile, hasByokKey, homeDir, maskKey, readApiKey } from './credentials';
+import { makeProviders } from './providerCmd';
 import { updateAvailable } from './update';
 import type { Lang } from './i18n';
 
@@ -105,7 +106,7 @@ export async function runChecks(o: DoctorOptions): Promise<Check[]> {
   const model = o.model ?? LOCAITH_MODEL_FLASH;
   if (!key) {
     const byok = hasByokKey(env);
-    add(t('Khoá Locaith', 'Locaith key'), byok ? 'warn' : 'fail', byok ? t('chưa có, nhưng có khoá hãng khác trong môi trường (BYOK)', 'none, but another vendor key is in the environment (BYOK)') : t(`chưa có — chạy \`locaith login\` (hoặc đặt LOCAITH_API_KEY; tệp ${configFile(env)})`, `none — run \`locaith login\` (or set LOCAITH_API_KEY; file ${configFile(env)})`));
+    add(t('Khoá Locaith', 'Locaith key'), byok ? 'warn' : 'fail', byok ? t('chưa có, nhưng có khoá hãng khác trong môi trường (BYOK)', 'none, but another vendor key is in the environment (BYOK)') : t(`chưa có — chạy \`locaith login\` (hoặc đặt LOCAITH_API_KEY; tệp ${configFile(env)}); muốn dùng khoá/API của hãng khác: \`locaith provider add\``, `none — run \`locaith login\` (or set LOCAITH_API_KEY; file ${configFile(env)}); to use another vendor's key/API: \`locaith provider add\``));
   } else {
     add(t('Khoá Locaith', 'Locaith key'), 'ok', t(`đã có (${maskKey(key)})`, `present (${maskKey(key)})`));
     const t0 = Date.now();
@@ -132,6 +133,27 @@ export async function runChecks(o: DoctorOptions): Promise<Check[]> {
     } catch (err) {
       add(t('Cổng Locaith', 'Locaith gateway'), 'fail', err instanceof Error ? err.message : String(err));
     }
+  }
+
+  // Nhà cung cấp khác (hãng dựng sẵn + API tuỳ chỉnh): cái nào dùng được, và điều gì sai trong cấu hình (mục bị bỏ qua, khoá lệch địa chỉ…).
+  // Chỉ hiện khi người dùng có cấu hình/khoá nào đó — người chỉ dùng Locaith không bị thêm một dòng thừa.
+  try {
+    const prov = makeProviders({ home: homeDir(env), env, cwd: o.cwd, lang: o.lang, version: o.version });
+    const usable = prov
+      .rows()
+      .filter((r) => r.id !== LOCAITH_PROVIDER_ID && r.usable)
+      .map((r) => r.id);
+    const problems = prov.problems();
+    if (usable.length || problems.length) {
+      const shown = problems.slice(0, 3).join('; ') + (problems.length > 3 ? t(` (+${problems.length - 3} điểm nữa — \`locaith provider list\`)`, ` (+${problems.length - 3} more — \`locaith provider list\`)`) : '');
+      add(
+        t('Nhà cung cấp khác', 'Other providers'),
+        problems.length ? 'warn' : 'ok',
+        problems.length ? `${shown}${usable.length ? ` · ${t('dùng được', 'usable')}: ${usable.join(', ')}` : ''}` : `${t('dùng được', 'usable')}: ${usable.join(', ')}`,
+      );
+    }
+  } catch {
+    /* cấu hình nhà cung cấp lỗi nặng: các chỗ khác (provider list) sẽ báo, doctor không được sập vì chuyện này */
   }
 
   try {

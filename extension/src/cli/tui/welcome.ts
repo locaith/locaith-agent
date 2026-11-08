@@ -64,6 +64,9 @@ export function renderWelcome(i: WelcomeInfo): string[] {
   if (st?.account?.loggedIn) {
     const who = [st.account.email, st.account.plan].filter(Boolean).join(` ${th.g.sep} `);
     info.push(th.muted(tr('tui.banner.account.in') + ': ') + (who || th.ok(th.g.ok)));
+  } else if (st && st.provider && st.provider !== 'locaith') {
+    // Đang dùng khoá/API của hãng khác: «chưa đăng nhập Locaith» không phải điều cần cảnh báo, nói đang chạy bằng nhà cung cấp nào.
+    info.push(th.muted(tr('tui.banner.provider') + ': ') + st.provider);
   } else if (st) info.push(th.warn(tr('tui.banner.account.out')));
   if (st?.model) info.push(th.muted(tr('tui.banner.model') + ': ') + st.model);
   const branch = st?.gitBranch ? ' ' + th.muted(`(${th.g.branch} ${st.gitBranch})`) : '';

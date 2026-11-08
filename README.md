@@ -20,7 +20,7 @@ locaith                      # interactive session (first run: language → sign
 locaith -p "summarize this repo"   # print once, for scripts and CI
 ```
 
-The same coding agent as the extension in your terminal — permission cards, checkpoints and `/rewind`, hooks, MCP, skills, sessions you can resume, custom commands, and your own Anthropic / OpenAI / Gemini / DeepSeek / xAI key if you prefer. Python 3.8+; it uses your Node 20+ or a bundled one. Guide: `extension/docs/CLI.md`.
+The same coding agent as the extension in your terminal — permission cards, checkpoints and `/rewind`, hooks, MCP, skills, sessions you can resume, custom commands, and your own key or API if you prefer — Anthropic / OpenAI / Gemini / DeepSeek / xAI, or any OpenAI-compatible address such as OpenRouter, Ollama, LM Studio, Groq (`locaith provider add`; keys are never typed on the command line). Python 3.8+; it uses your Node 20+ or a bundled one. Guide: `extension/docs/CLI.md`.
 
 ## Install from the Marketplace
 

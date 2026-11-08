@@ -10,7 +10,7 @@
 
 import path from 'node:path';
 
-export type CliCommand = 'chat' | 'print' | 'doctor' | 'login' | 'logout' | 'whoami' | 'consent' | 'update' | 'sessions' | 'config' | 'help' | 'version';
+export type CliCommand = 'chat' | 'print' | 'doctor' | 'login' | 'logout' | 'whoami' | 'consent' | 'update' | 'sessions' | 'config' | 'provider' | 'help' | 'version';
 export type OutputFormat = 'text' | 'json' | 'stream-json';
 export type PermissionModeArg = 'default' | 'acceptEdits' | 'plan' | 'bypass';
 
@@ -48,11 +48,35 @@ export interface ParsedArgs {
   noBrowser: boolean;
   /** `sessions --all`, `update --check` … cờ phụ của lệnh con. */
   flags: Record<string, boolean>;
+  /** `locaith provider <hành-động> …` (chỉ có khi command === 'provider'). */
+  provider?: ProviderArgs;
+}
+
+export interface ProviderArgs {
+  /** list (mặc định) | add | key | remove | test — người gọi kiểm tên. */
+  action: string;
+  /** Các đối số đứng sau hành động (ví dụ id hoặc tên mẫu). */
+  args: string[];
+  id?: string;
+  url?: string;
+  label?: string;
+  models?: string[];
+  kind?: string;
+  /** API này không cần khoá. */
+  noKey: boolean;
+  /** Đọc khoá từ stdin (KHÔNG nhận khoá ở dòng lệnh). */
+  keyStdin: boolean;
+  /** Đọc khoá từ biến môi trường có tên này. */
+  keyEnv?: string;
+  /** `provider key <id> --remove`: xoá khoá đã lưu. */
+  remove: boolean;
+  /** Không thử kết nối sau khi thêm. */
+  noTest: boolean;
 }
 
 export class UsageError extends Error {}
 
-const SUBCOMMANDS = new Set(['doctor', 'login', 'logout', 'whoami', 'consent', 'update', 'sessions', 'config', 'help', 'version', 'ask']);
+const SUBCOMMANDS = new Set(['doctor', 'login', 'logout', 'whoami', 'consent', 'update', 'sessions', 'config', 'provider', 'help', 'version', 'ask']);
 
 const PERMISSION_ALIASES: Record<string, PermissionModeArg> = {
   default: 'default',
@@ -101,6 +125,8 @@ export function parseArgs(argv: string[], cwd: string = process.cwd()): ParsedAr
     flags: {},
   };
   const rest: string[] = [];
+  const pv: ProviderArgs = { action: 'list', args: [], noKey: false, keyStdin: false, remove: false, noTest: false };
+  const pvFlags: string[] = [];
   let printFlag = false;
   let sawSub = false;
 
@@ -243,6 +269,49 @@ export function parseArgs(argv: string[], cwd: string = process.cwd()): ParsedAr
       case '--no-browser':
         o.noBrowser = true;
         break;
+      case '--id':
+        pv.id = val();
+        pvFlags.push(flag);
+        break;
+      case '--url':
+        pv.url = val();
+        pvFlags.push(flag);
+        break;
+      case '--label':
+        pv.label = val();
+        pvFlags.push(flag);
+        break;
+      case '--models':
+        pv.models = val()
+          .split(/[,;\n]/)
+          .map((m) => m.trim())
+          .filter(Boolean);
+        pvFlags.push(flag);
+        break;
+      case '--kind':
+        pv.kind = val();
+        pvFlags.push(flag);
+        break;
+      case '--no-key':
+        pv.noKey = true;
+        pvFlags.push(flag);
+        break;
+      case '--key-stdin':
+        pv.keyStdin = true;
+        pvFlags.push(flag);
+        break;
+      case '--key-env':
+        pv.keyEnv = val();
+        pvFlags.push(flag);
+        break;
+      case '--remove':
+        pv.remove = true;
+        pvFlags.push(flag);
+        break;
+      case '--no-test':
+        pv.noTest = true;
+        pvFlags.push(flag);
+        break;
       case '--all':
       case '--check':
       case '--force':
@@ -256,8 +325,16 @@ export function parseArgs(argv: string[], cwd: string = process.cwd()): ParsedAr
       case '--version':
         o.command = 'version';
         break;
+      case '--key':
+      case '--api-key':
+      case '--apikey':
+      case '--token':
+      case '--password':
+        // Khoá ở dòng lệnh lộ trong lịch sử shell và danh sách tiến trình: từ chối ngay, KHÔNG in lại giá trị.
+        throw new UsageError(`${flag}: không nhận khoá ở dòng lệnh (lộ trong lịch sử shell). Dùng \`locaith provider key <id>\` (ô nhập ẩn), hoặc --key-stdin / --key-env TÊN.`);
       default:
-        throw new UsageError(`Không biết tuỳ chọn ${a}`);
+        // Chỉ in tên cờ, không in `=giá-trị`: giá trị có thể là khoá.
+        throw new UsageError(`Không biết tuỳ chọn ${flag}`);
     }
   }
 
@@ -266,6 +343,11 @@ export function parseArgs(argv: string[], cwd: string = process.cwd()): ParsedAr
     return o;
   }
   if (o.command === 'version') return o;
+  if (o.command === 'provider') {
+    o.provider = { ...pv, action: (rest[0] ?? 'list').toLowerCase(), args: rest.slice(1) };
+    return o;
+  }
+  if (pvFlags.length) throw new UsageError(`Tuỳ chọn ${pvFlags[0]} chỉ dùng với \`locaith provider\``);
   const text = rest.join(' ').trim();
   if (o.command === 'chat') {
     if (printFlag) o.command = 'print';

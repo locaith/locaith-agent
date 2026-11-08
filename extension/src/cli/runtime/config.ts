@@ -32,8 +32,12 @@ interface Layer {
   restricted?: boolean;
 }
 
-/** Khoá an toàn: không bao giờ đọc từ dự án/cục bộ (kho mã lạ không được tự bật quyền nguy hiểm). */
-const SECURE_KEYS = new Set(['agent.allowBypassPermissions']);
+/**
+ * Khoá an toàn: không bao giờ đọc từ dự án/cục bộ (kho mã lạ không được tự bật quyền nguy hiểm).
+ * `customProviders` và `baseUrls` quyết định MÁY CHỦ NÀO nhận lời nhắc và khoá API → chỉ cài đặt người dùng (như `scope: machine` của extension),
+ * nếu không một kho mã lạ có thể đổi địa chỉ để hứng khoá.
+ */
+const SECURE_KEYS = new Set(['agent.allowBypassPermissions', 'customProviders', 'baseUrls']);
 /** Mảng của các khoá này được nối giữa các tầng thay vì bị đè. */
 const CONCAT_PREFIXES = ['permissions.', 'hooks'];
 /** Khoá mà tầng dự án CHƯA TIN CẬY vẫn được đóng góp (chỉ siết chặt). */

@@ -103,6 +103,45 @@ describe('runOnboardingFlow (logic)', () => {
     expect(ui.said.some((s) => s.startsWith('warn:'))).toBe(true);
   });
 
+  it('BYOK (0.4.1): nhà cung cấp ĐÃ lưu sẵn (khoá đã lưu, API cục bộ không cần khoá) được chấp nhận, không bắt thiết lập lại', async () => {
+    const ui = scripted(['byok', 'yes']);
+    let setupCalled = false;
+    const r = await runOnboardingFlow(base({ languageChosen: true, byokKnown: () => ['deepseek (đã lưu khoá)', 'ollama (không cần khoá)'], byokSetup: async () => ((setupCalled = true), true) }), ui);
+    expect(r).toMatchObject({ loggedIn: true, consented: true, cancelled: false });
+    expect(setupCalled).toBe(false);
+    expect(ui.said.join('\n')).toContain('deepseek (đã lưu khoá)');
+  });
+
+  it('BYOK (0.4.1): chưa có gì → chạy trình hướng dẫn ngay tại chỗ (thay vì bắt thoát ra đặt biến môi trường); xong thì đi tiếp', async () => {
+    const ui = scripted(['byok', 'mau-x', 'yes']);
+    let seenIo = false;
+    const r = await runOnboardingFlow(
+      base({
+        languageChosen: true,
+        byokSetup: async (io) => {
+          seenIo = true;
+          // trình hướng dẫn nói chuyện qua cùng giao diện của màn hướng dẫn
+          expect(await io.pick('chọn', [{ id: 'mau-x', label: 'X' }])).toBe('mau-x');
+          io.say('ok', 'đã lưu');
+          return true;
+        },
+      }),
+      ui,
+    );
+    expect(seenIo).toBe(true);
+    expect(r).toMatchObject({ loggedIn: true, consented: true, cancelled: false });
+    expect(ui.asked.some((a) => a === 'pick:chọn')).toBe(true);
+    expect(ui.said).toContain('ok:đã lưu');
+  });
+
+  it('BYOK (0.4.1): huỷ trình hướng dẫn → quay lại màn chọn cách đăng nhập (chọn «bỏ qua» thì đi tiếp không đăng nhập)', async () => {
+    const ui = scripted(['byok', 'skip', 'yes']);
+    let calls = 0;
+    const r = await runOnboardingFlow(base({ languageChosen: true, byokSetup: async () => (calls++, false) }), ui);
+    expect(calls).toBe(1);
+    expect(r).toMatchObject({ loggedIn: false, trusted: true, cancelled: false });
+  });
+
   it('đồng ý thông báo dữ liệu: chọn «chưa» thì không gọi cổng', async () => {
     let called = false;
     const ui = scripted(['byok', false, 'yes']);

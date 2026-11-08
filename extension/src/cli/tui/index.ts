@@ -16,7 +16,7 @@ export { MockRuntime } from './mockRuntime';
 export type { MockOptions } from './mockRuntime';
 export { renderWelcome } from './welcome';
 export type { WelcomeInfo } from './welcome';
-export { runOnboarding } from './onboarding';
+export { runOnboarding, withTerminalUi } from './onboarding';
 export type { OnboardingOptions, OnboardingResult } from './onboarding';
 
 export type RunTuiOptions = TuiOptions;

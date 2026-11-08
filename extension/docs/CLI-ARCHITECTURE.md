@@ -48,7 +48,7 @@ Quy tắc:
 | Quyền | `shared/permissionRules.ts`, `core/engine/permissions.ts`, `host/permissionsFeature.ts` (đọc để biết cách «Luôn cho phép») | |
 | @tệp, tài liệu | `host/userContent.ts` (`buildUserContent`), `shared/docExtract.ts` | |
 | Đăng nhập tài khoản | `cli/account.ts`, `cli/browserLogin.ts`, `core/account/*`, `core/providers/locaithGateway.ts`, `core/providers/gatewayDiagnostics.ts` | |
-| Nhà cung cấp khác (BYOK) | `core/providers/{index,presets}.ts` | đọc khoá từ biến môi trường (ANTHROPIC_API_KEY, OPENAI_API_KEY, GEMINI_API_KEY, DEEPSEEK_API_KEY, XAI_API_KEY…) |
+| Nhà cung cấp khác (BYOK) | `core/providers/{index,presets,registry,service}.ts` + `cli/providerStore.ts` (kho khoá đã lưu, kiểm `customProviders`/`baseUrls`, ghi cài đặt người dùng), `cli/providerWizard.ts` (trình hướng dẫn qua `WizardIO`), `cli/providerCmd.ts` (`locaith provider …`), `cli/runtime/providers.ts` (`CliProviders`), `/provider` ở `runtime/slash.ts` | khoá từ biến môi trường (ANTHROPIC_API_KEY, OPENAI_API_KEY, GEMINI_API_KEY, DEEPSEEK_API_KEY, XAI_API_KEY, `<ID>_API_KEY`) hoặc khoá ĐÃ LƯU ở `~/.locaith/provider-keys.json` (0.4.1); xem §3 |
 
 ## 3. Cài đặt, tin cậy, tệp
 
@@ -56,6 +56,13 @@ Quy tắc:
   Khoá giống cài đặt extension bỏ tiền tố `locaithAgent.` (ví dụ `agent.compactAtPercent`, `permissions.allow`, `hooks`, `checkpoints.enabled`, `agent.outputStyle`).
 - **Tin cậy thư mục** (`~/.locaith/trusted.json`): chưa tin → cài đặt dự án CHỈ được thêm luật `ask/deny`; hooks, MCP, lệnh `.locaith/commands` của dự án KHÔNG chạy; chế độ mặc định thành `plan`-an toàn như extension (`workspace untrusted`).
 - Khoá tài khoản: `LOCAITH_API_KEY` hoặc `~/.locaith/cli.json` (quyền 600) — giữ nguyên cơ chế hiện có. Không bao giờ in khoá ra log/màn hình.
+- **Khoá hãng khác (0.4.1)** — các bất biến phải giữ khi sửa phần này:
+  1. Khoá đã lưu ở `~/.locaith/provider-keys.json` (`{version:1, keys:{id:{key,baseUrl,savedAt}}}`, quyền 600, ghi nguyên tử), TÁCH khỏi `cli.json`. Biến môi trường luôn THẮNG khoá đã lưu (`CliProviders.savedKeyForUse` trả undefined khi env đặt → registry rơi về env).
+  2. Mỗi khoá GẮN với địa chỉ lúc lưu; chỉ gửi khi `effectiveBaseUrl(id)` — địa chỉ THẬT mà registry sẽ gọi (hãng dựng sẵn: `baseUrls` hoặc mặc định; API tuỳ chỉnh: `baseUrl` của chính nó) — còn khớp. Lệch → không gửi, `problems()`/`provider list`/`/doctor` báo.
+  3. `customProviders` và `baseUrls` nằm trong `SECURE_KEYS` (`runtime/config.ts`): chỉ đọc từ cài đặt NGƯỜI DÙNG; cài đặt dự án/cục bộ bị bỏ qua dù thư mục đã tin cậy (kho lạ không được chuyển hướng khoá). `baseUrls` chỉ nhận id hãng dựng sẵn + `locaith`.
+  4. Địa chỉ: https luôn được; http chỉ tới máy này, hoặc mạng nội bộ khi API không cần khoá (`checkBaseUrl`). Mục sai bị bỏ KÈM lý do (`validateCustomProviders`/`validateBaseUrls`), không lặng lẽ.
+  5. Không nhận khoá ở dòng lệnh: ô nhập ẩn, `--key-stdin`, `--key-env`; `parseArgs` từ chối `--key=…` mà không in lại giá trị; đối số thừa không bị in lại. Mọi khoá được `logger.registerSecret`.
+  6. Ghi cài đặt/khoá chỉ qua `providerStore` (đọc-sửa-ghi nguyên tử; tệp hỏng → KHÔNG ghi đè). Trình hướng dẫn chỉ nói chuyện qua `WizardIO` nên kiểm thử bằng giao diện giả; `submit('/provider …')` trả về khi lệnh trao quyền cho người dùng (ask) — chờ `idle()`.
 - Phiên: `~/.locaith/sessions/<id>.json` (định dạng của `shared/sessionStore`: `{session, transcript, …}`), **đọc được cả định dạng cũ của CLI 0.3.x** (`{id,title,model,cwd,messages}`) và chuyển lên khi lưu lại. Ghi nguyên tử (tệp tạm + rename), quyền 600.
   Ảnh đính kèm thu nhỏ (≤ 1568 px, JPEG/PNG vừa phải) trước khi lưu/gửi; transcript chỉ giữ bản xem trước nhỏ.
 - Lịch sử gõ: `~/.locaith/history` (300 dòng, quyền 600). Thư mục kiểm tra: `~/.locaith/{checkpoints,skills,commands,memory}`.

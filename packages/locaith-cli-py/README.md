@@ -32,8 +32,24 @@ Gõ tiếp khi trợ lý đang chạy: tin được **xếp hàng** và gửi �
 
 **Lệnh gạch chéo** (đầy đủ: `/help` trong phiên hoặc `locaith help commands`):
 `/clear` `/compact` `/context` `/cost` `/model` `/mode` `/thinking` `/resume` `/sessions` `/rewind` `/fork` `/tasks` `/hooks` `/permissions` `/agents` `/mcp` `/memory` `/init` `/skills`
-`/review` `/simplify` `/security-review` `/verify` `/output-style` `/config` `/theme` `/login` `/logout` `/whoami` `/doctor` `/update` `/export` `/copy` `/exit`.
+`/review` `/simplify` `/security-review` `/verify` `/output-style` `/config` `/theme` `/login` `/logout` `/whoami` `/provider` `/doctor` `/update` `/export` `/copy` `/exit`.
 Tự thêm lệnh: tạo `.locaith/commands/ten.md` (dự án) hoặc `~/.locaith/commands/ten.md` (cá nhân), dùng `$ARGUMENTS`, `@tệp`, ``!`lệnh` ``.
+
+## Dùng khoá hoặc API của hãng khác
+
+Ngoài mô hình Locaith, dùng được khoá của **Anthropic · OpenAI · Gemini · DeepSeek · xAI**, các API tương thích OpenAI (**OpenRouter · Ollama · LM Studio · Groq · Together · Mistral · Fireworks**) hoặc máy chủ riêng của bạn:
+
+```bash
+locaith provider add                  # trình hướng dẫn: chọn hãng/mẫu → dán khoá (ô ẩn) → thử kết nối
+locaith provider add ollama --models qwen3-coder                                  # chạy trên máy bạn, không cần khoá
+locaith provider add my-llm --url https://llm.example.com/v1 --key-env MY_LLM_KEY # API riêng
+locaith provider key anthropic        # lưu / đổi khoá một hãng   (--key-stdin · --key-env TÊN · --remove)
+locaith provider list | test | remove <id>
+locaith --model ollama:qwen3-coder    # hoặc /model trong phiên
+```
+
+Trong phiên gõ `/provider`: nhà cung cấp vừa thêm dùng được ngay. Khoá lưu ở `~/.locaith/provider-keys.json` (quyền 600) và **gắn với địa chỉ lúc lưu** — đổi địa chỉ thì khoá không được gửi đi.
+**Không nhập khoá ở dòng lệnh** (lộ trong lịch sử shell). Cài đặt trong kho mã không thêm được nhà cung cấp hay đổi địa chỉ — chỉ `~/.locaith/settings.json` của bạn. Chi tiết: `locaith help providers`.
 
 ## Quyền — bạn luôn nắm quyền
 
@@ -75,7 +91,7 @@ Biến môi trường: `LOCAITH_API_KEY`, `LOCAITH_LANG=vi|en`, `NO_COLOR=1`, `L
 
 ## Lệnh con
 
-`locaith doctor` (kiểm máy + cách sửa) · `login` / `logout` / `whoami` · `consent --yes` · `update` · `sessions` · `config` · `help [chủ đề]` · `--version`.
+`locaith doctor` (kiểm máy + cách sửa) · `login` / `logout` / `whoami` · `consent --yes` · `provider` (nhà cung cấp mô hình) · `update` · `sessions` · `config` · `help [chủ đề]` · `--version`.
 
 ## Cập nhật, gỡ cài đặt, thu hồi quyền
 
@@ -100,4 +116,5 @@ Khoá không bao giờ được ghi ra log; `locaith doctor --json` đã tự �
 - **Non-interactive**: `locaith -p "task"` (reads stdin, `--output-format json|stream-json`, `--permission-mode`, `--allowedTools`); unprompted actions are denied, never hang. Exit codes: 0 ok · 1 error · 2 usage · 127 Node missing · 130 interrupted.
 - **Same engine as the VS Code extension**: permission rules, hooks, checkpoints/rewind, background tasks, MCP, skills, sub-agents, context compaction, independent verification.
 - **Config**: `~/.locaith/settings.json` < project `.locaith/settings.json` < `.locaith/settings.local.json`; env `LOCAITH_API_KEY`, `LOCAITH_LANG`, `NO_COLOR`, `LOCAITH_ASCII`, `LOCAITH_HOME`, `LOCAITH_NODE`. Project settings need a trusted folder.
-- **Diagnose**: `locaith doctor` · **Update**: `locaith update` · **Help topics**: `locaith help commands|shortcuts|print|settings|permissions|hooks|mcp|sessions|memory|troubleshooting`.
+- **Other vendors / your own API** (0.4.1): `locaith provider add|key|list|test|remove` and `/provider` — Anthropic, OpenAI, Gemini, DeepSeek, xAI, OpenAI-compatible presets (OpenRouter, Ollama, LM Studio, Groq, Together, Mistral, Fireworks) or any address. Keys go through a hidden prompt, `--key-stdin` or `--key-env` (never the command line) and are saved to `~/.locaith/provider-keys.json` (mode 600), bound to the address they were saved for. A repository cannot add providers or change addresses. `locaith help providers`.
+- **Diagnose**: `locaith doctor` · **Update**: `locaith update` · **Help topics**: `locaith help commands|shortcuts|print|settings|permissions|providers|hooks|mcp|sessions|memory|troubleshooting`.

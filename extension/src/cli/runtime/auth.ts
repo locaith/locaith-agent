@@ -58,8 +58,8 @@ export class NotLoggedInError extends Error {
 
   constructor(lang: 'vi' | 'en' = 'vi', detail?: { configFile?: string }) {
     const file = detail?.configFile ?? '~/.locaith/cli.json';
-    const vi = `Chưa đăng nhập Locaith. Chạy \`locaith login\` (mở trình duyệt, bấm «Cho phép»), hoặc đặt biến môi trường LOCAITH_API_KEY / ghi { "apiKey": "lat_…" } vào ${file}. Muốn dùng khoá hãng khác: đặt ANTHROPIC_API_KEY, OPENAI_API_KEY, GEMINI_API_KEY, DEEPSEEK_API_KEY hoặc XAI_API_KEY.`;
-    const en = `Not logged in to Locaith. Run \`locaith login\` (opens the browser, click “Allow”), or set LOCAITH_API_KEY / write { "apiKey": "lat_…" } to ${file}. To use another vendor's key set ANTHROPIC_API_KEY, OPENAI_API_KEY, GEMINI_API_KEY, DEEPSEEK_API_KEY or XAI_API_KEY.`;
+    const vi = `Chưa đăng nhập Locaith. Chạy \`locaith login\` (mở trình duyệt, bấm «Cho phép»), hoặc đặt biến môi trường LOCAITH_API_KEY / ghi { "apiKey": "lat_…" } vào ${file}. Muốn dùng khoá hoặc API của hãng khác (OpenRouter, Ollama…): chạy \`locaith provider add\`, hoặc đặt ANTHROPIC_API_KEY, OPENAI_API_KEY, GEMINI_API_KEY, DEEPSEEK_API_KEY hay XAI_API_KEY.`;
+    const en = `Not logged in to Locaith. Run \`locaith login\` (opens the browser, click “Allow”), or set LOCAITH_API_KEY / write { "apiKey": "lat_…" } to ${file}. To use another vendor's key or API (OpenRouter, Ollama…): run \`locaith provider add\`, or set ANTHROPIC_API_KEY, OPENAI_API_KEY, GEMINI_API_KEY, DEEPSEEK_API_KEY or XAI_API_KEY.`;
     super(lang === 'en' ? en : vi);
     this.name = 'NotLoggedInError';
     this.vi = vi;

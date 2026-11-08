@@ -12,8 +12,10 @@ import { gatewayDiagnosticHeaders } from '../../core/providers/gatewayDiagnostic
 import { LOCAITH_MODEL_FLASH, LOCAITH_PROVIDER_ID } from '../../core/providers/locaithGateway';
 import type { AccountProviderHooks, CustomProviderConfig } from '../../core/providers/registry';
 import { ProviderService } from '../../core/providers/service';
-import type { LLMProvider, LogLevel, ModelInfo } from '../../core/types';
+import { ProviderError, type LLMProvider, type LogLevel, type ModelInfo } from '../../core/types';
 import type { SettingsStore } from './config';
+import { t as cliT } from '../i18n';
+import { customEnvName, readStoredKeys, storedKeyFor, validateBaseUrls, validateCustomProviders } from '../providerStore';
 import { NotLoggedInError, readLocaithKey } from './auth';
 
 const DEFAULT_CONTEXT = 128_000;
@@ -41,6 +43,25 @@ export interface ProvidersInit {
   fetchImpl?: typeof fetch;
   log(level: LogLevel, message: string): void;
   lang(): 'vi' | 'en';
+}
+
+export interface ProviderRow {
+  id: string;
+  label: string;
+  baseUrl: string;
+  kind: string;
+  builtin: boolean;
+  usable: boolean;
+  key: { source: 'login' | 'env' | 'saved' | 'not-required' | 'none' | 'mismatch'; env?: string; savedUrl?: string };
+}
+
+/** Kết quả thử kết nối. `reason` (khi hỏng): không tới được máy chủ · khoá bị từ chối · máy chủ trả lời nhưng không có /models · khác. */
+export interface ProviderTestResult {
+  ok: boolean;
+  models?: number;
+  ms: number;
+  error?: string;
+  reason?: 'unreachable' | 'auth' | 'no-models' | 'other';
 }
 
 export interface ProviderTarget {
@@ -81,7 +102,8 @@ export class CliProviders {
       customProviders: () => this.customProviders(),
       eagerInput: () => false,
       summarizerModel: () => (i.settings.get<string>('summarizer.model', 'auto') || 'auto').trim() || 'auto',
-      resolveKey: async () => undefined, // khoá hãng khác chỉ lấy từ biến môi trường (registry tự đọc `env`)
+      // Khoá hãng khác: biến môi trường thắng (registry tự đọc `env` khi hàm này trả undefined); không có thì dùng khoá đã lưu bằng `locaith provider key`.
+      resolveKey: async (id) => this.savedKeyForUse(id),
       log: (l, m) => i.log(l, m),
       env: i.env,
       fetchImpl: i.fetchImpl,
@@ -94,24 +116,32 @@ export class CliProviders {
   // ── cấu hình ────────────────────────────────────────────────────────────────
 
   private baseUrls(): Record<string, string> {
-    const raw = this.i.settings.get<unknown>('baseUrls', {});
-    const out: Record<string, string> = {};
-    if (raw && typeof raw === 'object' && !Array.isArray(raw)) {
-      for (const [id, url] of Object.entries(raw as Record<string, unknown>)) {
-        if (typeof url === 'string' && /^https:\/\//i.test(url.trim())) out[id] = url.trim();
-        else if (typeof url === 'string' && /^http:\/\/(localhost|127\.0\.0\.1|\[::1\])(:\d+)?(\/|$)/i.test(url.trim())) out[id] = url.trim();
-      }
-    }
+    // Chỉ cài đặt NGƯỜI DÙNG (xem SECURE_KEYS ở config.ts); mục sai bị bỏ và được báo ở `problems()`.
+    const out = { ...validateBaseUrls(this.i.settings.get<unknown>('baseUrls', undefined), this.i.lang()).valid };
     if (this.i.baseUrl && this.i.baseUrl.trim()) out[LOCAITH_PROVIDER_ID] = this.i.baseUrl.trim();
     return out;
   }
 
   private customProviders(): CustomProviderConfig[] {
-    const raw = this.i.settings.get<unknown>('customProviders', []);
-    if (!Array.isArray(raw)) return [];
-    return raw.filter(
-      (c): c is CustomProviderConfig => !!c && typeof c === 'object' && typeof (c as CustomProviderConfig).id === 'string' && typeof (c as CustomProviderConfig).baseUrl === 'string' && /^(https:\/\/|http:\/\/(localhost|127\.0\.0\.1))/i.test((c as CustomProviderConfig).baseUrl),
-    );
+    return validateCustomProviders(this.i.settings.get<unknown>('customProviders', undefined), this.i.lang()).valid;
+  }
+
+  /** Nạp lại cấu hình (sau khi `/provider` hoặc `locaith provider` ghi cài đặt/khoá): dựng lại registry, bỏ danh sách model đã đệm của mục đổi. */
+  reload(): void {
+    this.probCache = undefined;
+    // SettingsStore đệm 300 ms: vừa ghi tệp xong mà không bỏ đệm thì sẽ đọc lại bản cũ.
+    this.i.settings.invalidate();
+    this.service.reconfigure();
+  }
+
+  /**
+   * Địa chỉ THẬT mà nhà cung cấp sẽ gọi — phải khớp từng chữ với cách registry dựng (khoá đã lưu được gắn/so với địa chỉ này):
+   * hãng dựng sẵn và cổng Locaith = ghi đè trong `baseUrls` hoặc mặc định của hãng; API tuỳ chỉnh = "baseUrl" của chính nó (registry không áp `baseUrls` cho nó).
+   */
+  effectiveBaseUrl(id: string): string | undefined {
+    const p = this.presetOf(id);
+    if (p) return this.baseUrls()[id] || p.baseUrl;
+    return this.customProviders().find((c) => c.id === id)?.baseUrl;
   }
 
   get overridden(): boolean {
@@ -133,21 +163,154 @@ export class CliProviders {
   envNames(id: string): string[] {
     const p = this.presetOf(id);
     if (p) return p.credential === 'account' ? ['LOCAITH_API_KEY'] : p.envKeys;
-    return [`${id.toUpperCase().replace(/[^A-Z0-9]/g, '_')}_API_KEY`];
+    return [customEnvName(id)];
+  }
+
+  /** Có biến môi trường nào chứa khoá của nhà cung cấp này không (trả tên biến đầu tiên có giá trị). */
+  envSet(id: string): string | undefined {
+    return this.envNames(id).find((n) => (this.i.env[n] ?? '').trim().length > 0);
+  }
+
+  /**
+   * Khoá đã lưu dùng được cho `id`? Chỉ khi biến môi trường KHÔNG đặt (env thắng) và địa chỉ hiện tại còn KHỚP địa chỉ lúc lưu
+   * (đổi địa chỉ → khoá ngừng được gửi đi, xem providerStore.ts).
+   */
+  private savedKeyForUse(id: string): string | undefined {
+    if (id === LOCAITH_PROVIDER_ID || this.envSet(id)) return undefined;
+    const url = this.effectiveBaseUrl(id);
+    if (!url) return undefined;
+    const r = storedKeyFor(this.i.home, id, url);
+    return 'key' in r ? r.key : undefined;
   }
 
   hasKey(id: string): boolean {
     if (this.override && id === this.override.id) return true;
     if (id === LOCAITH_PROVIDER_ID) return !!this.token();
-    const p = this.presetOf(id);
-    const names = this.envNames(id);
-    if (names.some((n) => (this.i.env[n] ?? '').trim())) return true;
+    if (this.envSet(id)) return true;
+    if (this.savedKeyForUse(id)) return true;
     // API tuỳ chỉnh không đòi khoá (Ollama, LM Studio…).
-    if (!p) {
+    if (!this.presetOf(id)) {
       const c = this.customProviders().find((x) => x.id === id);
       return !!c && c.requiresKey !== true;
     }
     return false;
+  }
+
+  /** Khoá của `id` đến từ đâu (cho `provider list`, /doctor): đăng nhập · biến môi trường · đã lưu · không cần · chưa có · lệch địa chỉ. */
+  keySource(id: string): { source: 'login' | 'env' | 'saved' | 'not-required' | 'none' | 'mismatch'; env?: string; savedUrl?: string } {
+    if (id === LOCAITH_PROVIDER_ID) return { source: this.token() ? 'login' : 'none' };
+    const env = this.envSet(id);
+    if (env) return { source: 'env', env };
+    const url = this.effectiveBaseUrl(id);
+    if (url) {
+      const r = storedKeyFor(this.i.home, id, url);
+      if ('key' in r) return { source: 'saved' };
+      if ('mismatch' in r) return { source: 'mismatch', savedUrl: r.mismatch.savedUrl };
+    }
+    if (!this.presetOf(id)) {
+      const c = this.customProviders().find((x) => x.id === id);
+      if (c && c.requiresKey !== true) return { source: 'not-required' };
+    }
+    return { source: 'none' };
+  }
+
+  /** Bảng nhà cung cấp cho `provider list` và `/provider list`: mọi nhà cung cấp đã đăng ký (trừ demo/auto) kèm địa chỉ hiệu lực và nguồn khoá. */
+  rows(): ProviderRow[] {
+    const ids = this.service.registry.ids().filter((x) => x !== 'demo' && x !== 'auto' && (!this.override || x === this.override.id));
+    return ids.map((id) => {
+      let kind = '';
+      try {
+        kind = this.service.get(id).kind;
+      } catch {
+        /* nhà cung cấp biến mất giữa chừng */
+      }
+      return { id, label: this.label(id), baseUrl: this.effectiveBaseUrl(id) ?? '', kind, builtin: !!this.presetOf(id), key: this.keySource(id), usable: this.hasKey(id) };
+    });
+  }
+
+  /** Mọi khoá đang có (đã lưu + biến môi trường của các nhà cung cấp biết trước) — để che khỏi nhật ký. */
+  secrets(): string[] {
+    const out = new Set<string>();
+    for (const sk of Object.values(readStoredKeys(this.i.home).keys)) out.add(sk.key);
+    const ids = [...BYOK_ORDER, ...this.customProviders().map((c) => c.id)];
+    for (const id of ids) for (const n of this.envNames(id)) {
+      const v = (this.i.env[n] ?? '').trim();
+      if (v) out.add(v);
+    }
+    return [...out];
+  }
+
+  private probCache?: { at: number; list: string[] };
+
+  /** Mô tả MỌI điều sai trong cấu hình nhà cung cấp (mục bị bỏ qua, địa chỉ bị từ chối, khoá đã lưu lệch địa chỉ, tệp khoá hỏng). Đệm 3 giây. */
+  problems(): string[] {
+    const now = Date.now();
+    if (this.probCache && now - this.probCache.at < 3000) return this.probCache.list;
+    const lang = this.i.lang();
+    const out = [
+      ...validateCustomProviders(this.i.settings.get<unknown>('customProviders', undefined), lang).problems,
+      ...validateBaseUrls(this.i.settings.get<unknown>('baseUrls', undefined), lang).problems,
+    ];
+    const ks = readStoredKeys(this.i.home);
+    if (ks.problem) out.push(ks.problem);
+    for (const id of Object.keys(ks.keys)) {
+      const url = this.effectiveBaseUrl(id);
+      if (!url) continue; // khoá mồ côi (nhà cung cấp đã gỡ): không phải lỗi cấu hình
+      const r = storedKeyFor(this.i.home, id, url);
+      if ('mismatch' in r) out.push(cliT('cli.prov.cfg.keyMismatch', { id, saved: r.mismatch.savedUrl, now: url }, lang));
+    }
+    this.probCache = { at: now, list: out };
+    return out;
+  }
+
+  /** API tuỳ chỉnh `id` có ghim sẵn danh sách model không (khi đó không cần /models để dùng). */
+  hasPinnedModels(id: string): boolean {
+    return (this.customProviders().find((c) => c.id === id)?.models?.length ?? 0) > 0;
+  }
+
+  /**
+   * Thử kết nối tới `id` bằng `ping` (GET danh sách model, KHÔNG thử lại): lỗi thật — từ chối kết nối, sai khoá, quá giờ — hiện ngay và đúng
+   * nguyên nhân, không bị che bởi vòng thử lại 1+2+4+8 giây của `fetchModels`. Ping qua thì đếm model (hỏng bước đếm không làm hỏng phép thử).
+   * Hạn giờ tổng `timeoutMs`; huỷ được các yêu cầu đang bay. Không bao giờ ném.
+   */
+  async test(id: string, timeoutMs = 8000): Promise<ProviderTestResult> {
+    const t0 = Date.now();
+    const ctl = new AbortController();
+    let timedOut = false;
+    let timer: NodeJS.Timeout | undefined;
+    const deadline = new Promise<never>((_, rej) => {
+      timer = setTimeout(() => {
+        timedOut = true;
+        ctl.abort();
+        rej(new Error(cliT('cli.prov.test.timeout', { s: Math.max(1, Math.round(timeoutMs / 1000)) }, this.i.lang())));
+      }, timeoutMs);
+      timer.unref?.();
+    });
+    deadline.catch(() => undefined); // phép thử xong trước hạn thì lời từ chối này không còn ai nghe
+    try {
+      const p = this.service.get(id);
+      await Promise.race([p.ping(ctl.signal), deadline]);
+      let models: number | undefined;
+      try {
+        models = (await Promise.race([p.fetchModels(ctl.signal), deadline])).length;
+      } catch {
+        /* /models trả lỗi sau khi ping qua (hiếm): vẫn tính là thông, chỉ không đếm được model */
+      }
+      return { ok: true, ...(models !== undefined ? { models } : {}), ms: Date.now() - t0 };
+    } catch (err) {
+      const pe = err instanceof ProviderError ? err : undefined;
+      const reason: ProviderTestResult['reason'] =
+        timedOut || pe?.kind === 'network' || pe?.kind === 'timeout'
+          ? 'unreachable'
+          : pe?.kind === 'auth' || pe?.status === 401 || pe?.status === 403
+            ? 'auth'
+            : pe?.kind === 'not_found' || pe?.status === 404 || pe?.status === 405
+              ? 'no-models'
+              : 'other';
+      return { ok: false, reason, ms: Date.now() - t0, error: err instanceof Error ? err.message : String(err) };
+    } finally {
+      if (timer) clearTimeout(timer);
+    }
   }
 
   /** Các nhà cung cấp dùng được ngay (đã có khoá), theo thứ tự ưu tiên. */
@@ -195,7 +358,9 @@ export class CliProviders {
     if (id === LOCAITH_PROVIDER_ID) return new NotLoggedInError(this.i.lang(), { configFile: '~/.locaith/cli.json' });
     const names = this.envNames(id).join(' / ');
     const label = this.label(id);
-    return new Error(this.i.lang() === 'en' ? `No API key for ${label}: set ${names}.` : `Chưa có khoá API cho ${label}: đặt biến môi trường ${names}.`);
+    const ks = this.keySource(id);
+    if (ks.source === 'mismatch') return new Error(cliT('cli.prov.cfg.keyMismatchErr', { id, label, saved: ks.savedUrl ?? '', now: this.effectiveBaseUrl(id) ?? '' }, this.i.lang()));
+    return new Error(cliT('cli.prov.noKey', { label, names, id }, this.i.lang()));
   }
 
   /**

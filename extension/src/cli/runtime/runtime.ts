@@ -216,6 +216,10 @@ export class Runtime implements CliRuntime {
       log: (l, m) => this.logger.log(l, m),
       lang: () => this.lang,
     });
+    // Che mọi khoá hãng khác (đã lưu + biến môi trường) khỏi nhật ký; báo điều sai trong cấu hình nhà cung cấp ngay lúc khởi động.
+    for (const sec of this.providers.secrets()) this.logger.registerSecret(sec);
+    const provProblems = this.providers.problems();
+    if (provProblems.length) this.startupNotices.push(this.tr('providerProblems', { n: provProblems.length, first: provProblems[0]! }));
 
     // Chọn nhà cung cấp/model. Cờ --model là lựa chọn rõ ràng (sai → lỗi); cài đặt `model`/`defaultModel` chỉ là mặc định (sai → rơi về mặc định).
     let target: { provider: string; model: string };
@@ -431,6 +435,8 @@ export class Runtime implements CliRuntime {
     if (acct.loggedIn && acct.consent === false && s.provider === LOCAITH_PROVIDER_ID) notices.push(this.tr('noticeConsent'));
     if (this.modelQueue) notices.push(this.tr('noticeQueue', { pos: this.modelQueue.position, limit: this.modelQueue.limit ?? '?' }));
     if (this.featureErrors.length) notices.push(this.tr('noticeFeatureErrors', { n: this.featureErrors.length }));
+    const provProblems = this.providers.problems();
+    if (provProblems.length) notices.push(this.tr('noticeProviderProblems', { n: provProblems.length }));
     const st: RuntimeStatus = {
       version: this.opts.version,
       cwd: this.cwd,

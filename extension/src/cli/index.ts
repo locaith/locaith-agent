@@ -23,14 +23,17 @@ import { deviceLabel, loginWithBrowser } from './browserLogin';
 import { configFile, hasByokKey, homeDir, readApiKey, removeApiKey, writeApiKey } from './credentials';
 import { doctor } from './doctor';
 import { HELP_TOPICS, helpTopicText, topicList, usageText } from './help';
-import { detectLang, setLang, t, type Lang } from './i18n';
+import { detectLang, getLang, setLang, t, type Lang } from './i18n';
 import { runPrint, type PrintDeps } from './print';
+import { runProviderCommand, wizardDeps, type ProviderCmdDeps } from './providerCmd';
+import { knownProviders } from './providerStore';
+import { addProviderFlow, wizardIoFromUi, type WizardIO } from './providerWizard';
 import { createRuntime, isDirTrusted, NotLoggedInError, trustDir } from './runtime';
 import { SessionRepo } from './runtime/sessions';
-import { runOnboarding, runTui } from './tui';
+import { runOnboarding, runTui, withTerminalUi } from './tui';
 import { compareVersions, latestKnown, runUpdate, updateAvailable } from './update';
 
-export const VERSION = '0.4.0';
+export const VERSION = '0.4.1';
 
 // ── nhỏ gọn: ngôn ngữ, tin cậy, tiện ích ─────────────────────────────────────────────────────────
 
@@ -230,6 +233,24 @@ async function acceptConsentNow(a: ParsedArgs, env: NodeJS.ProcessEnv): Promise<
   return { ok: false, message: r.error === 'unauthorized' ? t('cli.consent.unauthorized') : r.error === 'network' ? t('cli.consent.network') : t('cli.consent.rejected', { why: r.message ?? '—' }) };
 }
 
+/** Phụ thuộc cho `locaith provider …` và bước «dùng khoá hãng khác» của màn hình hướng dẫn lần đầu. */
+function providerDeps(a: ParsedArgs, env: NodeJS.ProcessEnv, lang: Lang): ProviderCmdDeps {
+  const tty = !!process.stdin.isTTY && !!process.stdout.isTTY;
+  return {
+    home: homeDir(env),
+    env,
+    cwd: a.cwd,
+    lang,
+    version: VERSION,
+    out: (l) => console.log(l),
+    err: (l) => console.error(l),
+    isTTY: tty,
+    // stdin là terminal (quên đưa khoá qua ống): KHÔNG đợi người dùng gõ — chữ gõ vào sẽ hiện nguyên trên màn hình. Trả rỗng để lệnh báo «hãy đưa khoá vào».
+    readStdin: async () => (process.stdin.isTTY ? '' : ((await readStdin()) ?? '')),
+    ...(tty ? { withUi: <T>(fn: (io: WizardIO) => Promise<T>) => withTerminalUi({ version: VERSION, lang, cwd: a.cwd, env, noColor: a.noColor }, (ui) => fn(wizardIoFromUi(ui))) } : {}),
+  };
+}
+
 async function chat(a: ParsedArgs, env: NodeJS.ProcessEnv, lang: Lang): Promise<number> {
   const tty = !!process.stdin.isTTY && !!process.stdout.isTTY;
   if (!tty) {
@@ -259,6 +280,8 @@ async function chat(a: ParsedArgs, env: NodeJS.ProcessEnv, lang: Lang): Promise<
       accountDeps: (io) => ({ ...accountDeps(a, env), ask: io.ask, out: io.out, err: io.err }),
       acceptConsent: () => acceptConsentNow(a, env),
       saveLang: (l) => saveLanguage(l, env),
+      byokKnown: () => knownProviders(home, env, getLang()),
+      byokSetup: async (io) => !!(await addProviderFlow(io, wizardDeps(providerDeps(a, env, getLang())))),
       saveTrust: (v) => {
         if (v) trustDir(home, a.cwd);
       },
@@ -413,6 +436,8 @@ async function main(argv: string[]): Promise<number> {
         return configCmd(a, env);
       case 'sessions':
         return await sessionsCmd(a, env);
+      case 'provider':
+        return await runProviderCommand(a, providerDeps(a, env, lang));
       case 'print':
         return await runPrint(a, printDeps(a, env, lang));
       case 'chat':

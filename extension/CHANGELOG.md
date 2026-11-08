@@ -1,5 +1,14 @@
 # Changelog
 
+## locaith-cli 0.4.1 - 2026-11-08 (PyPI only — the extension stays at 0.7.2)
+
+- **Use another vendor's key or your own API from the terminal.** `locaith provider add|key|list|test|remove`, and `/provider` inside a session: Anthropic, OpenAI, Gemini, DeepSeek, xAI, OpenAI-compatible presets (OpenRouter, Ollama, LM Studio, Groq, Together, Mistral, Fireworks) or any address. A provider you add works in the running session at once (no restart). The first-run "use another vendor's key" step opens the same wizard instead of telling you to set an environment variable yourself.
+- **Keys are never typed on the command line.** A hidden prompt, `--key-stdin` or `--key-env NAME`; `--key sk-…` (or a key typed after the command) is refused without being echoed back. Saved keys live in `~/.locaith/provider-keys.json` (mode 600, atomic writes), are masked from logs, and are **bound to the address they were saved for** — if the address changes the key is no longer sent, and `locaith provider list` / `/doctor` say why. Environment variables still win over saved keys.
+- **A cloned repository can no longer point your key at another server.** `customProviders` and `baseUrls` are now read from your own `~/.locaith/settings.json` only; project and local settings are ignored (before, a trusted folder's `.locaith/settings.json` could set them).
+- **Clear errors instead of silent skips.** A bad entry (plain `http://` to a public host, `user:password@` in the address, unknown `kind`, a reserved id) used to be dropped without a word; it is now reported with the reason by `provider list`, `/doctor`, `locaith doctor` and a start-up notice. `http://` is accepted for this machine, and for a local network when the API needs no key.
+- **An honest connection test.** `provider test` pings `/models` without retries, so a refused connection, a rejected key and a server with no `/models` are told apart within a second, instead of one "no response in 8 seconds".
+- 186 new tests (store, wizard, command, slash, first-run, strings, and a real-process end-to-end run against a local server).
+
 ## 0.7.2 - 2026-11-08
 
 - **The Lo logo comes alive while you wait.** The icon on the "working" line is still the glowing Lo for the first 8 seconds; on a long wait it sweeps into a small character — a robot dog, a robot, a drone, a rocket — and sweeps back to the logo (80-second cycle: 8 s logo · dog 12 s · rest 6 s · robot 12 s · rest 6 s · drone 12 s · rest 6 s · rocket 18 s; from the second cycle the order is shuffled but never repeats). The icon cell is a fixed 20×20 px so the line never changes height; reduced motion shows only the logo; high-contrast themes use system colours; light themes get dark eyes and a softer glow. New setting `locaithAgent.ui.workingCharacters` (on by default; also in Settings) — off keeps the plain spinner. The same animation runs on the Remote page and in the Chrome/Edge build.

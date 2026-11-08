@@ -6,6 +6,7 @@
 import { chmodSync, existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { knownProviders } from './providerStore';
 
 export function homeDir(env: NodeJS.ProcessEnv = process.env): string {
   return env.LOCAITH_HOME?.trim() || os.homedir();
@@ -54,7 +55,15 @@ export function maskKey(key: string): string {
   return `${key.slice(0, 6)}… (${key.length})`;
 }
 
-/** Khoá của hãng khác (BYOK) có trong môi trường không — chỉ để quyết định có cần đăng nhập Locaith hay không. */
+/**
+ * Có nhà cung cấp hãng khác dùng được không — chỉ để quyết định có cần đăng nhập Locaith hay không: khoá trong môi trường, khoá ĐÃ LƯU bằng
+ * `locaith provider key`, hoặc API tuỳ chỉnh (`customProviders`) không cần khoá / đã có biến `<ID>_API_KEY`.
+ */
 export function hasByokKey(env: NodeJS.ProcessEnv = process.env): boolean {
-  return ['ANTHROPIC_API_KEY', 'OPENAI_API_KEY', 'GEMINI_API_KEY', 'GOOGLE_API_KEY', 'DEEPSEEK_API_KEY', 'XAI_API_KEY', 'OPENROUTER_API_KEY'].some((k) => (env[k] ?? '').trim().length > 0);
+  if (['ANTHROPIC_API_KEY', 'OPENAI_API_KEY', 'GEMINI_API_KEY', 'GOOGLE_API_KEY', 'DEEPSEEK_API_KEY', 'XAI_API_KEY', 'OPENROUTER_API_KEY'].some((k) => (env[k] ?? '').trim().length > 0)) return true;
+  try {
+    return knownProviders(homeDir(env), env, 'vi').length > 0;
+  } catch {
+    return false;
+  }
 }
