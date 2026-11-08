@@ -1,0 +1,6 @@
+# Bundle lõi do build.mjs sinh từ mã nguồn extension — không commit (tái tạo được).
+locaith_cli/bin/*.cjs
+dist/
+build/
+*.egg-info/
+__pycache__/
