@@ -16,6 +16,8 @@ import type { PermissionDecision, SessionState, ToolHost } from '../../core/engi
 import type { RunExtension } from '../../core/engine/seams';
 import type { PermissionMode, PermissionRequest, SessionSummary, SlashCommandInfo, ThinkingLevel, TItem, TodoItem, UiEvent } from '../../shared/protocol';
 import type { LLMProvider } from '../../core/types';
+import type { SkillRegistry } from '../../core/skills/registry';
+import type { AgentRegistry } from '../../core/agents/definitions';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Trạng thái hiển thị ở dải dưới ô nhập
@@ -246,6 +248,11 @@ export interface FeatureContext {
   readonly interactive: boolean;
   readonly host: ToolHost;
   readonly settings: SettingsApi;
+  /** Sổ kỹ năng và sổ agent do lõi (cli-rt) tạo sẵn với phần dựng sẵn; tính năng gọi `loadDirs(host, dirs)` để thêm thư mục người dùng/dự án. */
+  readonly skills: SkillRegistry;
+  readonly agents: AgentRegistry;
+  /** Cho phép ĐỌC thêm một thư mục ngoài workspace (thư mục kỹ năng/agent/lệnh…) — vào `ToolHost.extraReadRoots()`. */
+  addReadRoot(dir: string): void;
   /** Phiên đang chạy — LUÔN gọi hàm (đổi khi /resume, /new). */
   session(): SessionState;
   isTrusted(): boolean;
