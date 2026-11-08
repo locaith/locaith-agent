@@ -55,7 +55,7 @@ exports.run = async function run() {
 
   // ND_TEST_ONLY=<tên>: chỉ chạy MỘT bước (đã đăng nhập) để chẩn đoán nhanh — remote · relay · bypass · bio · queue
   if (process.env.ND_TEST_ONLY) {
-    const fn = { remote: testRemote, relay: testRelay, bypass: testBypassMode, bio: testBioAutoSetup, queue: testQueueFlow, media: testMediaPreview }[process.env.ND_TEST_ONLY];
+    const fn = { remote: testRemote, relay: testRelay, bypass: testBypassMode, bio: testBioAutoSetup, queue: testQueueFlow, media: testMediaPreview, openfile: testOpenFileOutside }[process.env.ND_TEST_ONLY];
     if (!fn) throw new Error('ND_TEST_ONLY không hợp lệ: ' + process.env.ND_TEST_ONLY);
     await fn(api);
     return;
@@ -131,6 +131,9 @@ exports.run = async function run() {
 
   // 9b. (0.6.3) Xem trước kết quả (ảnh/video/âm thanh) + gấp quá trình làm việc — host thật, webview thật, trình xem ảnh của VS Code
   await testMediaPreview(api);
+
+  // 9c. (0.7.2) Mở tệp NGOÀI workspace bằng host thật + các cài đặt/lệnh mới có mặt với mặc định đúng
+  await testOpenFileOutside(api);
 
   // 10. Đổi font từ giao diện → ghi vào cài đặt VS Code → host cập nhật lại ViewState (và từ chối giá trị sai kiểu).
   const cfg = () => vscode.workspace.getConfiguration('locaithAgent');
@@ -209,6 +212,53 @@ exports.run = async function run() {
  *  - «Mở trong VS Code» mở trình xem ảnh của VS Code; đường dẫn chưa được xác nhận thì không mở gì;
  *  - webview thật (CSP media-src + localResourceRoots) phát được video H.264 và hiện ảnh; lượt đã xong gấp quá trình thành một dòng.
  */
+/**
+ * (0.7.2) Bấm liên kết tệp trong chat → host mở tệp THẬT kể cả NGOÀI workspace (trước đây từ chối «Chỉ mở được tệp trong workspace»).
+ * Kiểm bằng host + editor THẬT của VS Code: đường dẫn tuyệt đối, dạng file://, nhảy tới đúng dòng; thư mục / tệp không có / ổ mạng
+ * KHÔNG mở thêm tab nào. Kèm: các cài đặt và lệnh mới của 0.7.2 có mặt với mặc định đúng (gõ sai package.json sẽ lộ ở đây).
+ */
+async function testOpenFileOutside(api) {
+  const os = require('node:os');
+  const sb = api.sidebar;
+  const ws = vscode.workspace.workspaceFolders[0].uri.fsPath;
+  const outDir = fs.mkdtempSync(path.join(os.tmpdir(), 'nd-open-outside-'));
+  assert.ok(!path.resolve(outDir).toLowerCase().startsWith(path.resolve(ws).toLowerCase() + path.sep), 'thư mục thử phải nằm NGOÀI workspace');
+  const md = path.join(outDir, 'ghi-chu.md');
+  fs.writeFileSync(md, '# Ghi chú ngoài workspace\n\nNguyễn Văn Ánh.\nDòng ba.\n');
+  const isMd = () => {
+    const ed = vscode.window.activeTextEditor;
+    return !!ed && ed.document.uri.fsPath.toLowerCase() === md.toLowerCase();
+  };
+  const tabCount = () => vscode.window.tabGroups.all.reduce((n, g) => n + g.tabs.length, 0);
+  try {
+    await sb.onMessage({ type: 'open_file', path: md, line: 3 });
+    await waitFor(isMd, 15000, 'mở tệp .md NGOÀI workspace bằng đường dẫn tuyệt đối');
+    assert.strictEqual(vscode.window.activeTextEditor.selection.active.line, 2, 'phải nhảy tới dòng 3');
+    await vscode.commands.executeCommand('workbench.action.closeActiveEditor');
+
+    await sb.onMessage({ type: 'open_file', path: vscode.Uri.file(md).toString() });
+    await waitFor(isMd, 15000, 'mở tệp .md NGOÀI workspace bằng địa chỉ file://');
+    await vscode.commands.executeCommand('workbench.action.closeActiveEditor');
+
+    const before = tabCount();
+    for (const p of [outDir, path.join(outDir, 'khong-co.md'), '\\\\may-chu\\chia-se\\a.md']) await sb.onMessage({ type: 'open_file', path: p });
+    await sleep(800);
+    assert.strictEqual(tabCount(), before, 'thư mục / tệp không có / ổ mạng không được mở thêm tab');
+  } finally {
+    fs.rmSync(outDir, { recursive: true, force: true });
+  }
+
+  const cfg = vscode.workspace.getConfiguration('locaithAgent');
+  assert.strictEqual(cfg.get('artifacts.htmlOpenIn'), 'browser', 'HTML mặc định mở bằng trình duyệt');
+  assert.strictEqual(cfg.get('ui.workingCharacters'), true, 'nhân vật chờ mặc định bật');
+  assert.strictEqual(cfg.get('ui.liteMode'), false, 'chế độ nhẹ mặc định tắt');
+  assert.strictEqual(cfg.get('agent.maxImagesInContext'), 8, 'giữ 8 ảnh gần nhất trong ngữ cảnh');
+  assert.strictEqual(cfg.get('history.autoCleanImagesDays'), 0, 'tự dọn ảnh cũ mặc định tắt');
+  const cmds = await vscode.commands.getCommands(true);
+  assert.ok(cmds.includes('locaithAgent.cleanup'), 'thiếu lệnh locaithAgent.cleanup');
+  console.log('[open] 0.7.2: mở tệp ngoài workspace, cài đặt và lệnh mới: ĐÚNG');
+}
+
 async function testMediaPreview(api) {
   const sb = api.sidebar;
   const wv = sb.webview;
