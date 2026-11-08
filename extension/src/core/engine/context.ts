@@ -39,6 +39,8 @@ export interface SystemPromptInput {
   providerId?: string;
   /** (lane:commands-agents) Phong cách đầu ra (`/output-style`); null/'default' = prompt giữ nguyên từng byte. */
   outputStyle?: SessionOutputStyle | null;
+  /** (lane:cli-rt) Đoạn chỉ dẫn thêm của host (CLI: --append-system-prompt, phần đóng góp của tính năng). Vắng/rỗng = prompt giữ nguyên từng byte. */
+  extraSystemPrompt?: string | null;
 }
 
 const OS_NAME = { windows: 'Windows', mac: 'macOS', linux: 'Linux' } as const;
@@ -154,6 +156,8 @@ export function buildSystemPrompt(i: SystemPromptInput): string {
   // (lane:commands-agents) Phong cách đầu ra: chỉ đổi giọng/định dạng, khối tự nhắc rằng không nới lỏng các quy tắc phía trên.
   const style = outputStyleBlock(i.outputStyle);
   if (style) parts.push(style);
+
+  if (i.extraSystemPrompt?.trim()) parts.push(i.extraSystemPrompt.trim());
 
   if (i.promptedThinking) {
     parts.push(

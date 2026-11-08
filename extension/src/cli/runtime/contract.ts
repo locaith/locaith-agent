@@ -75,6 +75,9 @@ export type AskRequest =
   | { id: string; kind: 'confirm'; title: string; detail?: string; yes?: string; no?: string; defaultYes?: boolean; danger?: boolean }
   | { id: string; kind: 'input'; title: string; detail?: string; placeholder?: string; secret?: boolean; initial?: string };
 
+/** AskRequest không có `id` (runtime tự cấp). Omit thường làm sập union nên dùng dạng phân phối. */
+export type AskInput = AskRequest extends infer R ? (R extends AskRequest ? Omit<R, 'id'> : never) : never;
+
 /** Giá trị trả lời: pick → id (multi → mảng id); confirm → boolean; input → chuỗi; huỷ (Esc) → null. */
 export type AskAnswer = string | string[] | boolean | null;
 
@@ -99,7 +102,8 @@ export type RuntimeEvent =
   /** Dựng lại hội thoại (sau /resume, /fork, /rewind hội thoại, /clear): giao diện xoá vùng đã in và in lại. `items` rỗng = phiên mới trống. */
   | { t: 'replay'; items: TItem[]; reason: 'resume' | 'fork' | 'rewind' | 'new' | 'clear' }
   /** Yêu cầu giao diện làm một việc. */
-  | { t: 'action'; action: 'exit' | 'redraw' | 'clear_screen' | 'open_editor' | 'copy'; payload?: string };
+  /** (cli-rt) `insert` = đưa `payload` vào ô nhập (tin đang xếp hàng bị trả về sau khi dừng lượt); `redraw` kèm `payload: 'theme:<tên>'` khi /theme đổi giao diện. */
+  | { t: 'action'; action: 'exit' | 'redraw' | 'clear_screen' | 'open_editor' | 'copy' | 'insert'; payload?: string };
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Giao diện gọi vào runtime
@@ -160,6 +164,9 @@ export interface CliRuntime {
 
   /** Đóng sạch: dừng tác vụ nền, đóng MCP, ghi phiên. Gọi đúng một lần khi thoát. */
   dispose(): Promise<void>;
+
+  /** (cli-rt, tuỳ chọn) Cài đặt hợp nhất user < project < local < env — để giao diện đọc `ui.theme`… */
+  readonly settings?: SettingsApi;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -199,8 +206,12 @@ export interface RuntimeOptions {
   env?: NodeJS.ProcessEnv;
   /** KIỂM THỬ: nhà cung cấp giả thay cho cổng thật. */
   providerOverride?: LLMProvider;
-  /** Đã tin thư mục này chưa (quyết định ở giao diện/onboarding). false → cài đặt dự án (hooks, MCP, allow) KHÔNG được áp. */
+  /** Đã tin thư mục này chưa (quyết định ở giao diện/onboarding). false → cài đặt dự án (hooks, MCP, allow) KHÔNG được áp. Vắng = tra `~/.locaith/trusted.json`. */
   trusted?: boolean;
+  /** (cli-rt, KIỂM THỬ) Thay hẳn danh sách mô-đun tính năng (mặc định `defaultFeatures()`). */
+  features?: FeatureModule[];
+  /** (cli-rt, KIỂM THỬ) fetch giả cho gọi mạng của lõi (tài khoản, /update, /doctor). */
+  fetchImpl?: typeof fetch;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -224,7 +235,7 @@ export interface SlashRunContext {
   output(text: string, kind?: 'markdown' | 'plain' | 'error'): void;
   toast(level: 'info' | 'warn' | 'error', text: string): void;
   /** Hỏi người dùng (không tương tác → trả null). */
-  ask(req: Omit<AskRequest, 'id'>): Promise<AskAnswer>;
+  ask(req: AskInput): Promise<AskAnswer>;
   /** Chạy MỘT lượt agent như thể người dùng gõ nội dung này (không lưu dòng lệnh). */
   runPrompt(text: string, opts?: { model?: string }): Promise<void>;
   readonly busy: boolean;
@@ -261,7 +272,7 @@ export interface FeatureContext {
   emit(e: RuntimeEvent): void;
   output(text: string, kind?: 'markdown' | 'plain' | 'error'): void;
   toast(level: 'info' | 'warn' | 'error', text: string): void;
-  ask(req: Omit<AskRequest, 'id'>): Promise<AskAnswer>;
+  ask(req: AskInput): Promise<AskAnswer>;
   log(level: 'debug' | 'info' | 'warn' | 'error', message: string): void;
 
   /** Đăng ký lệnh gạch chéo. Trả về hàm gỡ. */
@@ -279,6 +290,27 @@ export interface FeatureContext {
   /** Đăng ký việc dọn khi thoát/đổi phiên. */
   onDispose(fn: () => void | Promise<void>): void;
   onSessionChange(fn: (s: SessionState) => void): void;
+
+  // ── (cli-rt) Điểm móc bổ sung — đều TUỲ CHỌN trong kiểu (lõi luôn cung cấp), dùng `ctx.beforeSend?.(…)` ──
+  /** Trước khi tin người dùng tới model (hook UserPromptSubmit/SessionStart): trả `{blocked:true, reason}` để chặn; tin bị chặn được trả về ô nhập qua action `insert`. */
+  beforeSend?(fn: (info: { text: string; signal: AbortSignal }) => { blocked?: boolean; reason?: string } | void | Promise<{ blocked?: boolean; reason?: string } | void>): void;
+  /** Ngay trước khi nén ngữ cảnh thật sự bắt đầu (hook PreCompact). */
+  onBeforeCompact?(fn: (info: { session: SessionState; trigger: 'auto' | 'manual' | 'overflow'; signal: AbortSignal }) => void | Promise<void>): void;
+  /** Sau khi nén thành công, kèm bản tóm tắt (lưu vào bộ nhớ dài hạn…). */
+  onCompacted?(fn: (info: { session: SessionState; summary: string }) => void | Promise<void>): void;
+  /** Sau MỖI lần công cụ ghi tệp thành công: `before` = nội dung trước (null = tệp mới; {skipped} = không đọc được) — checkpoints/rewind. */
+  onFileWrite?(fn: (abs: string, before: string | null | { skipped: 'binary' | 'unreadable' }, after: string) => void): void;
+  /** Khi một yêu cầu xin quyền được trình ra (hook Notification). */
+  onPermissionRequest?(fn: (req: PermissionRequest) => void): void;
+  /** Transcript hiện tại (chỉ đọc). */
+  transcript?(): readonly TItem[];
+  /** Ghi phiên hiện tại ngay (trước /fork, /rewind…). */
+  saveSession?(): Promise<void>;
+  /**
+   * Thay phiên đang chạy bằng `next` (fork/rewind/…): ghi phiên cũ, đặt `next`, dựng lại transcript (từ `opts.transcript` hoặc từ messages),
+   * phát `replay` + `status`, gọi `onSessionChange`. Chỉ khi rảnh.
+   */
+  replaceSession?(next: SessionState, opts?: { reason?: 'resume' | 'fork' | 'rewind' | 'new' | 'clear'; transcript?: TItem[] }): Promise<void>;
 }
 
 export interface FeatureModule {
