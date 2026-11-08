@@ -201,6 +201,9 @@ const tick = () => new Promise<void>((r) => setImmediate(r));
 async function untilRequests(p: HangProvider, n: number): Promise<void> {
   for (let i = 0; i < 5000 && p.requests.length < n; i++) await tick();
   for (let i = 0; i < 20; i++) await tick();
+  // Rồi chờ tới khi bộ hẹn giờ của watchdog THẬT SỰ được đặt: nếu vi.advanceTimersByTimeAsync chạy trước đó thì không bắn gì, lượt treo mãi và test quá hạn 20 s
+  // (hay gặp khi máy bận — 7/12 lần chạy trên bản gốc 0.7.3 ngày 08/11/2026, không liên quan thay đổi nào của 0.7.4).
+  for (let i = 0; i < 5000 && vi.getTimerCount() === 0; i++) await tick();
 }
 
 describe('B04 — watchdog theo bậc (fake timers)', () => {

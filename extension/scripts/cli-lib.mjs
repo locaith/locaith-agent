@@ -139,6 +139,9 @@ export class PtySession {
 
   async exit(ms = 8000) {
     const r = await Promise.race([this.exitPromise, sleep(ms).then(() => 'timeout')]);
+    // Thoát xong còn phải đợi phần dữ liệu cuối (lời chào + lệnh khôi phục terminal) đi hết qua hàng đợi xterm: trên macOS sự kiện thoát tới
+    // TRƯỚC khi chữ cuối kịp vào bộ đệm màn hình, nên đọc text() ngay sau exit() thấy thiếu «Hẹn gặp lại» (Linux/Windows chỉ may mắn nhanh hơn).
+    if (r !== 'timeout') await this.settle(250);
     return r;
   }
 
