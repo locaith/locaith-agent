@@ -43,7 +43,7 @@ export class GitBranch {
       done = true;
       clearTimeout(timer);
       this.inflight = false;
-      const next = v && v !== 'HEAD' ? v : v === 'HEAD' ? 'HEAD' : undefined;
+      const next = v || undefined;
       if (next !== this.value) {
         this.value = next;
         this.onChange();

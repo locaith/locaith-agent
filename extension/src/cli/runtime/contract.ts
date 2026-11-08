@@ -38,6 +38,8 @@ export interface RuntimeStatus {
   context: { tokens: number; window: number; percent: number };
   /** Tổng token của phiên (đã tính cả agent con nếu có số). */
   usage: { input: number; output: number };
+  /** (cli-rt) Token đã dùng bởi các agent con (số mới nhất agent con báo, cộng dồn theo lệnh gọi) — KHÔNG nằm trong `usage`/`costUsd` (không biết tách vào/ra). */
+  subAgentTokens?: number;
   /** Chi phí ước tính (USD) — chỉ khi danh mục model có giá thật. */
   costUsd?: number;
   /** Đang có một lượt chạy. */
@@ -257,6 +259,8 @@ export interface FeatureContext {
   readonly lang: 'vi' | 'en';
   readonly version: string;
   readonly interactive: boolean;
+  /** (cli-rt) Một phần tuỳ chọn khởi tạo mà tính năng cần (--mcp-config, --add-dir, --allowedTools, --append-system-prompt…). */
+  readonly options?: Readonly<Pick<RuntimeOptions, 'mcpConfig' | 'addDirs' | 'allowedTools' | 'disallowedTools' | 'appendSystemPrompt' | 'permissionMode' | 'noPersist' | 'verbose' | 'timeoutSec'>>;
   readonly host: ToolHost;
   readonly settings: SettingsApi;
   /** Sổ kỹ năng và sổ agent do lõi (cli-rt) tạo sẵn với phần dựng sẵn; tính năng gọi `loadDirs(host, dirs)` để thêm thư mục người dùng/dự án. */

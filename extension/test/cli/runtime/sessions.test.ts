@@ -193,7 +193,7 @@ describe('lưu và mở lại phiên', () => {
 
   it('resume:true khi chưa có phiên nào thì bắt đầu phiên mới, không ném lỗi', async () => {
     const h = await harness({ resume: true, script: [textTurn('x')] });
-    expect(h.rt.status().messages ?? 0).toBe(0);
+    expect(h.rt.status().usage).toEqual({ input: 0, output: 0 });
     expect(h.rt.status().title.length).toBeGreaterThan(0);
     await h.cleanup();
   });

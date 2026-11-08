@@ -73,6 +73,7 @@ export const RUNTIME_STRINGS: { vi: Record<string, string>; en: Record<string, s
     shellAborted: 'đã dừng',
     shellTimeout: 'quá hạn',
     shellFailed: 'Không chạy được lệnh: {detail}',
+    imageTooLarge: 'Bỏ qua ảnh «{name}» ({w}×{h}): cạnh dài hơn {max} px — hãy thu nhỏ ảnh rồi đính kèm lại.',
     // hàng đợi
     queueFull: 'Hàng đợi đã đầy ({n} tin). Chờ trợ lý nhận bớt rồi gửi lại.',
     queueRestored: 'Đã trả {n} tin đang chờ về ô nhập — sửa hoặc gửi lại khi sẵn sàng.',
@@ -241,6 +242,7 @@ export const RUNTIME_STRINGS: { vi: Record<string, string>; en: Record<string, s
     shellAborted: 'stopped',
     shellTimeout: 'timed out',
     shellFailed: 'Could not run the command: {detail}',
+    imageTooLarge: 'Skipped image “{name}” ({w}×{h}): the long edge exceeds {max} px — shrink it and attach again.',
     queueFull: 'The queue is full ({n} messages). Wait for the assistant to pick some up, then resend.',
     queueRestored: 'Moved {n} queued message(s) back to the input box — edit or resend when ready.',
     consentRequired: "This account has not accepted Locaith's data notice. Run `locaith consent --yes` (once, by the account owner) and try again.",

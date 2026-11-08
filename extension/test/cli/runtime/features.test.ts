@@ -234,7 +234,7 @@ describe('FeatureModule cắm vào lõi', () => {
     const h = await harness({
       features: [mod],
       files: { 'a.txt': 'cũ' },
-      script: [toolTurn([{ name: 'write_file', input: { path: 'a.txt', content: 'mới' } }]), textTurn('xong')],
+      script: [toolTurn([{ id: 'r1', name: 'read_file', input: { path: 'a.txt' } }]), toolTurn([{ id: 'w1', name: 'write_file', input: { path: 'a.txt', content: 'mới' } }]), textTurn('xong')],
       autoPermission: () => ({ decision: 'allow' }),
     });
     await h.rt.submit('sửa a.txt');

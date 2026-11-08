@@ -9,7 +9,9 @@ afterEach(() => cleanupDirs());
 
 async function rt(env: Record<string, string>, extra: Partial<Parameters<typeof createRuntime>[0]> = {}) {
   const home = extra.home ?? tmpDir('lc-home-');
-  return createRuntime({ cwd: tmpDir('lc-cwd-'), home, version: '1.2.3', interactive: false, env: cleanEnv(env), features: [], trusted: true, ...extra });
+  // fetch giả: KHÔNG gọi mạng thật (làm mới tài khoản/consent ở nền sẽ rơi vào đây)
+  const fetchImpl = (async () => new Response('{}', { status: 404 })) as unknown as typeof fetch;
+  return createRuntime({ cwd: tmpDir('lc-cwd-'), home, version: '1.2.3', interactive: false, env: cleanEnv(env), features: [], trusted: true, fetchImpl, ...extra });
 }
 
 describe('chọn nhà cung cấp', () => {

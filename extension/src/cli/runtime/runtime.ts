@@ -69,6 +69,7 @@ import type {
 } from './contract';
 import { defaultFeatures } from './features';
 import { CliToolHost } from './host';
+import { imageDimensions, MAX_IMAGE_EDGE } from './images';
 import { AccountInfoCache, GitBranch } from './info';
 import { CliProviders } from './providers';
 import { registerBuiltinSlash } from './slash';
@@ -88,10 +89,6 @@ const DISPOSE_STEP_TIMEOUT_MS = 3000;
 interface QueuedTurn extends QueuedMessage {
   readFiles: Record<string, string>;
   original: AttachmentInfo[];
-}
-
-interface FeatureSlashHolder {
-  def: FeatureSlashDef;
 }
 
 /** Ngữ cảnh một lệnh gạch chéo: hợp của SlashContext (registry extension) và SlashRunContext (contract). */
@@ -141,6 +138,8 @@ export class Runtime implements CliRuntime {
   private readonly inflight = new Set<Promise<unknown>>();
   private idleResolvers: Array<() => void> = [];
   private modelQueue: QueueState | null = null;
+  /** Token mới nhất mỗi lệnh gọi agent con báo (callId → tokens). */
+  private readonly agentTokens = new Map<string, number>();
   private disposed = false;
   private disposing: Promise<void> | null = null;
   private keepDispatcher = false;
@@ -166,7 +165,6 @@ export class Runtime implements CliRuntime {
   private readonly beforeCompactFns: Array<NonNullable<Parameters<NonNullable<FeatureContext['onBeforeCompact']>>[0]>> = [];
   private readonly compactedFns: Array<NonNullable<Parameters<NonNullable<FeatureContext['onCompacted']>>[0]>> = [];
   readonly featureErrors: Array<{ name: string; error: string }> = [];
-  private readonly featureSlash = new Map<string, FeatureSlashHolder>();
   private startupNotices: string[] = [];
 
   constructor(opts: RuntimeOptions) {
@@ -373,6 +371,9 @@ export class Runtime implements CliRuntime {
       this.logger.log('warn', `Không áp được sự kiện ${ev.t} vào transcript: ${err instanceof Error ? err.message : String(err)}`);
     }
     switch (ev.t) {
+      case 'agent_progress':
+        this.agentTokens.set(ev.callId, ev.tokens);
+        break;
       case 'todos':
       case 'tasks':
         this.session.todos = ev.todos;
@@ -424,6 +425,7 @@ export class Runtime implements CliRuntime {
       ...(s.provider === LOCAITH_PROVIDER_ID || acct.loggedIn ? { account: { loggedIn: acct.loggedIn, ...(acct.email ? { email: acct.email } : {}), ...(acct.plan ? { plan: acct.plan } : {}) } } : {}),
       context: { tokens, window, percent: window > 0 ? Math.min(999, Math.round((tokens / window) * 100)) : 0 },
       usage: { input: meter.inputTokens, output: meter.outputTokens },
+      ...(this.subAgentTotal() > 0 ? { subAgentTokens: this.subAgentTotal() } : {}),
       ...(meter.costUsd !== undefined ? { costUsd: meter.costUsd } : {}),
       running: this.running,
       queued: this.queue.map((q) => q.text),
@@ -441,6 +443,12 @@ export class Runtime implements CliRuntime {
       }
     }
     return st;
+  }
+
+  private subAgentTotal(): number {
+    let n = 0;
+    for (const v of this.agentTokens.values()) n += v;
+    return n;
   }
 
   scheduleStatus(): void {
@@ -547,6 +555,11 @@ export class Runtime implements CliRuntime {
     const out: AttachmentInfo[] = [];
     for (const a of atts) {
       if (a.kind !== 'image' || !a.data) continue;
+      const dim = imageDimensions(a.data);
+      if (dim && Math.max(dim.width, dim.height) > MAX_IMAGE_EDGE) {
+        this.notice('warn', this.tr('imageTooLarge', { name: a.name || 'image', w: dim.width, h: dim.height, max: MAX_IMAGE_EDGE }));
+        continue;
+      }
       out.push({ kind: 'image', label: a.name || 'image', mediaType: a.mediaType, data: a.data });
     }
     const seen = new Set<string>();
@@ -1332,6 +1345,7 @@ export class Runtime implements CliRuntime {
     }
     this.session = next;
     this.transcript = transcript;
+    this.agentTokens.clear();
     this.queue = [];
     this.pendingNotes = [];
     this.emit({ t: 'replay', items: this.transcript, reason });
@@ -1383,6 +1397,17 @@ export class Runtime implements CliRuntime {
       lang: this.lang,
       version: this.opts.version,
       interactive: this.opts.interactive,
+      options: {
+        mcpConfig: this.opts.mcpConfig,
+        addDirs: this.opts.addDirs,
+        allowedTools: this.opts.allowedTools,
+        disallowedTools: this.opts.disallowedTools,
+        appendSystemPrompt: this.opts.appendSystemPrompt,
+        permissionMode: this.opts.permissionMode,
+        noPersist: this.opts.noPersist,
+        verbose: this.opts.verbose,
+        timeoutSec: this.opts.timeoutSec,
+      },
       host: this.host,
       settings: this.store,
       skills: this.skills,
@@ -1400,10 +1425,7 @@ export class Runtime implements CliRuntime {
       ask: (req) => this.ask(req),
       log: logf,
       slash: (def, source) => {
-        const src = source ?? 'builtin';
-        this.slashReg.register(this.adaptSlash(def, src));
-        this.featureSlash.set(def.name, { def });
-        return () => undefined;
+        return this.slashReg.register(this.adaptSlash(def, source ?? 'builtin'));
       },
       replaceSlashSource: (source, defs) => this.slashReg.replaceSource(source, defs.map((d) => this.adaptSlash(d, source))),
       addRunExtension: (ext, o) => {
