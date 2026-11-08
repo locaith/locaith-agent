@@ -3,6 +3,7 @@
 //   node webview/dev/shoot.mjs          # chụp tất cả
 //   node webview/dev/shoot.mjs picker   # chỉ chụp các ảnh có tên chứa "picker"
 //   node webview/dev/shoot.mjs --ime    # chạy kiểm tra IME (Telex) thay vì chụp ảnh
+//   node webview/dev/shoot.mjs --history # (0.7.4) kiểm tra ↑/↓ duyệt lại tin đã gõ bằng phím thật
 import { createRequire } from 'node:module';
 import { mkdir } from 'node:fs/promises';
 import path from 'node:path';
@@ -17,6 +18,7 @@ const CHROME = process.env.CHROME_PATH ?? 'C:/Program Files/Google/Chrome/Applic
 const OUT = path.join(here, 'shots');
 const args = process.argv.slice(2);
 const imeMode = args.includes('--ime');
+const historyMode = args.includes('--history');
 const filter = args.find((a) => !a.startsWith('--'));
 
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -968,6 +970,130 @@ async function runImeTests(browser) {
   return results.filter((ok) => !ok).length;
 }
 
+// ── (0.7.4) lịch sử các tin đã gõ: ↑/↓ ở ô nhập, bằng phím THẬT trong Chrome ────────────────────────────────
+
+async function runHistoryTests(browser) {
+  const { page, problems } = await newPage(browser, 420, 760);
+  await openPage(page, 'harness.html', { scenario: 'welcome', theme: 'dark', speed: '0' });
+  const log = (type) => page.evaluate((t) => (window.__ND_LOG__ ?? []).filter((m) => m.type === t), type);
+  const results = [];
+  const check = (name, ok, extra = '') => {
+    results.push(ok);
+    console.log(`${ok ? '✔' : '✘'} ${name}${extra ? ` — ${extra}` : ''}`);
+  };
+  const val = () => page.$eval('.composer-input', (el) => el.value);
+  const caret = () => page.$eval('.composer-input', (el) => [el.selectionStart, el.selectionEnd]);
+  const key = async (k, mods = []) => {
+    for (const m of mods) await page.keyboard.down(m);
+    await page.keyboard.press(k);
+    for (const m of mods.reverse()) await page.keyboard.up(m);
+    await wait(40);
+  };
+  const type = async (s) => page.keyboard.type(s, { delay: 8 });
+  const newline = () => key('Enter', ['Shift']);
+  const send = async () => {
+    await page.keyboard.press('Enter');
+    await wait(250);
+  };
+
+  await page.click('.composer-input');
+  // 1) Gửi hai tin: một dòng, rồi hai dòng.
+  await type('tin một');
+  await send();
+  await type('tin hai');
+  await newline();
+  await type('dòng hai của tin hai');
+  await send();
+  check('Hai tin đã gửi', (await log('send')).length === 2 && (await val()) === '');
+
+  // 2) ↑ ở ô trống = tin mới nhất (nhiều dòng), con trỏ cuối DÒNG ĐẦU; KHÔNG gửi `edit_last`.
+  await key('ArrowUp');
+  check('↑ ở ô trống gọi lại tin mới nhất', (await val()) === 'tin hai\ndòng hai của tin hai', JSON.stringify(await val()));
+  check('↑ đặt con trỏ cuối dòng đầu (↑ kế tiếp đi tiếp ngay)', (await caret()).join() === '7,7', (await caret()).join());
+  check('↑ ở ô trống KHÔNG còn gửi edit_last (phá huỷ)', (await log('edit_last')).length === 0);
+  await key('ArrowUp');
+  check('↑ lần hai: lùi tới tin cũ hơn', (await val()) === 'tin một', JSON.stringify(await val()));
+  await key('ArrowUp');
+  check('↑ khi đã ở tin cũ nhất: giữ nguyên', (await val()) === 'tin một');
+
+  // 3) ↓ tiến dần; tin nhiều dòng cần ↓ hai lần (lần đầu di con trỏ xuống dòng cuối); qua tin mới nhất thì ô trống lại.
+  await key('ArrowDown');
+  check('↓ tiến tới tin kế tiếp', (await val()) === 'tin hai\ndòng hai của tin hai');
+  check('↓ đặt con trỏ cuối chữ', (await caret())[0] === (await val()).length);
+  await key('ArrowDown');
+  check('↓ qua tin mới nhất trả ô nhập về bản nháp (trống)', (await val()) === '', JSON.stringify(await val()));
+
+  // 4) Bản nháp đang gõ được giữ và trả lại.
+  await type('nháp đang gõ');
+  await key('ArrowUp');
+  check('↑ khi đang có nháp: thay bằng tin gần nhất', (await val()).startsWith('tin hai'));
+  await key('ArrowDown');
+  await key('ArrowDown');
+  check('↓ qua tin mới nhất: bản nháp quay lại nguyên vẹn', (await val()) === 'nháp đang gõ', JSON.stringify(await val()));
+
+  // 5) Sửa chữ đang gọi lại → thoát chế độ duyệt; ↑ kế tiếp bắt đầu lại từ tin mới nhất, bản sửa là nháp mới.
+  await page.$eval('.composer-input', (el) => {
+    el.value = '';
+    el.dispatchEvent(new Event('input', { bubbles: true }));
+  });
+  await key('ArrowUp'); // tin hai (nhiều dòng)
+  await key('ArrowUp'); // tin một
+  await page.keyboard.press('End');
+  await type('!');
+  check('Sửa tin vừa gọi lại', (await val()) === 'tin một!');
+  await key('ArrowUp');
+  check('↑ sau khi sửa: bắt đầu lại từ tin mới nhất', (await val()).startsWith('tin hai'), JSON.stringify(await val()));
+  await key('ArrowDown');
+  await key('ArrowDown');
+  check('Bản sửa trở thành nháp và quay lại khi ↓ qua tin mới nhất', (await val()) === 'tin một!', JSON.stringify(await val()));
+
+  // 6) Phím bị bỏ qua: Shift+↑ và đang chọn vùng chữ không gọi lại tin.
+  await key('ArrowUp', ['Shift']);
+  check('Shift+↑ không gọi lại tin', (await val()) === 'tin một!');
+  await page.keyboard.down('Shift');
+  await page.keyboard.press('Home');
+  await page.keyboard.up('Shift');
+  await key('ArrowUp');
+  check('Đang chọn vùng chữ: ↑ không gọi lại tin', (await val()) === 'tin một!');
+  await page.$eval('.composer-input', (el) => {
+    el.value = '';
+    el.dispatchEvent(new Event('input', { bubbles: true }));
+  });
+
+  // 7) Menu «/» đang mở thì ↑/↓ thuộc về menu, không gọi lịch sử.
+  await type('/');
+  await page.waitForSelector('.popover-menu .menu-row', { timeout: 3000 });
+  await key('ArrowUp');
+  check('Menu «/» mở: ↑ không thay chữ bằng lịch sử', (await val()) === '/', JSON.stringify(await val()));
+  await page.keyboard.press('Escape');
+  await page.$eval('.composer-input', (el) => {
+    el.value = '';
+    el.dispatchEvent(new Event('input', { bubbles: true }));
+  });
+
+  // 8) Host gửi lịch sử đã lưu (qua lần khởi động): ghép với tin vừa gõ ở phiên giao diện này.
+  await page.evaluate(() => window.dispatchEvent(new MessageEvent('message', { data: { type: 'prompt_history', items: ['cũ một', 'cũ hai'] } })));
+  await wait(60);
+  await key('ArrowUp');
+  check('Sau khi host gửi lịch sử, tin vừa gõ vẫn là mới nhất', (await val()).startsWith('tin hai'), JSON.stringify(await val()));
+  await key('ArrowUp'); // tin một (gõ ở phiên này)
+  await key('ArrowUp'); // cũ hai (đã lưu từ lần chạy trước)
+  check('…và lùi được tới tin đã lưu từ lần chạy trước', (await val()) === 'cũ hai', JSON.stringify(await val()));
+
+  // 9) Gửi một tin được gọi lại: không lặp trong lịch sử (chuyển xuống cuối), thoát chế độ duyệt.
+  await key('ArrowUp');
+  check('Lùi tới «cũ một»', (await val()) === 'cũ một');
+  await send();
+  const sent = await log('send');
+  check('Gửi tin vừa gọi lại', sent.at(-1)?.text === 'cũ một' && (await val()) === '');
+  await key('ArrowUp');
+  check('Tin vừa gửi lại là tin mới nhất', (await val()) === 'cũ một', JSON.stringify(await val()));
+
+  problems.forEach((p) => console.log(`    ${p}`));
+  await page.close();
+  return results.filter((ok) => !ok).length;
+}
+
 const browser = await puppeteer.launch({
   executablePath: CHROME,
   headless: true,
@@ -975,7 +1101,7 @@ const browser = await puppeteer.launch({
 });
 let failures = 0;
 try {
-  failures = imeMode ? await runImeTests(browser) : await runShots(browser);
+  failures = historyMode ? await runHistoryTests(browser) : imeMode ? await runImeTests(browser) : await runShots(browser);
 } finally {
   await browser.close();
 }
