@@ -95,7 +95,7 @@ tên + phiên bản, tài khoản/gói, model, thư mục, mẹo xoay vòng («/
 **Ô nhập:** khung bo tròn, dấu nhắc `>`; nhiều dòng (Ctrl+J, Alt+Enter, hoặc `\` + Enter; dán nhiều dòng giữ nguyên nhờ bracketed paste); cao tối đa ~8 dòng rồi cuộn trong ô;
 con trỏ giả (đảo màu) để không phụ thuộc toạ độ con trỏ thật; chỉnh sửa kiểu emacs (Ctrl+A/E/K/U/W/Y, Alt+B/F, Home/End, Del); lịch sử ↑/↓ (lưu đĩa) + Ctrl+R tìm ngược; Tab/→ chấp nhận gợi ý;
 chữ mờ gợi ý khi trống («Nhập việc cần làm… / lệnh · @ tệp · ! shell»). `/` mở menu lệnh (lọc theo chữ gõ, ↑↓ chọn, Enter chạy/điền); `@` mở menu tệp (mờ ảo, `complete()` của runtime);
-`!` ở đầu dòng đổi dấu nhắc sang chế độ shell; `?` khi trống hiện phím tắt. Dán ảnh: Ctrl+V trên Windows đọc clipboard ảnh (PowerShell), nơi khác dán đường dẫn ảnh.
+`!` ở đầu dòng đổi dấu nhắc sang chế độ shell; `?` khi trống hiện phím tắt. Dán ảnh: Alt+V, Ctrl+V, lệnh `/paste` (`/image`) hoặc một «dán» không có chữ đều đọc clipboard ảnh (Windows: PowerShell `-STA -EncodedCommand`, thu nhỏ ảnh lớn ngay trong PowerShell; macOS `pngpaste`; Linux `wl-paste`/`xclip`); dán đường dẫn một tệp ảnh cũng đính kèm. Windows Terminal giữ Ctrl+V để dán chữ nên Ctrl+V không tới ứng dụng — vì vậy Alt+V và `/paste` là đường chính. `/paste` do giao diện xử lý (không đi qua runtime) để ảnh đã đính kèm không bị gửi đi cùng dòng lệnh.
 Phím: Enter gửi · Esc dừng lượt (đang rảnh: xoá ô; Esc 2 lần = menu rewind) · Ctrl+C (có chữ: xoá; đang chạy: dừng; rảnh + trống: nhắc «nhấn lần nữa để thoát») · Ctrl+D thoát khi trống ·
 Ctrl+L vẽ lại · Ctrl+O bật/tắt «mở rộng kết quả công cụ» · Shift+Tab đổi chế độ quyền (hiện ở dải trạng thái) · Ctrl+T bật/tắt bảng việc.
 Gõ khi đang chạy → xếp hàng (hiện «đang chờ: …» trên ô nhập).

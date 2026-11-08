@@ -24,7 +24,7 @@ export interface WelcomeInfo {
   compact?: boolean;
 }
 
-const TIP_KEYS = ['banner.tip1', 'banner.tip2', 'banner.tip3', 'banner.tip4', 'banner.tip5', 'banner.tip6'];
+const TIP_KEYS = ['banner.tip1', 'banner.tip2', 'banner.tip3', 'banner.tip4', 'banner.tip5', 'banner.tip6', 'banner.tip7'];
 
 export function pickTip(i = Math.floor(Date.now() / 86_400_000)): string {
   return tr('tui.' + TIP_KEYS[Math.abs(i) % TIP_KEYS.length]);

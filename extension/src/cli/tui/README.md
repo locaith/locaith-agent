@@ -33,7 +33,7 @@ sự kiện rt ───────→ Conversation (conversation.ts) ───
 
 ## Phím tắt
 
-Enter gửi · Ctrl+J / Alt+Enter / `\`+Enter xuống dòng (dán nhiều dòng giữ nguyên) · Esc dừng lượt (rảnh: xoá ô; Esc×2 = `/rewind`) · Ctrl+C (có chữ: xoá; đang chạy: dừng; rảnh+trống: nhấn lần nữa để thoát) · Ctrl+D thoát khi trống · Ctrl+L đẩy màn hình lên scrollback · Ctrl+O bật/tắt mở rộng kết quả (+ in đầy đủ kết quả bị rút gọn gần nhất) · Ctrl+T bảng việc · Ctrl+R tìm ngược · Ctrl+G soạn ngoài · Shift+Tab đổi chế độ quyền · ↑/↓ lịch sử · Tab/→ chấp nhận gợi ý · `/` menu lệnh · `@` menu tệp · `!` chế độ shell · `?` bảng phím tắt · Ctrl+V / Alt+V dán ảnh clipboard · Ctrl+A/E/K/U/W/Y, Alt+B/F/D emacs.
+Enter gửi · Ctrl+J / Alt+Enter / `\`+Enter xuống dòng (dán nhiều dòng giữ nguyên) · Esc dừng lượt (rảnh: xoá ô; Esc×2 = `/rewind`) · Ctrl+C (có chữ: xoá; đang chạy: dừng; rảnh+trống: nhấn lần nữa để thoát) · Ctrl+D thoát khi trống · Ctrl+L đẩy màn hình lên scrollback · Ctrl+O bật/tắt mở rộng kết quả (+ in đầy đủ kết quả bị rút gọn gần nhất) · Ctrl+T bảng việc · Ctrl+R tìm ngược · Ctrl+G soạn ngoài · Shift+Tab đổi chế độ quyền · ↑/↓ lịch sử · Tab/→ chấp nhận gợi ý · `/` menu lệnh · `@` menu tệp · `!` chế độ shell · `?` bảng phím tắt · Alt+V / `/paste` (`/image`) / Ctrl+V dán ảnh clipboard (Windows Terminal giữ Ctrl+V để dán chữ nên Ctrl+V không tới ứng dụng; «dán» rỗng cũng thử đọc ảnh) · Ctrl+A/E/K/U/W/Y, Alt+B/F/D emacs.
 
 ## Chạy thử, ảnh, kiểm thử
 

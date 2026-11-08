@@ -108,7 +108,8 @@ Lệnh tuỳ chỉnh: tạo tệp .locaith/commands/ten.md (dự án) hoặc ~/.
   Ctrl+C: xoá ô nhập / dừng lượt / (rảnh + trống) bấm lần nữa để thoát · Ctrl+D: thoát khi ô trống
   Shift+Tab: đổi chế độ quyền · Ctrl+O: mở/gập kết quả công cụ · Ctrl+T: bảng việc · Ctrl+L: vẽ lại
   Tab/→: chấp nhận gợi ý · "/" menu lệnh · "@" tệp · "!" shell · "?" phím tắt
-  Ctrl+A/E: đầu/cuối dòng · Ctrl+K/U/W: xoá tới cuối/đầu/từ trước · Alt+B/F: nhảy từ · Ctrl+V: dán ảnh (Windows)
+  Ctrl+A/E: đầu/cuối dòng · Ctrl+K/U/W: xoá tới cuối/đầu/từ trước · Alt+B/F: nhảy từ
+  Alt+V hoặc /paste: đính kèm ảnh trong clipboard (Windows Terminal giữ Ctrl+V để dán chữ nên Ctrl+V không tới được; terminal khác dùng Ctrl+V cũng được)
 Gõ tiếp khi trợ lý đang chạy: tin được XẾP HÀNG và gửi ở ranh giới vòng công cụ kế tiếp.`,
   print: `CHẾ ĐỘ IN MỘT LẦN (không giao diện) — dùng cho script/CI
   locaith -p "tóm tắt repo này"                         in câu trả lời cuối ra stdout
@@ -201,7 +202,8 @@ Custom commands: create .locaith/commands/name.md (project) or ~/.locaith/comman
   Ctrl+C: clear input / stop the turn / (idle + empty) press again to quit · Ctrl+D: quit when empty
   Shift+Tab: cycle permission mode · Ctrl+O: expand/collapse tool output · Ctrl+T: todo panel · Ctrl+L: redraw
   Tab/→: accept suggestion · "/" commands · "@" files · "!" shell · "?" shortcuts
-  Ctrl+A/E: line start/end · Ctrl+K/U/W: kill to end/start/previous word · Alt+B/F: word jump · Ctrl+V: paste image (Windows)
+  Ctrl+A/E: line start/end · Ctrl+K/U/W: kill to end/start/previous word · Alt+B/F: word jump
+  Alt+V or /paste: attach the image on the clipboard (Windows Terminal keeps Ctrl+V to paste text, so Ctrl+V never arrives; other terminals also accept Ctrl+V)
 Keep typing while the assistant works: your message is QUEUED and delivered at the next tool-loop boundary.`,
   print: `PRINT MODE (no UI) — for scripts/CI
   locaith -p "summarize this repo"                       final answer to stdout

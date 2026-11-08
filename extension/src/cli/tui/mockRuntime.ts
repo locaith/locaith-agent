@@ -220,6 +220,7 @@ export class MockRuntime implements CliRuntime {
       { name: 'tasks', description: d('Tác vụ nền', 'Background tasks') },
       { name: 'mcp', description: d('Máy chủ MCP', 'MCP servers') },
       { name: 'memory', description: d('Ký ức dự án (LOCAITH.md)', 'Project memory (LOCAITH.md)') },
+      { name: 'paste', description: d('Đính kèm ảnh trong clipboard (Alt+V)', 'Attach the clipboard image (Alt+V)') },
       { name: 'exit', description: d('Thoát Locaith', 'Quit Locaith') },
     ];
   }

@@ -1,4 +1,4 @@
-# Locaith CLI — hướng dẫn sử dụng (0.4.5)
+# Locaith CLI — hướng dẫn sử dụng (0.4.6)
 
 Trợ lý lập trình Locaith ngay trong terminal. **Cùng lõi** với extension VS Code: cùng engine, công cụ, kỹ năng, hooks, checkpoints/rewind,
 tác vụ nền, MCP, luật quyền, nén ngữ cảnh. Model chạy ở cổng Locaith (`locaith-v5-flash`, `locaith-v5-si`) hoặc khoá hãng khác của bạn
@@ -59,7 +59,8 @@ Mọi dòng đã xong được **in thẳng vào scrollback** của terminal (cu
 | `Shift+Tab` | đổi chế độ quyền: default → acceptEdits → plan (→ bypass nếu được phép) |
 | `Ctrl+O` | mở rộng / gập kết quả công cụ · `Ctrl+T` bảng việc · `Ctrl+L` vẽ lại |
 | `/` · `@` · `!` · `?` | menu lệnh · nhắc tệp (`@src/app.ts`, `@tệp#L10-20`) · chạy shell ngay · bảng phím tắt |
-| `Tab` / `→` | chấp nhận gợi ý · `Ctrl+V` dán ảnh (Windows) |
+| `Tab` / `→` | chấp nhận gợi ý |
+| `Alt+V` · `/paste` (`/image`) | đính kèm ảnh đang có trong clipboard (ảnh chụp màn hình `Win+Shift+S`, ảnh sao chép từ trình duyệt, tệp ảnh sao chép trong Explorer). Trên Windows `Ctrl+V` do terminal giữ để dán chữ nên **không** tới được CLI — dùng `Alt+V` hoặc `/paste`; ở terminal khác `Ctrl+V` cũng được |
 | `Ctrl+A/E/K/U/W` · `Alt+B/F` | chỉnh sửa kiểu emacs |
 
 ### Lệnh gạch chéo (gõ `/` để mở menu)
@@ -175,7 +176,7 @@ Nhiều máy chủ OpenAI-compatible không có `/models`: khai `models` để d
 | Nén ngữ cảnh | tự động ở 80% cửa sổ (`agent.compactAtPercent`), `/compact [giữ gì]`, `/context` |
 | Ký ức và chỉ dẫn | `LOCAITH.md` / `AGENTS.md` / `CLAUDE.md` ở gốc dự án và `~/.locaith/LOCAITH.md`; `/init`, `/memory`; ký ức bền `.locaith/memory/MEMORY.md` |
 | Phiên | `~/.locaith/sessions` (đọc được phiên của CLI 0.3.x); `-c`, `-r`, `/resume`, `/fork`, `/export` |
-| Ảnh | `@ảnh.png`, `Ctrl+V` (Windows) — thu nhỏ trước khi gửi |
+| Ảnh | `@ảnh.png`, `Alt+V` / `/paste` (ảnh trong clipboard), dán hoặc kéo-thả đường dẫn ảnh vào terminal. Có thể gửi ảnh không kèm chữ (Enter). Trên Windows, ảnh lớn được thu nhỏ trước khi gửi (cạnh dài ≤ 2000 px, ≤ 3,5 MB) vì các hãng từ chối ảnh > 5 MB |
 
 ## Sự cố thường gặp
 
@@ -185,6 +186,7 @@ Nhiều máy chủ OpenAI-compatible không có `/models`: khai `models` để d
 | «Chưa đồng ý thông báo dữ liệu» | `locaith consent --yes` (hoặc đồng ý ở lần chạy đầu) |
 | màu/khung bị vỡ | `NO_COLOR=1` hoặc `LOCAITH_ASCII=1`; dùng Windows Terminal / PowerShell 7 để có đủ màu |
 | trợ lý treo | `Esc` để dừng; với `-p` đặt `--timeout <giây>`; `locaith doctor` để kiểm mạng |
+| bấm `Ctrl+V` mà ảnh không vào | terminal (Windows Terminal, VS Code…) dùng `Ctrl+V` để dán chữ và không chuyển phím cho CLI → dùng `Alt+V` hoặc gõ `/paste`. «Clipboard không có ảnh» = clipboard chỉ có chữ: chụp màn hình (`Win+Shift+S`) hoặc sao chép ảnh rồi thử lại; Linux cần `wl-clipboard` hoặc `xclip`, macOS cần `pngpaste` |
 | `-p` bị chặn ghi tệp | thư mục chưa tin cậy → chạy `locaith` một lần ở đó, hoặc `--permission-mode acceptEdits` |
 
 Báo lỗi: https://locaith.ai, kèm kết quả `locaith doctor --json` (khoá đã được tự ẩn).

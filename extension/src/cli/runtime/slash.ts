@@ -596,6 +596,14 @@ export function registerBuiltinSlash(rt: Runtime): void {
     { needsIdle: false },
   );
 
+  // ── /paste (/image) ── đính kèm ảnh trong clipboard. Giao diện tự xử lý dòng này trước khi tới đây; handler dành cho nơi gọi khác và để lệnh hiện trong menu / trợ giúp.
+  const pasteImage: Handler = (ctx) => {
+    if (!rt.interactive) return ctx.output(tr('pasteNeedsTty'), 'plain');
+    rt.emit({ t: 'action', action: 'paste_image' });
+  };
+  reg('paste', 'paste', pasteImage, { needsIdle: false });
+  reg('image', 'paste', pasteImage, { needsIdle: false });
+
   void builtinOutputStyles;
   void cliConfigFile;
   void isDirTrusted;

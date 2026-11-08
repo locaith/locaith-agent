@@ -14,7 +14,8 @@ import * as path from 'node:path';
 import type { PermissionRequest, SuggestionOption, TItem, TodoItem } from '../../shared/protocol';
 import type { AskAnswer, AskRequest, Attachment, CliRuntime, RuntimeEvent, RuntimeStatus } from '../runtime/contract';
 import { setLang, t as tr, type Lang } from '../i18n';
-import { copyToClipboard, imageFromPath, readClipboardImage } from './clipboard';
+import { imageDimensions } from '../runtime/images';
+import { copyToClipboard, imageFromPath, readClipboardImageDetailed, type ClipboardImageResult } from './clipboard';
 import { Conversation } from './conversation';
 import { PermissionDialog, makeAskDialog, type Dialog } from './dialogs';
 import { Editor } from './editor';
@@ -53,6 +54,8 @@ export interface TuiOptions {
   initialPrompt?: string;
   /** Thay thế đọc ảnh clipboard (kiểm thử). */
   readImage?: () => Promise<Attachment | null>;
+  /** Như `readImage` nhưng trả cả lý do thất bại (kiểm thử các thông báo lỗi); ưu tiên hơn `readImage`. */
+  readImageResult?: () => Promise<ClipboardImageResult>;
 }
 
 interface DialogEntry {
@@ -64,6 +67,8 @@ interface DialogEntry {
 type Toast = { level: 'info' | 'warn' | 'error'; text: string; until: number };
 
 const SLASH_LOCAL_THEME = /^\/theme(?:\s+(\S+))?\s*$/i;
+/** `/paste` (alias `/image`): đính kèm ảnh trong clipboard. Do giao diện xử lý — không đi qua runtime, để ảnh đã đính kèm không bị gửi đi cùng dòng lệnh. */
+const SLASH_LOCAL_PASTE = /^\/(?:paste|image)\s*$/i;
 
 export class TuiApp {
   readonly th: Theme;
@@ -437,8 +442,11 @@ export class TuiApp {
     }
   }
 
-  private onAction(action: 'exit' | 'redraw' | 'clear_screen' | 'open_editor' | 'copy' | 'insert', payload?: string): void {
+  private onAction(action: 'exit' | 'redraw' | 'clear_screen' | 'open_editor' | 'copy' | 'insert' | 'paste_image', payload?: string): void {
     switch (action) {
+      case 'paste_image':
+        void this.pasteClipboardImage();
+        return;
       case 'exit':
         this.exit(0);
         return;
@@ -516,10 +524,14 @@ export class TuiApp {
       this.searchUpdate(this.history.entries.length - 1);
       return;
     }
+    // «Dán» không kèm chữ: nhiều terminal gửi đúng như vậy khi clipboard chỉ có ảnh → thử đọc ảnh thay vì bỏ qua im lặng.
+    if (text === '') {
+      void this.pasteClipboardImage();
+      return;
+    }
     const img = imageFromPath(text, this.status?.cwd ?? this.o.cwd ?? process.cwd());
     if (img) {
-      this.attachments.push(img);
-      this.setToast('info', tr('tui.image.pasted', { name: img.name }));
+      this.attachImage(img);
       return;
     }
     if (this.editor.empty && text.startsWith('!') && !this.shell) {
@@ -588,7 +600,9 @@ export class TuiApp {
       return;
     }
     if (this.isCtrl(k, 'z') && process.platform !== 'win32') return this.suspendProcess();
-    if ((this.isCtrl(k, 'v') || (k.alt && k.name === 'char' && k.text === 'v')) && !this.busyImage) {
+    // Dán ảnh: Ctrl+V chỉ tới được ứng dụng ở terminal không giữ phím này; Windows Terminal (và VS Code) dùng Ctrl+V để dán CHỮ nên ảnh không bao giờ tới đây
+    // → Alt+V (và lệnh /paste) là đường chính trên Windows. Không rơi xuống nhánh chèn chữ dù đang bận đọc.
+    if (this.isCtrl(k, 'v') || (k.alt && !k.ctrl && k.name === 'char' && (k.text ?? '').toLowerCase() === 'v')) {
       void this.pasteClipboardImage();
       return;
     }
@@ -843,16 +857,49 @@ export class TuiApp {
     }
   }
 
+  /** Đưa ảnh vào danh sách đính kèm và báo bằng một dòng thông báo (tên, kích thước điểm ảnh, dung lượng). */
+  private attachImage(img: Attachment): void {
+    this.attachments.push(img);
+    const dim = imageDimensions(img.data);
+    const kb = Math.max(1, Math.round((img.data.length * 3) / 4 / 1024));
+    const size = kb >= 1024 ? `${(kb / 1024).toFixed(1)} MB` : `${kb} KB`;
+    this.setToast('info', tr('tui.image.pasted', { name: img.name, info: ` (${dim ? `${dim.width}×${dim.height}, ` : ''}${size})` }));
+  }
+
+  private async readClipboard(): Promise<ClipboardImageResult> {
+    if (this.o.readImageResult) return this.o.readImageResult();
+    if (this.o.readImage) {
+      const a = await this.o.readImage();
+      return a ? { ok: true, attachment: a } : { ok: false, reason: 'none' };
+    }
+    return readClipboardImageDetailed(process.platform, undefined, this.status?.cwd ?? this.o.cwd ?? process.cwd());
+  }
+
+  private imageFailText(r: Extract<ClipboardImageResult, { ok: false }>): string {
+    switch (r.reason) {
+      case 'none':
+        return tr('tui.image.none');
+      case 'too_large':
+        return tr('tui.image.toolarge');
+      case 'no_tool':
+        return tr('tui.image.notool', { tool: r.detail ?? '' });
+      default:
+        return tr('tui.image.fail') + (r.detail ? `: ${r.detail}` : '');
+    }
+  }
+
   private async pasteClipboardImage(): Promise<void> {
+    if (this.busyImage) return;
     this.busyImage = true;
+    // PowerShell mất khoảng một giây để khởi động: báo ngay để người dùng không tưởng phím không ăn.
+    this.setToast('info', tr('tui.image.reading'), 30_000);
+    this.screen.schedule();
     try {
-      const img = await (this.o.readImage ? this.o.readImage() : readClipboardImage());
-      if (img) {
-        this.attachments.push(img);
-        this.setToast('info', tr('tui.image.pasted', { name: img.name }));
-      } else this.setToast('warn', tr('tui.image.fail'));
-    } catch {
-      this.setToast('warn', tr('tui.image.fail'));
+      const res = await this.readClipboard();
+      if (res.ok) this.attachImage(res.attachment);
+      else this.setToast('warn', this.imageFailText(res), 7000);
+    } catch (err) {
+      this.setToast('warn', this.imageFailText({ ok: false, reason: 'error', detail: err instanceof Error ? err.message : String(err) }), 7000);
     } finally {
       this.busyImage = false;
       this.screen.schedule();
@@ -898,7 +945,19 @@ export class TuiApp {
   }
 
   private async submitCurrent(): Promise<void> {
-    const text = this.currentText().trim();
+    let text = this.currentText().trim();
+    if (!this.shell && SLASH_LOCAL_PASTE.test(text)) {
+      this.history.add(text);
+      this.history.resetNav();
+      this.editor.clear();
+      this.menu.clear();
+      this.options = [];
+      this.helpOpen = false;
+      await this.pasteClipboardImage();
+      return;
+    }
+    // Đã đính kèm ảnh mà chưa gõ chữ: vẫn gửi được, kèm một câu mặc định (trước đây Enter không làm gì và trông như dán không ăn).
+    if (!text && this.attachments.length) text = tr('tui.image.defaultPrompt');
     if (!text || text === '!') return;
     const busyCmd = this.idleOnlyCommand(text);
     if (busyCmd) {
@@ -1199,7 +1258,7 @@ export class TuiApp {
         ctrlCArmed: this.armed.c,
         ctrlDArmed: this.armed.d,
         esc2Armed: this.armed.esc,
-        empty: this.editor.empty && !this.shell,
+        empty: this.editor.empty && !this.shell && this.attachments.length === 0,
         expanded: this.expanded,
         dialog: !!dlgEntry,
         shell: this.shell,

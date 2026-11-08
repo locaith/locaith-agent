@@ -33,7 +33,7 @@ import { SessionRepo } from './runtime/sessions';
 import { runOnboarding, runTui, withTerminalUi } from './tui';
 import { compareVersions, latestKnown, runUpdate, updateAvailable } from './update';
 
-export const VERSION = '0.4.5';
+export const VERSION = '0.4.6';
 
 // ── nhỏ gọn: ngôn ngữ, tin cậy, tiện ích ─────────────────────────────────────────────────────────
 

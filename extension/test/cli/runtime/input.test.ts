@@ -219,6 +219,20 @@ describe('lệnh gạch chéo dựng sẵn', () => {
     await h.cleanup();
   });
 
+  it('/paste và /image phát action paste_image khi đang tương tác; ngoài giao diện thì giải thích thay vì im lặng', async () => {
+    const h = await harness({ script: [] });
+    expect(h.rt.slashCommands().map((c) => c.name)).toEqual(expect.arrayContaining(['paste', 'image']));
+    await h.rt.submit('/paste');
+    await h.rt.submit('/image');
+    expect(h.events.filter((e) => e.t === 'action' && e.action === 'paste_image')).toHaveLength(2);
+    await h.cleanup();
+    const p = await harness({ script: [], interactive: false });
+    await p.rt.submit('/paste');
+    expect(p.events.some((e) => e.t === 'action' && e.action === 'paste_image')).toBe(false);
+    expect(p.outputs().pop()).toMatch(/giao diện tương tác/);
+    await p.cleanup();
+  });
+
   it('/config đặt và đọc cài đặt người dùng; /theme phát redraw; /whoami khi chưa đăng nhập', async () => {
     const h = await harness({ script: [] });
     await h.rt.submit('/config agent.maxTurns 12');

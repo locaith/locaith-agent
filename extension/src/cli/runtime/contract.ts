@@ -106,8 +106,9 @@ export type RuntimeEvent =
   /** Dựng lại hội thoại (sau /resume, /fork, /rewind hội thoại, /clear): giao diện xoá vùng đã in và in lại. `items` rỗng = phiên mới trống. */
   | { t: 'replay'; items: TItem[]; reason: 'resume' | 'fork' | 'rewind' | 'new' | 'clear' }
   /** Yêu cầu giao diện làm một việc. */
-  /** (cli-rt) `insert` = đưa `payload` vào ô nhập (tin đang xếp hàng bị trả về sau khi dừng lượt); `redraw` kèm `payload: 'theme:<tên>'` khi /theme đổi giao diện. */
-  | { t: 'action'; action: 'exit' | 'redraw' | 'clear_screen' | 'open_editor' | 'copy' | 'insert'; payload?: string };
+  /** (cli-rt) `insert` = đưa `payload` vào ô nhập (tin đang xếp hàng bị trả về sau khi dừng lượt); `redraw` kèm `payload: 'theme:<tên>'` khi /theme đổi giao diện;
+   *  `paste_image` = đính kèm ảnh đang có trong clipboard vào tin sắp gửi (lệnh /paste, /image). */
+  | { t: 'action'; action: 'exit' | 'redraw' | 'clear_screen' | 'open_editor' | 'copy' | 'insert' | 'paste_image'; payload?: string };
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Giao diện gọi vào runtime

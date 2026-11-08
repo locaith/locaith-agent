@@ -280,8 +280,10 @@ export function renderMenu(menu: Menu, th: Theme, width: number): string[] {
 
 // ───────────────────────── phím tắt (?) ─────────────────────────
 
-export function renderShortcuts(th: Theme, width: number): string[] {
-  const keys = ['help.enter', 'help.newline', 'help.esc', 'help.ctrlc', 'help.ctrld', 'help.history', 'help.edit', 'help.mode', 'help.slash', 'help.expand', 'help.redraw'];
+export function renderShortcuts(th: Theme, width: number, platform: NodeJS.Platform = process.platform): string[] {
+  // Trên Windows Ctrl+V do terminal giữ để dán chữ nên ảnh không tới được ứng dụng: chỉ nêu Alt+V và /paste (không hứa điều không xảy ra).
+  const image = platform === 'win32' ? 'help.image.win' : 'help.image';
+  const keys = ['help.enter', 'help.newline', 'help.esc', 'help.ctrlc', 'help.ctrld', 'help.history', 'help.edit', 'help.mode', 'help.slash', 'help.expand', 'help.redraw', image];
   const items = keys.map((k) => tr('tui.' + k));
   const colW = Math.floor((width - 2) / 2);
   const out: string[] = [th.bold(' ' + tr('tui.help.title'))];

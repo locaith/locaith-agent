@@ -29,6 +29,7 @@ export const RUNTIME_STRINGS: { vi: Record<string, string>; en: Record<string, s
     'cmd.theme': 'Đổi giao diện màu (auto, dark, light, mono)',
     'cmd.export': 'Xuất hội thoại ra tệp Markdown',
     'cmd.copy': 'Sao chép câu trả lời cuối của trợ lý',
+    'cmd.paste': 'Đính kèm ảnh đang có trong clipboard (phím tắt: Alt+V)',
     // chung
     yes: 'đã đồng ý',
     busy: 'Trợ lý đang chạy — hãy dừng (Esc) hoặc chờ xong rồi thử lại.',
@@ -181,6 +182,7 @@ export const RUNTIME_STRINGS: { vi: Record<string, string>; en: Record<string, s
     exportEmpty: 'Chưa có gì để xuất.',
     exportDone: 'Đã xuất hội thoại ra {file}',
     copyNothing: 'Chưa có câu trả lời nào để sao chép.',
+    pasteNeedsTty: 'Lệnh này đọc ảnh từ clipboard nên chỉ dùng trong giao diện tương tác. Ngoài phiên, đưa ảnh vào bằng @đường-dẫn.png.',
     // /help
     helpTitle: '**Locaith CLI {version}** — trợ lý lập trình trong terminal',
     helpCommands: '**Lệnh**',
@@ -214,6 +216,7 @@ export const RUNTIME_STRINGS: { vi: Record<string, string>; en: Record<string, s
     'cmd.theme': 'Change the colour theme (auto, dark, light, mono)',
     'cmd.export': 'Export the conversation to a Markdown file',
     'cmd.copy': "Copy the assistant's last answer",
+    'cmd.paste': 'Attach the image on the clipboard (shortcut: Alt+V)',
     yes: 'accepted',
     busy: 'The assistant is running — stop it (Esc) or wait, then try again.',
     stopFirst: 'The assistant is busy — stop it (Esc) before using /{name}.',
@@ -353,6 +356,7 @@ export const RUNTIME_STRINGS: { vi: Record<string, string>; en: Record<string, s
     exportEmpty: 'Nothing to export yet.',
     exportDone: 'Exported the conversation to {file}',
     copyNothing: 'No answer to copy yet.',
+    pasteNeedsTty: 'This command reads an image from the clipboard, so it only works in the interactive screen. Outside it, attach an image with @path.png.',
     helpTitle: '**Locaith CLI {version}** — coding assistant in your terminal',
     helpCommands: '**Commands**',
     helpPrefixes: '**Prefixes**: `/command` · `!command` runs a shell command · `@path` attaches a file/folder (paste or drop images) · `@file#L10-20` attaches a range',
