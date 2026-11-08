@@ -11,7 +11,7 @@ import { DEFAULT_ACCOUNT_CONFIG } from '../../core/account/config';
 import { builtinOutputStyles } from '../../core/commands/outputStyles';
 import { LOCAITH_GATEWAY_URL, LOCAITH_PROVIDER_ID, LocaithGatewayClient } from '../../core/providers/locaithGateway';
 import { gatewayDiagnosticHeaders } from '../../core/providers/gatewayDiagnostics';
-import { PERMISSION_MODES, PICKER_THINKING_LEVELS, type PermissionMode, type ThinkingLevel, type TItem } from '../../shared/protocol';
+import { PERMISSION_MODES, PICKER_THINKING_LEVELS, type PermissionMode, type SessionSummary, type ThinkingLevel, type TItem } from '../../shared/protocol';
 import { buildMeter, contextReport, costReport } from '../../shared/sessionMeter';
 import { deviceLabel, loginWithBrowser } from '../browserLogin';
 import { t as cliT } from '../i18n';
@@ -19,6 +19,7 @@ import { clearLocaithKey, cliConfigFile, locaithKeyFromEnv, readLocaithKey, writ
 import type { Scope } from './config';
 import type { PickItem } from './contract';
 import type { FullSlashContext, Runtime } from './runtime';
+import { formatAgo, matchSessions, sessionMissMessage } from './sessions';
 import { isDirTrusted } from './trust';
 import { addProviderFlow, keyFlow, providerMenu, removeFlow, renderList, testFlow, testLine, type WizardDeps, type WizardIO } from '../providerWizard';
 import { writeFileAtomic } from './util';
@@ -353,47 +354,93 @@ export function registerBuiltinSlash(rt: Runtime): void {
 
   // ── /resume /sessions ──
   const fmtDate = (ts: number) => new Date(ts).toLocaleString(rt.lang === 'vi' ? 'vi-VN' : 'en-US', { dateStyle: 'short', timeStyle: 'short' });
-  reg(
-    'resume',
-    'resume',
-    async (ctx) => {
-      const arg = ctx.args.trim();
-      if (arg) {
-        await rt.resume(arg);
-        return ctx.toast('info', tr('resumed', { title: rt.session.title }));
-      }
-      const here = await rt.sessions('cwd');
-      if (!rt.interactive) return ctx.output(here.length ? here.slice(0, 20).map((s) => `- \`${s.id}\` ${fmtDate(s.updatedAt)} — ${s.title}`).join('\n') : tr('noSessions'), 'markdown');
-      const all = await rt.sessions('all');
-      const list = here.length ? here : all;
-      if (!list.length) return ctx.output(tr('noSessions'), 'plain');
-      const ans = await ctx.ask({
-        kind: 'pick',
-        title: tr('resumePickTitle'),
-        searchable: true,
-        allowCancel: true,
-        items: list.slice(0, 200).map((s) => ({ id: s.id, label: s.title || s.id, detail: `${fmtDate(s.updatedAt)} · ${s.model} · ${s.messageCount} ${tr('messagesShort')}${s.other ? ` · ${s.workspaceName ?? ''}` : ''}`, ...(s.id === rt.session.id ? { current: true } : {}) })),
-      });
-      if (typeof ans === 'string') {
-        await rt.resume(ans);
-        ctx.toast('info', tr('resumed', { title: rt.session.title }));
-      }
-    },
-    { argHint: '[id]' },
-  );
+  const mdCell = (s: string): string => s.replace(/\|/g, '\\|').replace(/\s+/g, ' ');
+  const shown = (s: SessionSummary): string => s.title || s.id;
+
+  /**
+   * Bảng Markdown cho nơi KHÔNG có hộp chọn (chế độ -p, `/sessions list`): số thứ tự, mã ĐẦY ĐỦ (sao chép được — trước đây bị cắt còn 14 ký tự) và một chân bảng
+   * nói rõ cách mở lại. Trước đây bảng chỉ liệt kê mã mà không nói làm gì với chúng. `numbered`: cột # khớp với `/resume <số>` (danh sách mặc định).
+   */
+  const sessionsTable = (rows: SessionSummary[], numbered: boolean): string => {
+    const lines = [
+      `| ${numbered ? '# | ' : ''}ID | ${tr('colUpdated')} | ${tr('stModel')} | ${tr('colTitle')} |`,
+      `|${numbered ? '---|' : ''}---|---|---|---|`,
+      ...rows.slice(0, 30).map((s, i) => `| ${numbered ? `${i + 1} | ` : ''}\`${s.id}\` | ${fmtDate(s.updatedAt)} | ${s.model} | ${mdCell(shown(s))}${s.other ? ` _(${s.workspaceName ?? '…'})_` : ''} |`),
+    ];
+    if (rows.length > 30) lines.push('', tr('sessionsMore', { n: rows.length - 30 }));
+    lines.push('', tr(numbered ? 'sessionsHowTo' : 'sessionsHowToAll', { id: rows[0].id }));
+    return lines.join('\n');
+  };
+
+  /** Hàng của hộp chọn: tiêu đề + «2 giờ trước · model · N tin». `grouped`: phiên của thư mục này lên trước, rồi các thư mục khác (nhóm có tiêu đề). */
+  const pickItems = (list: SessionSummary[], grouped: boolean) => {
+    const ordered = grouped ? [...list.filter((s) => !s.other), ...list.filter((s) => s.other)] : list;
+    const mixed = grouped && ordered.some((s) => s.other) && ordered.some((s) => !s.other);
+    const now = Date.now();
+    return ordered.slice(0, 200).map((s) => ({
+      id: s.id,
+      label: shown(s),
+      detail: `${formatAgo(s.updatedAt, now, rt.lang, fmtDate)} · ${s.model} · ${s.messageCount} ${tr('messagesShort')}${s.other ? ` · ${s.workspaceName ?? ''}` : ''}`,
+      ...(mixed ? { group: s.other ? tr('resumeGroupOther') : tr('resumeGroupHere') } : {}),
+      ...(s.id === rt.session.id ? { current: true } : {}),
+    }));
+  };
+
+  const openSession = async (ctx: FullSlashContext, s: SessionSummary): Promise<void> => {
+    await rt.resume(s.id);
+    ctx.toast('info', tr('resumed', { title: rt.session.title }));
+  };
+
+  /** Hộp chọn có ô tìm (↑↓ chọn, gõ để lọc theo tiêu đề, Enter mở, Esc huỷ) — cách chính để mở lại một phiên: không cần biết mã. */
+  const chooseSession = async (ctx: FullSlashContext, list: SessionSummary[], title: string, grouped: boolean): Promise<void> => {
+    const ans = await ctx.ask({ kind: 'pick', title, hint: tr('resumeHint'), searchable: true, allowCancel: true, items: pickItems(list, grouped) });
+    if (typeof ans !== 'string') return;
+    const s = list.find((x) => x.id === ans);
+    if (s) await openSession(ctx, s);
+  };
+
+  /**
+   * Dùng chung cho /resume và /sessions. Có đối số: mã, đầu mã, SỐ (`2`, `#2`) hoặc từ khoá trong tiêu đề — đúng một phiên thì mở thẳng, nhiều phiên thì
+   * (tương tác) chọn trong số đó. Không đối số: hộp chọn (phiên của thư mục này; chưa có thì mọi thư mục); `all`: mọi thư mục. Không có hộp chọn (-p): bảng.
+   */
+  const resumeFlow = async (ctx: FullSlashContext, rawArg: string, via: 'resume' | 'sessions'): Promise<void> => {
+    const arg = rawArg.trim();
+    const wantAll = arg.toLowerCase() === 'all';
+    const here = await rt.sessions('cwd');
+    const all = await rt.sessions('all');
+    if (arg && !wantAll) {
+      const m = matchSessions(arg, here, all);
+      if (m.kind === 'one') return openSession(ctx, m.session);
+      if (m.kind === 'many' && rt.interactive) return chooseSession(ctx, m.list, tr('resumePickMany', { q: arg, n: m.list.length }), true);
+      return ctx.output(sessionMissMessage(arg, m), 'error');
+    }
+    const everywhere = wantAll || !here.length;
+    const list = everywhere ? all : here;
+    if (!list.length) return ctx.output(tr('noSessions'), 'plain');
+    if (!rt.interactive) return ctx.output(sessionsTable(list, !wantAll || !here.length), 'markdown');
+    // /sessions chạy được cả lúc trợ lý đang trả lời (chỉ xem); nhưng mở lại một phiên thì phải đợi rảnh.
+    if (via === 'sessions' && rt.busy) return ctx.output(`${tr('sessionsBusy')}\n\n${sessionsTable(list, !wantAll || !here.length)}`, 'markdown');
+    await chooseSession(ctx, list, tr(everywhere ? 'resumePickTitleAll' : 'resumePickTitle'), everywhere);
+  };
+
+  reg('resume', 'resume', (ctx) => resumeFlow(ctx, ctx.args, 'resume'), { argHint: '[số | từ khoá | mã | all]' });
+  // /sessions: trong giao diện tương tác mở HỘP CHỌN như /resume (trước đây chỉ in một bảng mã không chọn được); `list` in bảng; `all` gồm mọi thư mục.
   reg(
     'sessions',
     'sessions',
     async (ctx) => {
-      const scope = ctx.args.trim() === 'all' ? 'all' : 'cwd';
-      const rows = await rt.sessions(scope);
-      if (!rows.length) return ctx.output(tr('noSessions'), 'plain');
-      ctx.output(
-        [`| ID | ${tr('colUpdated')} | ${tr('stModel')} | ${tr('colTitle')} |`, '|---|---|---|---|', ...rows.slice(0, 30).map((s) => `| \`${s.id.slice(0, 14)}\` | ${fmtDate(s.updatedAt)} | ${s.model} | ${s.title.replace(/\|/g, '\\|')}${s.other ? ` _(${s.workspaceName ?? '…'})_` : ''} |`)].join('\n'),
-        'markdown',
-      );
+      const toks = ctx.args.trim().toLowerCase().split(/\s+/).filter(Boolean);
+      const wantAll = toks.includes('all');
+      if (toks.includes('list') || toks.includes('ls') || !rt.interactive) {
+        const here = await rt.sessions('cwd');
+        const all = await rt.sessions('all');
+        const rows = wantAll || !here.length ? all : here;
+        if (!rows.length) return ctx.output(tr('noSessions'), 'plain');
+        return ctx.output(sessionsTable(rows, !wantAll || !here.length), 'markdown');
+      }
+      return resumeFlow(ctx, wantAll ? 'all' : '', 'sessions');
     },
-    { argHint: '[all]', needsIdle: false },
+    { argHint: '[list] [all]', needsIdle: false },
   );
 
   // ── /exit /quit ──

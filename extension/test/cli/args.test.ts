@@ -1,6 +1,6 @@
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { UsageError, parseArgs } from '../../src/cli/args';
+import { UsageError, parseArgs, wantsSessionPicker } from '../../src/cli/args';
 
 const CWD = path.resolve('/work/proj');
 const p = (argv: string[]) => parseArgs(argv, CWD);
@@ -115,5 +115,33 @@ describe('parseArgs', () => {
   it('cờ phụ của lệnh con', () => {
     expect(p(['sessions', '--all']).flags.all).toBe(true);
     expect(p(['update', '--check']).flags.check).toBe(true);
+  });
+
+  it('-r: một mình = chọn phiên; kèm mã/số/từ khoá = mở thẳng', () => {
+    expect(p(['-r']).resume).toBe(true);
+    expect(p(['--resume']).resume).toBe(true);
+    expect(p(['-r', 'cli_mw7yd9w31u']).resume).toBe('cli_mw7yd9w31u');
+    expect(p(['-r', '2']).resume).toBe('2');
+    expect(p(['-r', 'đăng nhập']).resume).toBe('đăng nhập');
+    expect(p(['--resume=cli_abc']).resume).toBe('cli_abc');
+    expect(p(['-r', '--no-color']).resume).toBe(true); // sau -r là cờ khác → vẫn là «chọn từ danh sách»
+  });
+
+  it('wantsSessionPicker: chỉ khi `locaith -r` đứng một mình trong phiên tương tác', () => {
+    expect(wantsSessionPicker(p(['-r']))).toBe(true);
+    expect(wantsSessionPicker(p(['--resume']))).toBe(true);
+    expect(wantsSessionPicker(p(['-r', '--no-color']))).toBe(true);
+    // có mã/số/từ khoá → mở thẳng, không hộp chọn
+    expect(wantsSessionPicker(p(['-r', 'cli_mw7yd9w31u']))).toBe(false);
+    expect(wantsSessionPicker(p(['-r', '2']))).toBe(false);
+    // -c = phiên gần nhất; -c cùng -r thì -c thắng (đã nói rõ muốn phiên gần nhất)
+    expect(wantsSessionPicker(p(['-c']))).toBe(false);
+    expect(wantsSessionPicker(p(['-c', '-r']))).toBe(false);
+    // có việc kèm theo hoặc chế độ in: không có chỗ cho hộp chọn
+    expect(wantsSessionPicker(p(['-r', '--model', 'locaith-v5-si', 'làm gì đó']))).toBe(false);
+    expect(wantsSessionPicker(p(['-r', '-p', 'tóm tắt']))).toBe(false);
+    expect(wantsSessionPicker(p(['-p', '-r']))).toBe(false);
+    // không có -r
+    expect(wantsSessionPicker(p([]))).toBe(false);
   });
 });

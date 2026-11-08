@@ -1,5 +1,14 @@
 # Changelog
 
+## locaith-cli 0.4.7 - 2026-11-09 (PyPI)
+
+- **Reopening a saved session no longer needs an id you have to remember.** Typing `/sessions` used to print a table of ids you could not select, and nothing said what to do with it (the only way was to ask an AI for `locaith -r cli_xxxxxxxxxx`). Now `/sessions` and `/resume` open the same **picker**: ↑↓ to choose, type to filter by title (accents optional — "thanh toan" finds "thanh toán"), Enter to open, Esc to cancel. Each row says how long ago it was used ("2 hours ago · model · 14 msgs"); sessions of other folders are grouped under "Other folders" (`/sessions all`).
+- **`locaith -r` with nothing after it opens the picker.** `--help` always promised "no id: pick from a list", but it silently reopened the latest session (the same as `-c`). It now opens the picker as soon as the screen is ready. `locaith -c` is unchanged.
+- **Pick by number, by a word of the title, or by id.** `/resume 2` · `locaith -r 2` open the second session of the list; `/resume login bug` · `locaith -r "login"` match the title (one hit opens it, several open a picker with just those); a full id or a long enough prefix still works.
+- **Ids are no longer cut short.** `locaith sessions` printed 8 characters and `/sessions` 14, but ids look like `cli_<time><random>` so sessions created close together share their first 8 characters — a copied id could not be used. Both now print the full id with a number column, and end with the commands that reopen a session. An id prefix shared by several sessions lists them instead of guessing.
+- **Clearer messages.** "No session in this folder, but 5 exist elsewhere — see `locaith sessions --all`" instead of a bare "no sessions"; "there is no session number 9 — the list has only 4"; "2 sessions match … — be more specific, or run `locaith -r` to pick". While the assistant is answering, `/sessions` shows the list and says why it cannot reopen yet.
+- Help (`locaith help sessions`, `/help`, the tips) and `docs/CLI.md` explain all of the above.
+
 ## locaith-cli 0.4.6 - 2026-11-08 (PyPI)
 
 - **Pasting an image into the terminal now works in Windows Terminal.** Windows Terminal (like VS Code's terminal) keeps `Ctrl+V` for itself to paste *text*, so a screenshot on the clipboard never reached Locaith — yet the shortcut list said "Ctrl+V pastes an image", and nothing mentioned the key that does arrive. Now **`Alt+V`** and the new **`/paste`** command (alias `/image`) attach the clipboard image, and the shortcut panel (`?`), the start-up tips and `--help` tell Windows users to use them. A paste that carries no text — what several terminals send when the clipboard holds only an image — also attaches the image instead of being silently dropped.

@@ -213,6 +213,7 @@ export class MockRuntime implements CliRuntime {
       { name: 'model', description: d('Chọn model', 'Pick a model') },
       { name: 'mode', description: d('Đổi chế độ quyền', 'Change permission mode') },
       { name: 'resume', description: d('Mở lại một phiên cũ', 'Resume an earlier session') },
+      { name: 'sessions', description: d('Danh sách phiên để chọn và mở lại', 'Sessions to pick from and reopen') },
       { name: 'rewind', description: d('Quay lại một điểm trước đó', 'Rewind to an earlier point') },
       { name: 'theme', description: d('Đổi giao diện sáng/tối', 'Switch light/dark theme') },
       { name: 'login', description: d('Đăng nhập tài khoản Locaith', 'Sign in to Locaith') },
@@ -285,6 +286,7 @@ export class MockRuntime implements CliRuntime {
       case 'quit':
         this.emit({ t: 'action', action: 'exit' });
         return;
+      case 'sessions': // như thật: trong giao diện tương tác /sessions mở cùng hộp chọn với /resume
       case 'resume': {
         const list = await this.sessions();
         const ans = await this.askUser({

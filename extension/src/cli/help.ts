@@ -24,7 +24,7 @@ COMMANDS
   locaith whoami                account, plan, usable models, whether the data notice is accepted
   locaith consent --yes         record acceptance of the data notice for the account (once, by the account owner)
   locaith provider [add|key|…]  model providers: add a custom API (OpenRouter, Ollama…), store another vendor's key, test the connection
-  locaith sessions [--all]      list saved sessions (reopen with  locaith -r <id>  or  locaith -c)
+  locaith sessions [--all]      list saved sessions (reopen: locaith -r to pick from a list, or  locaith -c  for the latest)
   locaith config                show where settings, key, sessions, MCP and memory live
   locaith update [--check]      check for / upgrade to a newer version on PyPI
   locaith help [topic]          detailed guides         locaith version   print the version
@@ -33,7 +33,7 @@ COMMON OPTIONS
   -p, --print                   non-interactive: print the answer and exit
   --output-format <f>           text (default) | json | stream-json   (with -p)
   -c, --continue                continue the most recent session in this folder
-  -r, --resume [id]             resume a session (no id: pick from a list)
+  -r, --resume [id|number|word] resume a session (nothing after -r: pick from a list; or a number, a word of the title, an id)
   --model <id>                  model (default locaith-v5-flash; also: locaith-v5-si)
   --permission-mode <m>         default | acceptEdits | plan | bypassPermissions
   --allow none|reads|all        (old CLI 0.3.x name: none = plan, reads = default, all = bypassPermissions)
@@ -60,7 +60,7 @@ LỆNH
   locaith whoami                tài khoản, gói, model dùng được, đã đồng ý thông báo dữ liệu chưa
   locaith consent --yes         ghi nhận đồng ý thông báo dữ liệu cho tài khoản (một lần, bởi chủ tài khoản)
   locaith provider [add|key|…]  nhà cung cấp mô hình: thêm API tuỳ chỉnh (OpenRouter, Ollama…), lưu khoá hãng khác, thử kết nối
-  locaith sessions [--all]      liệt kê phiên đã lưu (mở lại bằng  locaith -r <id>  hoặc  locaith -c)
+  locaith sessions [--all]      liệt kê phiên đã lưu (mở lại: locaith -r để chọn từ danh sách, hoặc  locaith -c  cho phiên gần nhất)
   locaith config                chỉ ra các tệp cài đặt, khoá, phiên, MCP, bộ nhớ
   locaith update [--check]      kiểm tra/nâng cấp lên bản mới trên PyPI
   locaith help [chủ đề]         hướng dẫn chi tiết      locaith version   in phiên bản
@@ -69,7 +69,7 @@ TUỲ CHỌN THƯỜNG DÙNG
   -p, --print                   không tương tác: in câu trả lời rồi thoát
   --output-format <f>           text (mặc định) | json | stream-json   (đi với -p)
   -c, --continue                tiếp tục phiên gần nhất của thư mục này
-  -r, --resume [id]             mở lại một phiên (không có id: chọn từ danh sách)
+  -r, --resume [id|số|từ khoá]  mở lại một phiên (không gõ gì sau -r: chọn từ danh sách; hoặc gõ số, từ trong tiêu đề, mã)
   --model <id>                  model (mặc định locaith-v5-flash; còn locaith-v5-si)
   --permission-mode <m>         default | acceptEdits | plan | bypassPermissions
   --allow none|reads|all        (tên cũ của CLI 0.3.x: none = plan, reads = default, all = bypassPermissions)
@@ -90,7 +90,8 @@ const VI: Record<HelpTopic, string> = {
   /compact [gì]    nén ngữ cảnh (ưu tiên giữ "gì")  /context         đồng hồ ngữ cảnh, token, số lần nén
   /cost            token và chi phí ước tính        /model [id]       xem/đổi model
   /mode [tên]      chế độ quyền (Shift+Tab)         /thinking [mức]   mức suy luận
-  /resume [id]     mở lại phiên đã lưu              /sessions         liệt kê phiên
+  /resume          chọn và mở lại một phiên đã lưu bằng ↑↓ + Enter  (hoặc  /resume 2 · /resume từ khoá · /resume mã)
+  /sessions        như /resume; /sessions list in bảng có số thứ tự và mã đầy đủ; /sessions all gồm mọi thư mục
   /rewind          quay lại một lượt (mã / hội thoại / cả hai)       /fork   rẽ nhánh từ đây
   /tasks           tác vụ nền (dev server, build…)  /hooks           xem hooks đang chạy
   /permissions     luật cho phép/hỏi/chặn           /agents           agent con
@@ -163,7 +164,10 @@ Cấu hình (lược đồ Claude): <dự-án>/.mcp.json, ~/.locaith/mcp.json, c
   { "mcpServers": { "github": { "command": "npx", "args": ["-y", "@modelcontextprotocol/server-github"], "env": { "GITHUB_TOKEN": "…" } } } }
 Máy chủ của dự án cần thư mục đã tin cậy và bạn duyệt từng cái. /mcp xem trạng thái, bật/tắt, kết nối lại. Công cụ MCP đi qua cùng luật quyền (mcp__máy-chủ__công-cụ).`,
   sessions: `PHIÊN
-Mỗi cuộc trò chuyện tự lưu ở ~/.locaith/sessions. locaith -c tiếp tục phiên gần nhất của thư mục; locaith -r [id] mở lại; /sessions, /resume trong phiên; /fork rẽ nhánh; /rewind quay lại một lượt (khôi phục mã và/hoặc hội thoại — cần checkpoints.enabled, mặc định bật).
+Mỗi cuộc trò chuyện tự lưu ở ~/.locaith/sessions. Mở lại KHÔNG cần nhớ mã:
+  trong phiên:  /resume (hoặc /sessions) → chọn bằng ↑↓, gõ chữ để lọc theo tiêu đề, Enter để mở · /resume 2 (theo số) · /resume lỗi đăng nhập (theo từ trong tiêu đề) · /sessions list (in bảng) · /sessions all (mọi thư mục)
+  ngoài phiên:  locaith -r (mở danh sách để chọn) · locaith -r 2 · locaith -r "đăng nhập" · locaith -r <mã> · locaith -c (phiên gần nhất của thư mục) · locaith sessions (in danh sách)
+/fork rẽ nhánh; /rewind quay lại một lượt (khôi phục mã và/hoặc hội thoại — cần checkpoints.enabled, mặc định bật).
 Nén ngữ cảnh tự động ở 80% cửa sổ (agent.compactAtPercent); kết quả công cụ cũ được lược trước; /compact để nén tay.`,
   memory: `KÝ ỨC VÀ CHỈ DẪN
 LOCAITH.md (hoặc AGENTS.md / CLAUDE.md) ở gốc dự án và ~/.locaith/LOCAITH.md: chỉ dẫn luôn được nạp. /init tạo LOCAITH.md bằng cách quét dự án; /memory mở để sửa.
@@ -184,7 +188,8 @@ const EN: Record<HelpTopic, string> = {
   /compact [what]  compact context (keep "what")    /context          context meter, tokens, compactions
   /cost            tokens and estimated cost        /model [id]       show/change model
   /mode [name]     permission mode (Shift+Tab)      /thinking [level] reasoning level
-  /resume [id]     reopen a saved session           /sessions         list sessions
+  /resume          pick and reopen a saved session with ↑↓ + Enter  (or  /resume 2 · /resume keyword · /resume id)
+  /sessions        like /resume; /sessions list prints a table with numbers and full ids; /sessions all covers every folder
   /rewind          go back to a turn (code / conversation / both)   /fork   branch from here
   /tasks           background tasks (dev servers…)  /hooks            show active hooks
   /permissions     allow/ask/deny rules             /agents           sub-agents
@@ -257,7 +262,10 @@ Config (Claude schema): <project>/.mcp.json, ~/.locaith/mcp.json, setting "mcpSe
   { "mcpServers": { "github": { "command": "npx", "args": ["-y", "@modelcontextprotocol/server-github"], "env": { "GITHUB_TOKEN": "…" } } } }
 Project servers need a trusted folder and your approval one by one. /mcp shows status, enable/disable, reconnect. MCP tools go through the same permission rules (mcp__server__tool).`,
   sessions: `SESSIONS
-Every conversation is saved in ~/.locaith/sessions. locaith -c continues the folder's latest session; locaith -r [id] reopens one; /sessions, /resume inside; /fork branches; /rewind goes back a turn (restores code and/or conversation — needs checkpoints.enabled, on by default).
+Every conversation is saved in ~/.locaith/sessions. You do NOT need to remember an id to reopen one:
+  inside:   /resume (or /sessions) → pick with ↑↓, type to filter by title, Enter to open · /resume 2 (by number) · /resume login bug (by words in the title) · /sessions list (prints a table) · /sessions all (all folders)
+  outside:  locaith -r (opens the picker) · locaith -r 2 · locaith -r "login" · locaith -r <id> · locaith -c (this folder's latest) · locaith sessions (prints the list)
+/fork branches; /rewind goes back a turn (restores code and/or conversation — needs checkpoints.enabled, on by default).
 Context auto-compacts at 80% of the window (agent.compactAtPercent); old tool results are trimmed first; /compact compacts by hand.`,
   memory: `MEMORY AND INSTRUCTIONS
 LOCAITH.md (or AGENTS.md / CLAUDE.md) at the repo root and ~/.locaith/LOCAITH.md: instructions always loaded. /init creates LOCAITH.md by scanning the project; /memory opens it for editing.

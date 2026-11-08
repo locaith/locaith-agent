@@ -29,7 +29,7 @@ sự kiện rt ───────→ Conversation (conversation.ts) ───
 * `widgets.ts` / `dialogs.ts`: ô nhập, dải trạng thái, spinner (chữ chạy bóng gradient), bảng việc, menu gợi ý, hộp xin quyền / chọn (có tìm kiếm, không phân biệt dấu) / xác nhận / nhập.
 * `terminal.ts`: raw mode, bracketed paste, hẹn giờ ESC đơn, khôi phục terminal khi thoát / crash / SIGINT / SIGTERM / SIGHUP (đồng bộ, idempotent).
 * `theme.ts`: truecolor → 256 → 16 → `NO_COLOR`; ASCII khi `LOCAITH_ASCII=1` hoặc locale không UTF-8; nền sáng/tối từ `COLORFGBG` hoặc `/theme`.
-* Quy ước với runtime: giao diện **tự in** dòng `> /lệnh` và `> !shell` (runtime không phát `user` cho chúng); tin gửi model được in khi nhận `ui:user` (nếu runtime quên, giao diện in bù ở `assistant_start`). `/theme` do giao diện xử lý. `action:'copy'` ghi clipboard (OSC 52 + `clip`/`pbcopy`/`xclip`); `action:'open_editor'` mở `$VISUAL/$EDITOR`.
+* Quy ước với runtime: giao diện **tự in** dòng `> /lệnh` và `> !shell` (runtime không phát `user` cho chúng); tin gửi model được in khi nhận `ui:user` (nếu runtime quên, giao diện in bù ở `assistant_start`). `/theme` do giao diện xử lý. `action:'copy'` ghi clipboard (OSC 52 + `clip`/`pbcopy`/`xclip`); `action:'open_editor'` mở `$VISUAL/$EDITOR`. `/sessions` và `/resume` mở cùng `PickDialog` (có ô tìm); `locaith -r` (không mã) chạy giao diện với `initialPrompt: '/resume'` — hộp chọn hiện ngay khi sẵn sàng (xem `wantsSessionPicker` ở `args.ts`).
 
 ## Phím tắt
 

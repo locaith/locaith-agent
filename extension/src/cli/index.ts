@@ -18,7 +18,7 @@ import { ACCOUNT_PRESETS, BUILTIN_PRESETS } from '../core/providers/presets';
 import { gatewayDiagnosticHeaders } from '../core/providers/gatewayDiagnostics';
 import { LOCAITH_GATEWAY_URL, LOCAITH_MODEL_FLASH, LOCAITH_PROVIDER_ID, LocaithGatewayClient } from '../core/providers/locaithGateway';
 import { loginCmd, whoamiCmd, type AccountDeps } from './account';
-import { UsageError, parseArgs, type ParsedArgs } from './args';
+import { UsageError, parseArgs, wantsSessionPicker, type ParsedArgs } from './args';
 import { deviceLabel, loginWithBrowser } from './browserLogin';
 import { configFile, hasByokKey, homeDir, readApiKey, removeApiKey, writeApiKey } from './credentials';
 import { doctor } from './doctor';
@@ -33,7 +33,7 @@ import { SessionRepo } from './runtime/sessions';
 import { runOnboarding, runTui, withTerminalUi } from './tui';
 import { compareVersions, latestKnown, runUpdate, updateAvailable } from './update';
 
-export const VERSION = '0.4.6';
+export const VERSION = '0.4.7';
 
 // ── nhỏ gọn: ngôn ngữ, tin cậy, tiện ích ─────────────────────────────────────────────────────────
 
@@ -296,6 +296,8 @@ async function chat(a: ParsedArgs, env: NodeJS.ProcessEnv, lang: Lang): Promise<
     trusted = r.trusted;
   }
 
+  // `locaith -r` (không mã): mở hộp chọn phiên ngay khi giao diện sẵn sàng thay vì lặng lẽ mở phiên gần nhất.
+  const pickSession = wantsSessionPicker(a);
   let rt;
   try {
     rt = await createRuntime({
@@ -313,7 +315,7 @@ async function chat(a: ParsedArgs, env: NodeJS.ProcessEnv, lang: Lang): Promise<
       maxTurns: a.maxTurns,
       timeoutSec: a.timeoutSec,
       mcpConfig: a.mcpConfig,
-      resume: a.resume ?? (a.continueLast ? true : undefined),
+      resume: pickSession ? undefined : a.resume ?? (a.continueLast ? true : undefined),
       noPersist: a.noPersist,
       lang: curLang,
       verbose: a.verbose,
@@ -328,7 +330,7 @@ async function chat(a: ParsedArgs, env: NodeJS.ProcessEnv, lang: Lang): Promise<
     throw err;
   }
   try {
-    return await runTui(rt, { version: VERSION, lang: curLang, cwd: a.cwd, env, noColor: a.noColor, home, initialPrompt: a.prompt });
+    return await runTui(rt, { version: VERSION, lang: curLang, cwd: a.cwd, env, noColor: a.noColor, home, initialPrompt: pickSession ? '/resume' : a.prompt });
   } finally {
     await rt.dispose();
   }
@@ -378,11 +380,19 @@ async function sessionsCmd(a: ParsedArgs, env: NodeJS.ProcessEnv): Promise<numbe
     return 0;
   }
   if (rows.length === 0) {
-    console.log(t('cli.sessions.none'));
+    // Thư mục này chưa có phiên nhưng thư mục khác có: nói rõ và chỉ cách xem (trước đây chỉ «chưa có phiên nào», khiến tưởng đã mất hết).
+    const elsewhere = a.flags.all ? 0 : (await repo.list('all')).length;
+    console.log(elsewhere ? t('cli.sessions.noneHere', { n: elsewhere }) : t('cli.sessions.none'));
     return 0;
   }
+  // Số thứ tự chỉ in khi khớp với `locaith -r <số>` (danh sách mặc định: thư mục này, hoặc mọi thư mục khi thư mục này chưa có phiên nào).
+  const numbered = !a.flags.all || (await repo.list('cwd')).length === 0;
   console.log(t('cli.sessions.header'));
-  for (const s of rows.slice(0, 40)) console.log(`  ${s.id.slice(0, 8)}  ${new Date(s.updatedAt).toLocaleString()}  ${(s.model ?? '').padEnd(18)} ${s.title}`);
+  // In MÃ ĐẦY ĐỦ: trước đây cắt còn 8 ký tự («cli_mw7y»), mà các phiên tạo gần nhau chung 8 ký tự đầu nên mã cắt không dùng được để mở lại.
+  rows.slice(0, 40).forEach((s, i) => console.log(`  ${numbered ? String(i + 1).padStart(2) : '  '}  ${s.id}  ${new Date(s.updatedAt).toLocaleString()}  ${(s.model ?? '').padEnd(18)} ${s.title}${s.other ? `  (${s.workspaceName ?? '…'})` : ''}`));
+  if (rows.length > 40) console.log(t('cli.sessions.more', { n: rows.length - 40 }));
+  console.log('');
+  console.log(t(numbered ? 'cli.sessions.howto' : 'cli.sessions.howtoAll', { id: rows[0].id }));
   return 0;
 }
 

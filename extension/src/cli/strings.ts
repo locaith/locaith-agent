@@ -23,7 +23,13 @@ registerStrings('cli', {
     'update.available': '↑ Có bản mới {latest} (đang {current}).',
     'update.offline': 'Không kiểm được bản mới (không có mạng?).',
     'sessions.none': 'Chưa có phiên nào được lưu.',
+    'sessions.noneHere': 'Chưa có phiên nào ở thư mục này — nhưng có {n} phiên ở thư mục khác. Xem bằng:  locaith sessions --all',
     'sessions.header': 'Phiên đã lưu (mới nhất trước):',
+    'sessions.more': '  … và {n} phiên nữa (lọc bằng  locaith -r từ-khoá  hoặc chọn trong  locaith -r ).',
+    'sessions.howto':
+      'Mở lại một phiên:\n  locaith -r              chọn từ danh sách (↑↓ + Enter)\n  locaith -r 2            theo SỐ ở cột trái\n  locaith -r "đăng nhập"  theo từ trong tiêu đề\n  locaith -r {id}   theo mã\n  locaith -c              phiên gần nhất của thư mục này',
+    'sessions.howtoAll':
+      'Mở lại một phiên:\n  locaith -r              chọn từ danh sách (↑↓ + Enter)\n  locaith -r "đăng nhập"  theo từ trong tiêu đề\n  locaith -r {id}   theo mã\n  locaith -c              phiên gần nhất của thư mục này',
     'config.title': 'Cấu hình của Locaith CLI',
     'prov.url.empty': 'Chưa nhập địa chỉ.',
     'prov.url.syntax': 'Địa chỉ không đúng dạng (ví dụ https://api.example.com/v1).',
@@ -206,7 +212,13 @@ registerStrings('cli', {
     'update.available': '↑ New version {latest} available (you have {current}).',
     'update.offline': 'Could not check for updates (offline?).',
     'sessions.none': 'No saved sessions yet.',
+    'sessions.noneHere': 'No saved session in this folder — but {n} exist in other folders. See them with:  locaith sessions --all',
     'sessions.header': 'Saved sessions (newest first):',
+    'sessions.more': '  … and {n} more (filter with  locaith -r keyword  or pick in  locaith -r ).',
+    'sessions.howto':
+      'Reopen a session:\n  locaith -r              pick from a list (↑↓ + Enter)\n  locaith -r 2            by the NUMBER in the left column\n  locaith -r "login"      by a word in the title\n  locaith -r {id}   by id\n  locaith -c              the latest session of this folder',
+    'sessions.howtoAll':
+      'Reopen a session:\n  locaith -r              pick from a list (↑↓ + Enter)\n  locaith -r "login"      by a word in the title\n  locaith -r {id}   by id\n  locaith -c              the latest session of this folder',
     'config.title': 'Locaith CLI configuration',
     'prov.url.empty': 'No address entered.',
     'prov.url.syntax': 'The address is malformed (for example https://api.example.com/v1).',

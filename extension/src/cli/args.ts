@@ -360,3 +360,11 @@ export function parseArgs(argv: string[], cwd: string = process.cwd()): ParsedAr
   }
   return o;
 }
+
+/**
+ * `locaith -r` đứng một mình (không mã, không việc kèm theo, không `-c`) trong giao diện tương tác = mở HỘP CHỌN phiên ngay khi khởi động.
+ * Trước đây trường hợp này lặng lẽ mở luôn phiên gần nhất (như `-c`) — trái với chính phần trợ giúp («không có id: chọn từ danh sách»).
+ */
+export function wantsSessionPicker(a: Pick<ParsedArgs, 'command' | 'resume' | 'continueLast' | 'prompt'>): boolean {
+  return a.command === 'chat' && a.resume === true && !a.continueLast && !a.prompt;
+}
