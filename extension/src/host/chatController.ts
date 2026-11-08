@@ -22,7 +22,8 @@ import { MEMORY_DIR, MEMORY_INDEX, type MemoryScope, type MemorySnapshot } from 
 import { t, type Lang } from '../core/engine/strings';
 import { Summarizer } from '../core/engine/summarizer';
 import { newSession, NotUtf8Error, type ArtifactRecord, type PermissionDecision, type SessionState } from '../core/engine/types';
-import { isInside, normalizeForCompare, resolveUserPath } from '../core/fsutil/paths';
+import { isInside, normalizeForCompare } from '../core/fsutil/paths';
+import { classifyOpenTarget, openCandidates, type OpenDecision } from '../core/fsutil/openTarget'; // (lane:v072-fixes)
 import { MEDIA_DATA_URI_MAX, MEDIA_MAX_PATHS, imageMime, mediaCandidates, mediaKindOf, viaLink, type MediaZones } from '../core/fsutil/mediaPaths';
 import * as fs from 'node:fs';
 import { DEMO_PROVIDER_ID } from '../core/providers';
@@ -2445,15 +2446,86 @@ export class ChatController implements vscode.Disposable {
   // Hành động trên editor
   // ─────────────────────────────────────────────────────────────────────────
 
+  /**
+   * (0.7.2) Người dùng bấm liên kết tệp → mở tệp THẬT kể cả ngoài workspace (trước đây từ chối: «Chỉ mở được tệp trong workspace»).
+   * Phân loại bằng hàm thuần `classifyOpenTarget`: tệp nhạy cảm ngoài workspace phải xác nhận; tài liệu/media mở bằng ứng dụng hệ
+   * thống; nhị phân chạy được chỉ hiện trong thư mục; thư mục / không thấy tệp → thông báo rõ.
+   */
   private async openFile(rel: string, line?: number): Promise<void> {
-    const r = resolveUserPath(this.host, String(rel ?? ''));
-    if (r.zone === 'outside') return this.toast('warn', this.lang === 'vi' ? 'Chỉ mở được tệp trong workspace.' : 'Only workspace files can be opened.');
+    const vi = this.lang === 'vi';
+    const roots = this.host.workspaceRoots();
+    const extra = this.host.extraReadRoots();
+    const shown = String(rel ?? '').trim();
+    const cands = openCandidates(shown, roots, os.homedir());
+    if (cands.length === 0) return this.toast('warn', vi ? `Không mở được «${shown.slice(0, 120)}»: đường dẫn không hợp lệ.` : `Cannot open "${shown.slice(0, 120)}": invalid path.`);
+    let dirHit: string | undefined;
+    let found: { abs: string; decision: OpenDecision } | undefined;
+    for (const abs of cands) {
+      let st: fs.Stats;
+      try {
+        st = await fs.promises.stat(abs);
+      } catch {
+        continue;
+      }
+      let real = abs;
+      try {
+        real = await fs.promises.realpath(abs);
+      } catch {
+        /* giữ nguyên */
+      }
+      let head: Uint8Array | undefined;
+      if (st.isFile() && !path.extname(abs)) {
+        try {
+          const fh = await fs.promises.open(abs, 'r');
+          try {
+            const buf = Buffer.alloc(4096);
+            const { bytesRead } = await fh.read(buf, 0, buf.length, 0);
+            head = buf.subarray(0, bytesRead);
+          } finally {
+            await fh.close();
+          }
+        } catch {
+          /* không đọc được đầu tệp → coi như văn bản */
+        }
+      }
+      const decision = classifyOpenTarget({ abs, real, roots, extraRoots: extra, probe: { exists: true, isFile: st.isFile(), isDirectory: st.isDirectory(), head } });
+      if (decision.action === 'directory') {
+        dirHit ??= abs;
+        continue;
+      }
+      if (decision.action === 'missing') continue;
+      found = { abs, decision };
+      break;
+    }
+    if (!found) {
+      if (dirHit) return this.toast('warn', vi ? `«${shown}» là thư mục, không phải tệp.` : `"${shown}" is a folder, not a file.`);
+      return this.toast('warn', vi ? `Không thấy tệp «${shown}».` : `File not found: "${shown}".`);
+    }
+    const { abs, decision } = found;
+    const uri = vscode.Uri.file(abs);
     try {
-      const doc = await vscode.workspace.openTextDocument(vscode.Uri.file(r.abs));
+      if (decision.confirm) {
+        const yes = vi ? 'Mở' : 'Open';
+        const pick = await vscode.window.showWarningMessage(
+          vi ? 'Mở tệp nhạy cảm ngoài workspace?' : 'Open a sensitive file outside the workspace?',
+          { modal: true, detail: abs },
+          yes,
+        );
+        if (pick !== yes) return;
+      }
+      if (decision.action === 'reveal') {
+        await vscode.commands.executeCommand('revealFileInOS', uri);
+        return this.toast('info', vi ? `«${path.basename(abs)}» là tệp nhị phân nên chỉ hiện trong thư mục chứa nó.` : `"${path.basename(abs)}" is a binary file, so it was only revealed in its folder.`);
+      }
+      if (decision.action === 'external') {
+        if (!(await vscode.env.openExternal(uri))) await vscode.commands.executeCommand('revealFileInOS', uri);
+        return;
+      }
       const ln = Math.max(0, (line ?? 1) - 1);
-      await vscode.window.showTextDocument(doc, { selection: new vscode.Range(ln, 0, ln, 0), preview: true });
+      // vscode.open: văn bản mở trình soạn, ảnh mở trình xem ảnh, tệp lớn tự xử lý — không cần openTextDocument (lỗi với tệp không phải văn bản).
+      await vscode.commands.executeCommand('vscode.open', uri, { selection: new vscode.Range(ln, 0, ln, 0), preview: true } satisfies vscode.TextDocumentShowOptions);
     } catch {
-      this.toast('error', this.lang === 'vi' ? `Không mở được ${rel}` : `Could not open ${rel}`);
+      this.toast('error', vi ? `Không mở được ${shown}` : `Could not open ${shown}`);
     }
   }
 
