@@ -81,14 +81,20 @@ jobs:
           node-version: '22'
           cache: npm
           cache-dependency-path: extension/package-lock.json
+      # The wheel is BUILT with a modern Python: pyproject.toml declares the licence as an SPDX expression (PEP 639), which needs setuptools >= 77, and
+      # that needs Python >= 3.9. The wheel itself is pure Python (`py3-none-any`, requires-python >= 3.8), so everything AFTER the build — the launcher
+      # tests, the clean virtualenv, the smoke tests — still runs on the matrix Python, including 3.8.
       - uses: actions/setup-python@v5
         with:
-          python-version: ${{ matrix.python }}
+          python-version: '3.12'
       - name: Build the wheel from source
         run: |
           (cd extension && npm ci --no-audit --no-fund)
           python -m pip install --quiet build twine
           node packages/locaith-cli-py/build.mjs --extension extension --python python
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
       - name: Launcher unit tests
         run: python -m unittest discover -s packages/locaith-cli-py/tests -v
       - name: Install the wheel in a clean virtualenv

@@ -1,5 +1,7 @@
 [build-system]
-requires = ["setuptools>=68", "wheel"]
+# setuptools >= 77 để khai báo giấy phép theo SPDX (PEP 639) — bản này cần Python >= 3.9 để DỰNG gói (CI dựng bằng Python 3.12);
+# gói dựng ra là wheel thuần Python và vẫn chạy trên Python 3.8 (requires-python bên dưới).
+requires = ["setuptools>=77", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
@@ -8,14 +10,15 @@ version = "0.4.6"
 description = "Locaith CLI — trợ lý lập trình Locaith ngay trong terminal, như Claude Code / Codex: giao diện đẹp, đọc/sửa tệp, chạy lệnh, MCP, hooks, rewind, cùng lõi với extension VS Code. Cài: pip install locaith-cli"
 readme = "README.md"
 requires-python = ">=3.8"
-license = { file = "LICENSE" }
+# Functional Source License 1.1 (mã nguồn chuyển sang Apache-2.0 sau 2 năm) — mã SPDX chính thức; văn bản đầy đủ nằm trong tệp LICENSE.
+license = "FSL-1.1-ALv2"
+license-files = ["LICENSE"]
 authors = [{ name = "Locaith Solution Tech", email = "locaithsolution@locaith.com" }]
 keywords = ["locaith", "cli", "agent", "ai", "terminal", "coding-agent", "assistant", "mcp", "claude-code", "codex"]
 classifiers = [
   "Development Status :: 4 - Beta",
   "Environment :: Console",
   "Intended Audience :: Developers",
-  "License :: Other/Proprietary License",
   "Operating System :: OS Independent",
   "Programming Language :: Python :: 3",
   "Topic :: Software Development",
@@ -35,7 +38,9 @@ Changelog = "https://github.com/locaith/locaith-agent/blob/main/extension/CHANGE
 locaith = "locaith_cli.cli:main"
 
 [tool.setuptools]
-packages = ["locaith_cli"]
+# `locaith_cli/bin` (bundle locaith.cjs do build.mjs sinh ra) khai báo rõ là một gói: không còn cảnh báo «absent from packages», và nếu quên chạy
+# build.mjs thì dựng gói THẤT BẠI ngay (trước đây ra một wheel thiếu lõi mà không báo gì).
+packages = ["locaith_cli", "locaith_cli.bin"]
 
 [tool.setuptools.package-data]
 locaith_cli = ["bin/*.cjs"]
