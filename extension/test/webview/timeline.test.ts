@@ -119,9 +119,12 @@ describe('needsWorkingIndicator', () => {
     expect(needsWorkingIndicator([])).toBe(true);
     expect(needsWorkingIndicator([tool('a', 'web_search', 'done')])).toBe(true);
   });
-  it('không cần khi có dòng đang chạy', () => {
-    expect(needsWorkingIndicator([pill('p', true)])).toBe(false);
-    expect(needsWorkingIndicator([tool('a', 'web_search', 'running')])).toBe(false);
-    expect(needsWorkingIndicator([{ type: 'thinking', id: 'k', text: 'x' }])).toBe(false);
+  it('luôn có suốt lượt đang chạy — kể cả khi đang nghĩ, đang chạy công cụ hay đang có chỉ báo trạng thái (như Claude Code)', () => {
+    expect(needsWorkingIndicator([pill('p', true)])).toBe(true);
+    expect(needsWorkingIndicator([tool('a', 'web_search', 'running')])).toBe(true);
+    expect(needsWorkingIndicator([{ type: 'thinking', id: 'k', text: 'x' }])).toBe(true);
+  });
+  it('chỉ ẩn khi đang chờ NGƯỜI DÙNG duyệt quyền (trợ lý không làm gì)', () => {
+    expect(needsWorkingIndicator([tool('a', 'edit_file', 'awaiting_permission')])).toBe(false);
   });
 });

@@ -1,8 +1,10 @@
-/** `locaith login` và `locaith whoami` — tách riêng để giữ index.ts dễ đọc. */
+/** `locaith login` và `locaith whoami` — tách riêng để giữ index.ts dễ đọc. Chuỗi hiển thị vi/en qua `i18n` (khoá `cli.acct.*`, xem strings.ts). */
 
 import { LocaithGatewayClient } from '../core/providers/locaithGateway';
 import type { ModelInfo } from '../core/types';
 import type { BrowserLoginResult } from './browserLogin';
+import { t } from './i18n';
+import './strings';
 
 export interface AccountDeps {
   baseUrl: string;
@@ -23,6 +25,11 @@ export interface AccountDeps {
   noBrowser?: boolean;
   /** Đăng nhập qua trình duyệt (PKCE + loopback). Không có = bản dựng không hỗ trợ. */
   browserLogin?(): Promise<BrowserLoginResult>;
+  /**
+   * Chạy BÊN TRONG màn hình hướng dẫn lần đầu (onboarding): không in ✔ trong chữ (giao diện tự thêm) và không nhắc
+   * «tiếp theo: whoami, consent» vì chính onboarding sẽ làm các bước đó ngay sau.
+   */
+  embedded?: boolean;
 }
 
 /**
@@ -48,65 +55,46 @@ async function checkToken(d: AccountDeps, token: string): Promise<'ok' | 'unauth
 export async function loginCmd(d: AccountDeps): Promise<number> {
   let token = (d.token ?? '').trim();
   let via: 'token' | 'browser' = 'token';
+  const tick = d.embedded ? '' : '✔ ';
+  const cross = d.embedded ? '' : '✘ ';
 
   if (!token && !d.noBrowser && d.browserLogin) {
-    if (!d.json) d.err('Đang mở trình duyệt để đăng nhập locaith.ai…');
+    if (!d.json) d.err(t('cli.acct.opening'));
     const r = await d.browserLogin();
     if (r.ok) {
       token = r.token;
       via = 'browser';
-      if (!d.json)
-        d.err(
-          r.user?.name
-            ? `✔ Đã uỷ quyền cho ${r.user.name}${r.user.emailMasked ? ' · ' + r.user.emailMasked : ''}.`
-            : '✔ Đã uỷ quyền.',
-        );
+      if (!d.json) d.err(tick + (r.user?.name ? t('cli.acct.authorizedFor', { who: `${r.user.name}${r.user.emailMasked ? ' · ' + r.user.emailMasked : ''}` }) : t('cli.acct.authorized')));
     } else {
-      const why: Record<string, string> = {
-        timeout: 'Hết thời gian chờ bấm «Cho phép» trong trình duyệt (3 phút).',
-        state: 'Trình duyệt chuyển về không khớp phiên đăng nhập này — đã huỷ để an toàn.',
-        denied: 'Yêu cầu uỷ quyền đã bị huỷ.',
-        exchange: 'Mã uỷ quyền không dùng được (quá 5 phút hoặc đã dùng rồi).',
-        network: 'Không kết nối được tới máy chủ tài khoản locaith.ai.',
-        browser: 'Không mở được trình duyệt trên máy này.',
-        cancelled: 'Đã huỷ đăng nhập.',
-      };
-      const msg = why[r.error] ?? 'Đăng nhập qua trình duyệt không thành công.';
+      const known = ['timeout', 'state', 'denied', 'exchange', 'network', 'browser', 'cancelled'];
+      const msg = t(known.includes(r.error) ? `cli.acct.why.${r.error}` : 'cli.acct.why.other');
       if (d.json) d.out(JSON.stringify({ ok: false, error: msg }));
       else {
-        d.err('✘ ' + msg);
-        d.err('  Chạy lại, hoặc dùng `locaith login --no-browser` để dán token thủ công.');
+        d.err(cross + msg);
+        d.err('  ' + t('cli.acct.rerun'));
       }
       return 1;
     }
   }
 
-  if (!token) token = (await d.ask('Dán token tài khoản Locaith (lat_…): ')).trim();
+  if (!token) token = (await d.ask(t('cli.acct.askToken'))).trim();
   if (!token) {
-    if (d.json) d.out(JSON.stringify({ ok: false, error: 'Không có token.' }));
-    else d.err('✘ Không có token nhập vào.');
+    if (d.json) d.out(JSON.stringify({ ok: false, error: t('cli.acct.noToken') }));
+    else d.err(cross + t('cli.acct.noTokenEntered'));
     return 2;
   }
 
   const state = await checkToken(d, token);
   if (state !== 'ok') {
-    const why =
-      state === 'unauthorized'
-        ? 'Token không hợp lệ hoặc đã hết hạn (Locaith trả 401).'
-        : state === 'network'
-          ? 'Không kết nối được tới cổng.'
-          : 'Cổng trả lỗi.';
+    const why = t(state === 'unauthorized' ? 'cli.acct.bad.unauthorized' : state === 'network' ? 'cli.acct.bad.network' : 'cli.acct.bad.server');
     if (d.json) d.out(JSON.stringify({ ok: false, error: why }));
-    else d.err('✘ ' + why);
+    else d.err(cross + why);
     return 1;
   }
   const file = d.writeKey(token);
   if (d.json) d.out(JSON.stringify({ ok: true, configFile: file, tokenPrefix: token.slice(0, 4) + '…', via }));
-  else
-    d.out(
-      `✔ Đã lưu token vào ${file} (quyền 600) — đăng nhập bằng tài khoản locaith.ai.\n` +
-        '  Tiếp theo: `locaith whoami`, và `locaith consent --yes` (một lần) trước lần chạy đầu.',
-    );
+  else if (d.embedded) d.out(t('cli.acct.savedShort', { file }));
+  else d.out(`${tick}${t('cli.acct.saved', { file })}\n  ${t('cli.acct.next')}`);
   return 0;
 }
 
@@ -117,8 +105,8 @@ export async function loginCmd(d: AccountDeps): Promise<number> {
 export async function whoamiCmd(d: AccountDeps): Promise<number> {
   const key = d.readKey();
   if (!key) {
-    if (d.json) d.out(JSON.stringify({ ok: false, error: 'Chưa đăng nhập.' }));
-    else d.err('✘ Chưa đăng nhập. Chạy `locaith login`.');
+    if (d.json) d.out(JSON.stringify({ ok: false, error: t('cli.acct.notLoggedIn') }));
+    else d.err('✘ ' + t('cli.acct.notLoggedInHint'));
     return 1;
   }
   const client = new LocaithGatewayClient({ baseUrl: () => d.baseUrl });
@@ -138,12 +126,12 @@ export async function whoamiCmd(d: AccountDeps): Promise<number> {
   if (d.json) {
     d.out(JSON.stringify({ ok: authOk, tokenPrefix: key.slice(0, 4) + '…', auth: authOk ? 'ok' : 'invalid', plan, account: card, limits: acct.ok ? acct.account.limits : null, consentAccepted: consent.ok ? consent.state.accepted : null, models }, null, 2));
   } else {
-    d.out(`Tài khoản: ${authOk ? `đã đăng nhập (${key.slice(0, 4)}…)` : 'token KHÔNG hợp lệ hoặc đã hết hạn'}`);
-    if (card?.name) d.out(`Tài khoản: ${card.name}${card.email_masked ? ' · ' + card.email_masked : ''}`);
-    d.out(`Gói: ${plan ?? (unsupported ? 'cổng chưa có endpoint /account — xem trên locaith.ai' : 'cổng chưa trả thông tin gói — xem trên locaith.ai')}`);
-    if (acct.ok && acct.account.limits?.unlimited) d.out('Hạn mức: không giới hạn (giai đoạn mở, không thu phí)');
-    if (consent.ok) d.out(`Đồng ý thông báo dữ liệu: ${consent.state.accepted ? 'rồi' : 'CHƯA (chạy locaith consent --yes)'}`);
-    if (models) d.out(`Model dùng được: ${models.join(', ')}`);
+    d.out(`${t('cli.acct.who.account')}: ${authOk ? t('cli.acct.who.loggedIn', { prefix: key.slice(0, 4) + '…' }) : t('cli.acct.who.invalid')}`);
+    if (card?.name) d.out(`${t('cli.acct.who.account')}: ${card.name}${card.email_masked ? ' · ' + card.email_masked : ''}`);
+    d.out(`${t('cli.acct.who.plan')}: ${plan ?? t(unsupported ? 'cli.acct.who.planUnsupported' : 'cli.acct.who.planUnknown')}`);
+    if (acct.ok && acct.account.limits?.unlimited) d.out(`${t('cli.acct.who.limits')}: ${t('cli.acct.who.unlimited')}`);
+    if (consent.ok) d.out(`${t('cli.acct.who.consent')}: ${consent.state.accepted ? t('cli.acct.who.consentYes') : t('cli.acct.who.consentNo')}`);
+    if (models) d.out(`${t('cli.acct.who.models')}: ${models.join(', ')}`);
   }
   return authOk ? 0 : 1;
 }

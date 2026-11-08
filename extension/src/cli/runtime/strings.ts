@@ -25,7 +25,7 @@ export const RUNTIME_STRINGS: { vi: Record<string, string>; en: Record<string, s
     'cmd.export': 'Xuất hội thoại ra tệp Markdown',
     'cmd.copy': 'Sao chép câu trả lời cuối của trợ lý',
     // chung
-    yes: 'rồi',
+    yes: 'đã đồng ý',
     busy: 'Trợ lý đang chạy — hãy dừng (Esc) hoặc chờ xong rồi thử lại.',
     stopFirst: 'Trợ lý đang bận — hãy dừng (Esc) trước khi dùng /{name}.',
     unknownCommand: 'Không có lệnh /{name}. Gõ /help để xem danh sách.',
@@ -66,6 +66,7 @@ export const RUNTIME_STRINGS: { vi: Record<string, string>; en: Record<string, s
     modelSet: 'Đã đổi sang {model}',
     modelCurrent: 'Model hiện tại: {model}',
     modelPickTitle: 'Chọn model',
+    resumePickTitle: 'Mở lại phiên đã lưu',
     // nén
     compactNothing: 'Không có gì để nén.',
     // !shell
@@ -125,7 +126,7 @@ export const RUNTIME_STRINGS: { vi: Record<string, string>; en: Record<string, s
     noticeConsent: 'Chưa đồng ý thông báo dữ liệu — chạy `locaith consent --yes`.',
     noticeQueue: 'Đang xếp hàng ở cổng Locaith: vị trí {pos}/{limit}.',
     noticeFeatureErrors: '{n} mô-đun tính năng bị lỗi — chạy /doctor.',
-    untrustedPlan: 'Thư mục chưa được tin cậy: trợ lý chỉ được đọc (chế độ kế hoạch). Chạy với --permission-mode để đổi.',
+    untrustedPlan: 'Thư mục chưa được tin cậy nên trợ lý chỉ được đọc (chế độ kế hoạch). Chạy `locaith` một lần trong thư mục này để tin cậy nó, hoặc thêm --permission-mode acceptEdits.',
     featureFailed: 'Mô-đun «{name}» không khởi động được: {detail}',
     // /config
     cfgTitle: 'Cài đặt',
@@ -200,7 +201,7 @@ export const RUNTIME_STRINGS: { vi: Record<string, string>; en: Record<string, s
     'cmd.theme': 'Change the colour theme (auto, dark, light, mono)',
     'cmd.export': 'Export the conversation to a Markdown file',
     'cmd.copy': "Copy the assistant's last answer",
-    yes: 'yes',
+    yes: 'accepted',
     busy: 'The assistant is running — stop it (Esc) or wait, then try again.',
     stopFirst: 'The assistant is busy — stop it (Esc) before using /{name}.',
     unknownCommand: 'No command /{name}. Type /help for the list.',
@@ -239,6 +240,7 @@ export const RUNTIME_STRINGS: { vi: Record<string, string>; en: Record<string, s
     modelSet: 'Switched to {model}',
     modelCurrent: 'Current model: {model}',
     modelPickTitle: 'Choose a model',
+    resumePickTitle: 'Resume a saved session',
     compactNothing: 'Nothing to compact.',
     shellEmpty: 'Type a command after !, for example: !git status',
     shellAborted: 'stopped',
@@ -293,7 +295,7 @@ export const RUNTIME_STRINGS: { vi: Record<string, string>; en: Record<string, s
     noticeConsent: 'Data notice not accepted yet — run `locaith consent --yes`.',
     noticeQueue: 'Queued at the Locaith gateway: position {pos}/{limit}.',
     noticeFeatureErrors: '{n} feature module(s) failed — run /doctor.',
-    untrustedPlan: 'This folder is not trusted: the assistant is read-only (plan mode). Use --permission-mode to change that.',
+    untrustedPlan: 'This folder is not trusted, so the assistant is read-only (plan mode). Run `locaith` once in this folder to trust it, or add --permission-mode acceptEdits.',
     featureFailed: 'Module “{name}” failed to start: {detail}',
     cfgTitle: 'Settings',
     cfgKey: 'Key',

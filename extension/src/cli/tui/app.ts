@@ -105,6 +105,8 @@ export class TuiApp {
   private spinnerSeed = Math.floor(Math.random() * 10);
   private lang: Lang;
   private busyImage = false;
+  /** Đã in khung chào (đầy đủ hoặc gọn kèm hội thoại cũ) chưa. */
+  private bannerPrinted = false;
 
   constructor(
     private readonly rt: CliRuntime,
@@ -164,20 +166,29 @@ export class TuiApp {
       this.screen.onResize = () => this.screen.schedule();
       this.screen.setProvider(() => this.compose());
       this.unsub = this.rt.on((e) => this.onRuntimeEvent(e));
-      if (this.o.banner !== false) {
-        this.screen.print(
-          renderWelcome({ version: this.o.version, lang: this.lang, theme: this.theme, width: this.screen.cols, height: this.screen.rows, status: this.status, cwd: this.status?.cwd ?? this.o.cwd ?? process.cwd() }),
-        );
-        this.conv.markPrinted();
-      }
-      this.printNewNotices();
-      if (this.running) this.startTicker();
-      this.screen.flush();
-      const first = this.o.initialPrompt?.trim();
-      if (first) {
-        this.history.add(first);
-        void this.send(first, false);
-      }
+      const begin = (): void => {
+        if (this.exiting) return;
+        if (!this.bannerPrinted) {
+          this.bannerPrinted = true;
+          if (this.o.banner !== false) {
+            this.screen.print(
+              renderWelcome({ version: this.o.version, lang: this.lang, theme: this.theme, width: this.screen.cols, height: this.screen.rows, status: this.status, cwd: this.status?.cwd ?? this.o.cwd ?? process.cwd() }),
+            );
+            this.conv.markPrinted();
+          }
+        }
+        this.printNewNotices();
+        if (this.running) this.startTicker();
+        this.screen.flush();
+        const first = this.o.initialPrompt?.trim();
+        if (first) {
+          this.history.add(first);
+          void this.send(first, false);
+        }
+      };
+      // Phiên mở sẵn lúc khởi động (`-c`, `-r`) phát `replay` cho người nghe đầu tiên ở microtask kế tiếp: chờ nó (nó tự in khung chào gọn
+      // kèm hội thoại cũ) rồi mới in khung chào đầy đủ nếu chưa có gì được in.
+      queueMicrotask(() => queueMicrotask(begin));
     }).then(async (code) => {
       await this.shutdown();
       return code;
@@ -378,7 +389,9 @@ export class TuiApp {
   }
 
   private replay(items: TItem[], reason: 'resume' | 'fork' | 'rewind' | 'new' | 'clear'): void {
-    this.screen.clearScreen(true);
+    // Lần đầu (phiên mở sẵn lúc khởi động) chưa in gì: KHÔNG xoá màn hình/scrollback của người dùng, chỉ in tiếp.
+    if (this.bannerPrinted) this.screen.clearScreen(true);
+    this.bannerPrinted = true;
     this.conv.reset();
     this.echoPending = null;
     this.options = [];
@@ -417,8 +430,7 @@ export class TuiApp {
         const back = (payload ?? '').trim();
         if (!back) return;
         const cur = this.editor.text;
-        this.loadText(cur ? `${back}
-${cur}` : back);
+        this.loadText(cur ? `${back}\n${cur}` : back);
         return;
       }
     }

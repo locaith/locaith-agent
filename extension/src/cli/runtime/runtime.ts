@@ -152,6 +152,8 @@ export class Runtime implements CliRuntime {
   // ── sự kiện ──
   private readonly listeners = new Set<(e: RuntimeEvent) => void>();
   private early: RuntimeEvent[] = [];
+  /** Hội thoại dựng lại của phiên mở lúc khởi động, giữ cho người nghe đầu tiên (chỉ cái mới nhất). */
+  private earlyReplay: Extract<RuntimeEvent, { t: 'replay' }> | null = null;
   private statusTimer: ReturnType<typeof setTimeout> | null = null;
   private lastStatusAt = 0;
   private saveTimer: ReturnType<typeof setTimeout> | null = null;
@@ -333,8 +335,10 @@ export class Runtime implements CliRuntime {
 
   on(listener: (e: RuntimeEvent) => void): () => void {
     this.listeners.add(listener);
-    if (this.early.length) {
-      const pending = this.early.splice(0);
+    if (this.early.length || this.earlyReplay) {
+      // Phiên mở sẵn lúc khởi động (`-c`, `-r`): giao hội thoại dựng lại TRƯỚC, rồi mới tới thông báo/đầu ra đã giữ.
+      const pending = [...(this.earlyReplay ? [this.earlyReplay] : []), ...this.early.splice(0)];
+      this.earlyReplay = null;
       queueMicrotask(() => {
         for (const e of pending) {
           try {
@@ -350,8 +354,9 @@ export class Runtime implements CliRuntime {
 
   emit(e: RuntimeEvent): void {
     if (this.listeners.size === 0) {
-      // Chưa ai nghe (đang khởi tạo): giữ lại thông báo/đầu ra để giao cho người nghe đầu tiên.
+      // Chưa ai nghe (đang khởi tạo): giữ lại thông báo/đầu ra (và hội thoại của phiên mở sẵn) để giao cho người nghe đầu tiên.
       if ((e.t === 'toast' || e.t === 'output') && this.early.length < 100) this.early.push(e);
+      else if (e.t === 'replay') this.earlyReplay = e;
       return;
     }
     for (const l of [...this.listeners]) {
@@ -1330,12 +1335,13 @@ export class Runtime implements CliRuntime {
 
   helpText(): string {
     const cmds = this.slashReg.list(this.lang);
-    const w = Math.max(8, ...cmds.map((c) => c.name.length)) + 1;
+    // Danh sách markdown: mô tả dài tự xuống hàng có lề treo dưới dòng đầu (cột căn bằng khoảng trắng bị gãy khi ngắt dòng).
     return [
       this.tr('helpTitle', { version: this.opts.version }),
       '',
       this.tr('helpCommands'),
-      ...cmds.map((c) => `  /${c.name.padEnd(w)} ${c.description}`),
+      '',
+      ...cmds.map((c) => `- \`/${c.name}\` — ${c.description}`),
       '',
       this.tr('helpPrefixes'),
       '',

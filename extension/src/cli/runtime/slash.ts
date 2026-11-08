@@ -113,7 +113,7 @@ export function registerBuiltinSlash(rt: Runtime): void {
           items.push({
             id: `${g.providerId}:${m.id}`,
             label: m.label && m.label !== m.id ? m.label : m.id,
-            detail: `${m.id} · ${fmtN(win / 1000, rt.lang)}k ctx`,
+            detail: `${m.id} · ${win >= 1_000_000 ? `${+(win / 1_000_000).toFixed(1)}M` : `${Math.round(win / 1000)}k`} ctx`,
             group: g.label,
             current: g.providerId === s.provider && m.id === s.model,
           });

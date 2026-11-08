@@ -484,14 +484,15 @@ export function turnPlainText(item: { blocks: readonly ABlock[] }): string {
     .join('\n\n');
 }
 
-/** LÃ†Â°Ã¡Â»Â£t Ã„â€˜ang chÃ¡ÂºÂ¡y mÃƒÂ  chÃ†Â°a cÃƒÂ³ gÃƒÂ¬ Ã„â€˜ang hoÃ¡ÂºÂ¡t Ã„â€˜Ã¡Â»â„¢ng Ã¢â€ â€™ cÃ¡ÂºÂ§n chÃ¡Â»â€° bÃƒÂ¡o "Ã„â€˜ang xÃ¡Â»Â­ lÃƒÂ½" Ã¡Â»Å¸ cuÃ¡Â»â€˜i. */
+/**
+ * Lượt đang chạy → luôn có dòng «đang xử lý» (logo động + nhãn + đồng hồ + token) ở cuối, như Claude Code («✻ Wibbling…» hiện suốt,
+ * cả khi dòng trên nó là «Thinking…» hay một lệnh đang chạy). Trước đây ẩn khi khối cuối đang nghĩ/đang chạy công cụ nên chính lúc chờ lâu
+ * nhất — người dùng lại không thấy logo động nào (07–08/11/2026, ảnh chụp của anh Tuấn Anh). Chỉ ẩn khi đang chờ NGƯỜI DÙNG duyệt quyền.
+ */
 export function needsWorkingIndicator(blocks: readonly ABlock[]): boolean {
   const last = blocks[blocks.length - 1];
   if (!last) return true;
-  if (last.type === 'pill' && last.active) return false;
-  if (last.type === 'tool' && (last.state === 'running' || last.state === 'awaiting_permission')) return false;
-  if (last.type === 'artifact' && last.state === 'writing') return false;
-  if (last.type === 'thinking') return false;
+  if (last.type === 'tool' && last.state === 'awaiting_permission') return false;
   return true;
 }
 

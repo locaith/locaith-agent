@@ -44,6 +44,8 @@ export interface OnboardingOptions {
   accountDeps?: (io: LoginIo) => AccountDeps;
   /** Ghi nhận đồng ý thông báo dữ liệu ở cổng (gọi sau khi người dùng bấm đồng ý). */
   acceptConsent?: () => Promise<{ ok: boolean; message?: string }>;
+  /** Hỏi cổng (SAU khi đăng nhập) xem tài khoản đã đồng ý ở nơi khác chưa: true (hoặc không rõ) → bỏ qua hộp thoại đồng ý. */
+  checkConsent?: () => Promise<boolean>;
   /** Nội dung thông báo dữ liệu (mặc định dùng chuỗi dựng sẵn). */
   consentText?: string;
   saveLang?: (l: Lang) => void;
@@ -143,7 +145,15 @@ export async function runOnboardingFlow(o: OnboardingOptions, ui: OnboardingUi):
       const w = how === 'browser' ? ui.wait(tr('tui.ob.login.opening')) : null;
       let code = 1;
       try {
-        const run = loginCmd({ ...deps, out: (l) => ui.say('ok', l), err: (l) => ui.say(/^\s*✘|không|Không|fail/i.test(l) ? 'warn' : 'info', l), json: false, noBrowser: how === 'token', token });
+        const run = loginCmd({
+          ...deps,
+          embedded: true,
+          out: (l) => ui.say('ok', l),
+          err: (l) => ui.say(/^\s*✘|không|Không|fail|could not|timed out|invalid|cancel/i.test(l) ? 'warn' : 'info', l),
+          json: false,
+          noBrowser: how === 'token',
+          token,
+        });
         const first = await Promise.race([run, w ? w.cancelled.then(() => 'cancel' as const) : new Promise<never>(() => undefined)]);
         if (first === 'cancel') return cancel('cancelled');
         code = first;
@@ -162,6 +172,13 @@ export async function runOnboardingFlow(o: OnboardingOptions, ui: OnboardingUi):
   }
 
   // 3. Thông báo dữ liệu (chỉ khi đăng nhập tài khoản Locaith và cổng chưa ghi nhận)
+  if (res.loggedIn && !res.consented && o.checkConsent) {
+    try {
+      res.consented = await o.checkConsent(); // đã đồng ý ở máy khác / lần trước → khỏi hỏi lại
+    } catch {
+      /* không kiểm được thì cứ hỏi */
+    }
+  }
   if (res.loggedIn && !res.consented && o.acceptConsent) {
     const body = o.consentText ?? tr('tui.ob.consent.body');
     const yes = await ui.confirm(tr('tui.ob.consent.title'), `${body}\n\n${tr('tui.ob.consent.q')}`, { yes: tr('tui.ob.consent.yes'), no: tr('tui.ob.consent.no') });
@@ -266,7 +283,9 @@ export class TerminalUi implements OnboardingUi {
     if (this.waiting) {
       out.push(renderSpinner({ theme: this.theme, width: W, lang: 'vi', frame: this.frame, elapsedMs: Date.now() - this.t0, tokens: 0, label: this.waiting.text.replace(/[….]+$/, ''), animate: this.theme.caps.color !== 'none', bare: true }));
       out.push('  ' + this.theme.faint('Ctrl+C'));
-    } else if (this.cur) out.push(...this.cur.dlg.render(W, Math.max(8, this.screen.rows - 4)));
+    } else if (this.cur) out.push(...this.cur.dlg.render(W, Math.max(8, this.screen.rows - 5)));
+    // Hàng cuối của vùng sống luôn bị cắt còn cols-1 (tránh tự xuống dòng ở cột cuối): đệm một dòng trống để viền dưới của hộp không bị cắt.
+    out.push('');
     return out;
   }
 

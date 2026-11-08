@@ -249,7 +249,8 @@ export class PickDialog implements Dialog<string | string[] | null> {
     const th = this.th;
     const inner = width - 4;
     const out: string[] = [];
-    if (this.req.hint) out.push(th.muted(truncatePlain(this.req.hint, inner)));
+    // Gợi ý có thể nhiều dòng (ví dụ hỏi tin cậy thư mục: đường dẫn + lời giải thích): ngắt theo dòng, mỗi dòng tự xuống hàng theo độ rộng.
+    if (this.req.hint) for (const l of this.req.hint.split('\n')) for (const w of l ? wrapAnsi(l, inner) : ['']) out.push(th.muted(w));
     if (this.searchable) {
       const q = this.query.renderRows(Math.max(4, inner - 8), th.inverse);
       out.push(th.muted(tr('tui.pick.search')) + (q.rows[0] ?? ''));

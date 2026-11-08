@@ -119,7 +119,8 @@ function normalize(name: string): string {
 
 function describe(d: SlashCommandDef, lang: Lang): string {
   const base = lang === 'en' ? d.description.en || d.description.vi : d.description.vi || d.description.en;
-  const hint = d.argHint ? ` ${d.argHint}` : '';
+  // Mô tả đã nêu cách dùng ("… — /tên [đối số]") thì khỏi nối gợi ý đối số lần nữa.
+  const hint = d.argHint && !base.includes(`/${d.name}`) ? ` ${d.argHint}` : '';
   const tag =
     d.source === 'project' ? (lang === 'en' ? ' (project)' : ' (dự án)') : d.source === 'user' ? (lang === 'en' ? ' (user)' : ' (cá nhân)') : d.source === 'plugin' ? ' (plugin)' : '';
   return `${base}${hint ? ' —' + hint : ''}${tag}`;

@@ -130,7 +130,8 @@ export class Conversation {
         this.advance(true);
         const a = this.assistant();
         this.finishAssistant();
-        if (a) this.printTurnFooter(a);
+        if (ev.stopReason === 'aborted') this.emit('misc', ['  ' + this.th.muted(`${this.th.g.result} ${tr('tui.interrupted')}`)], true);
+        else if (a) this.printTurnFooter(a);
         return;
       }
       case 'notice': {

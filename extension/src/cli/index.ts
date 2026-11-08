@@ -140,31 +140,30 @@ async function consent(a: ParsedArgs, env: NodeJS.ProcessEnv): Promise<number> {
   const client = new LocaithGatewayClient({ baseUrl: () => a.baseUrl ?? LOCAITH_GATEWAY_URL });
   const cur = await client.getConsent(key);
   if (!cur.ok) {
-    const why = cur.error === 'unauthorized' ? 'Token không còn hiệu lực (401).' : cur.error === 'network' ? 'Không kết nối được tới cổng.' : 'Cổng trả lỗi.';
+    const why = t(cur.error === 'unauthorized' ? 'cli.acct.bad.unauthorized' : cur.error === 'network' ? 'cli.acct.bad.network' : 'cli.acct.bad.server');
     if (json) console.log(JSON.stringify({ ok: false, error: why }));
     else console.error(`✘ ${why}`);
     return 1;
   }
   if (cur.state.accepted) {
     if (json) console.log(JSON.stringify({ ok: true, already: true, version: cur.state.version }));
-    else console.log(`✔ Tài khoản đã đồng ý thông báo dữ liệu (phiên bản ${cur.state.version}). Không cần làm gì.`);
+    else console.log(`✔ ${t('cli.consentCmd.already', { v: cur.state.version })}`);
     return 0;
   }
   if (!a.yes) {
-    const msg = `Cần ghi nhận đồng ý thông báo dữ liệu phiên bản ${cur.state.current} cho tài khoản này (bản ghi lưu ở cổng, dùng chung với bản VS Code).\nChạy lại với --yes nếu bạn — với tư cách chủ tài khoản — đồng ý.`;
     if (json) console.log(JSON.stringify({ ok: false, needsConsent: true, current: cur.state.current }));
-    else console.error(msg);
+    else console.error(t('cli.consentCmd.needs', { v: cur.state.current }));
     return 1;
   }
   const r = await client.postConsent(key, cur.state.current, 'cli');
   if (!r.ok) {
-    const why = r.error === 'unauthorized' ? 'Token không còn hiệu lực (401).' : r.error === 'network' ? 'Không kết nối được tới cổng.' : `Cổng từ chối: ${r.message ?? 'không rõ lý do'}`;
+    const why = r.error === 'unauthorized' ? t('cli.acct.bad.unauthorized') : r.error === 'network' ? t('cli.acct.bad.network') : t('cli.consent.rejected', { why: r.message ?? '—' });
     if (json) console.log(JSON.stringify({ ok: false, error: why }));
     else console.error(`✘ ${why}`);
     return 1;
   }
   if (json) console.log(JSON.stringify({ ok: true, version: cur.state.current }));
-  else console.log(`✔ Đã ghi nhận đồng ý phiên bản ${cur.state.current}.`);
+  else console.log(`✔ ${t('cli.consentCmd.done', { v: cur.state.current })}`);
   return 0;
 }
 
@@ -254,7 +253,8 @@ async function chat(a: ParsedArgs, env: NodeJS.ProcessEnv, lang: Lang): Promise<
       noColor: a.noColor,
       languageChosen,
       loggedIn,
-      consentAccepted: loggedIn ? await consentAlreadyAccepted(a, env) : false,
+      consentAccepted: false,
+      checkConsent: () => consentAlreadyAccepted(a, env),
       trusted,
       accountDeps: (io) => ({ ...accountDeps(a, env), ask: io.ask, out: io.out, err: io.err }),
       acceptConsent: () => acceptConsentNow(a, env),

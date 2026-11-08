@@ -23,6 +23,8 @@ import { createHash, randomBytes } from 'node:crypto';
 import { createServer, type Server } from 'node:http';
 import { spawn } from 'node:child_process';
 import { hostname, platform } from 'node:os';
+import { t } from './i18n';
+import './strings';
 
 const b64url = (b: Buffer): string => b.toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 
@@ -205,10 +207,10 @@ export async function loginWithBrowser(o: BrowserLoginOptions): Promise<BrowserL
       });
 
       if (!openUrl(url)) {
-        o.notify?.('Không mở được trình duyệt. Mở tay liên kết này rồi bấm «Cho phép»:', url);
+        o.notify?.(t('cli.acct.browserFailed'), url);
         return; // vẫn chờ, người dùng mở tay
       }
-      o.notify?.('Đã mở trình duyệt. Đăng nhập locaith.ai rồi bấm «Cho phép». Nếu không thấy trang, mở tay liên kết này:', url);
+      o.notify?.(t('cli.acct.browserOpened'), url);
     });
 
     if (!codeOrError.code) {
