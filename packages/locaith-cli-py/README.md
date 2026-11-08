@@ -105,7 +105,7 @@ Thu hồi phía máy chủ: locaith.ai → «VS Code từ xa» → thu hồi thi
 ## Kỹ thuật
 
 `pip install locaith-cli` kéo theo `nodejs-wheel-binaries` (Node.js đi kèm). Nếu máy đã có Node ≥ 20 thì dùng Node của hệ thống; đặt `LOCAITH_NODE` để chỉ định. Gói chứa đúng một tệp lõi `locaith.cjs` (cùng mã nguồn với extension).
-Khoá không bao giờ được ghi ra log; `locaith doctor --json` đã tự ẩn khoá. Phát hành: xem `packages/locaith-cli-py/build.mjs` (dựng wheel; việc đăng PyPI là bước riêng có chủ ý).
+Khoá không bao giờ được ghi ra log; `locaith doctor --json` đã tự ẩn khoá. Mã nguồn công khai ở https://github.com/locaith/locaith-agent (giấy phép FSL-1.1-ALv2).
 
 ---
 

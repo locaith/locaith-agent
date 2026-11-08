@@ -121,6 +121,45 @@ describe('Locaith CLI — chạy đầu-cuối với API tương thích OpenAI',
     expect(r.out.trim()).toBe('Tệp có 2 dòng: ALPHA và BETA.');
   });
 
+  // (0.4.4) Báo cáo đánh giá 08/11, mục 4: sai tham số in dòng lỗi rồi nối cả trang help (38 dòng) làm dòng lỗi chìm đi.
+  it('sai tham số: CHỈ dòng lỗi + gợi ý --help (không in cả trang help), mã thoát 2', async () => {
+    const bads: string[][] = [['--max-turns', 'abc'], ['--timeout', '-5'], ['--lang', 'fr'], ['--permission-mode', 'linhtinh'], ['--output-format', 'xml'], ['--khong-co-co-nay']];
+    for (const bad of bads) {
+      const r = await run(['-p', ...bad, 'hi']);
+      expect(r.code, bad.join(' ')).toBe(2);
+      const lines = r.err.trim().split(/\r?\n/);
+      expect(lines.length, r.err).toBeLessThanOrEqual(3);
+      expect(r.err, bad.join(' ')).toContain('--help');
+      expect(r.err, 'không được in trang help').not.toContain('Locaith CLI ');
+      expect(r.out).toBe('');
+    }
+  });
+
+  // (0.4.4) mục 3: `--cwd` không tồn tại vẫn chạy với mã 0 / "success"; CI tưởng đã chạy đúng thư mục.
+  it('--cwd không tồn tại hoặc không phải thư mục: dừng ngay với mã 2, KHÔNG gọi model', async () => {
+    const calls = (globalThis as Record<string, unknown>).__cliCalls as unknown[];
+    const before = calls.length;
+    const missing = path.join(dir, 'khong-co-thu-muc-nay');
+    const r = await run(['-p', 'hi', '--cwd', missing, '--base-url', base]);
+    expect(r.code).toBe(2);
+    expect(r.err).toContain('--cwd');
+    expect(r.err).toContain(missing);
+    const j = await run(['-p', '--output-format', 'json', 'hi', '--cwd', missing, '--base-url', base]);
+    expect(j.code).toBe(2);
+    expect(JSON.parse(j.out)).toMatchObject({ ok: false });
+    expect(String(JSON.parse(j.out).error)).toContain(missing);
+    const f = await run(['-p', 'hi', '--cwd', path.join(dir, 'sample.txt'), '--base-url', base]); // một TỆP, không phải thư mục
+    expect(f.code).toBe(2);
+    expect(f.err).toContain('--cwd');
+    expect(calls.length, 'không được gọi model khi --cwd sai').toBe(before);
+  });
+
+  it('--cwd là thư mục thật vẫn chạy bình thường (không làm hỏng ca đúng)', async () => {
+    const r = await run(['-p', 'đọc sample.txt', '--cwd', dir, '--base-url', base, '--allow', 'reads', '--max-turns', '5']);
+    expect(r.code).toBe(0);
+    expect(r.out).toContain('ALPHA và BETA');
+  });
+
   it('--json: lỗi mạng được báo bằng JSON và mã thoát 1', async () => {
     const r = await run(['ask', 'x', '--base-url', 'http://127.0.0.1:1/v1', '--cwd', dir, '--json']);
     expect(r.code).toBe(1);

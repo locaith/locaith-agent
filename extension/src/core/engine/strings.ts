@@ -68,6 +68,7 @@ const vi = {
   clearedResults: 'Đã lược {n} kết quả công cụ cũ để giữ ngữ cảnh gọn — đọc lại được khi cần',
   // ── (lane:output-timeouts) ──
   maxTokensEmptyRetry: 'Suy luận đã dùng hết giới hạn độ dài mà chưa có câu trả lời, đang thử lại với giới hạn cao hơn',
+  maxTokensEmptyLower: 'Suy luận mức {from} đã dùng hết giới hạn độ dài mà chưa có câu trả lời, đang thử lại ở mức {to} (phần còn lại của lượt này giữ mức {to}).',
   maxTokensEmptyStop: 'Suy luận đã dùng hết giới hạn độ dài mà chưa có câu trả lời. Hãy thử giảm mức suy luận hoặc tăng locaithAgent.agent.maxOutputTokens.',
   wrapUpFacts: 'Vết thật của lượt này (do harness ghi, không phải do bạn kể): {files}; {execs}; việc chưa xong trong danh sách: {pending}.',
   factsFiles: 'đã sửa {n} tệp ({list})',
@@ -292,6 +293,7 @@ const en: typeof vi = {
   clearedResults: 'Trimmed {n} old tool results to keep the context lean — re-readable when needed',
   // ── (lane:output-timeouts) ──
   maxTokensEmptyRetry: 'Reasoning used up the length limit before any answer, retrying with a higher limit',
+  maxTokensEmptyLower: 'Reasoning at {from} used up the length limit before any answer, retrying at {to} (the rest of this turn stays at {to}).',
   maxTokensEmptyStop: 'Reasoning used up the length limit before any answer. Try a lower reasoning level or raise locaithAgent.agent.maxOutputTokens.',
   wrapUpFacts: 'Real trace of this run (recorded by the harness, not by you): {files}; {execs}; unfinished tasks in the list: {pending}.',
   factsFiles: 'changed {n} file(s) ({list})',

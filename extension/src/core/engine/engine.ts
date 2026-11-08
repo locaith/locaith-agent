@@ -43,7 +43,7 @@ import { StreamInterceptor, type PillBudget } from './interceptor';
 import { t, type Lang } from './strings';
 // (lane:output-timeouts) trần đầu ra thích ứng · cắt đúng ranh giới + nối tiếp · watchdog im lặng · tổng kết ba phần khi bị buộc dừng
 import { forcedStopSummary, stopFacts, wrapUpPrompt } from './forcedStop';
-import { pickOutputBudget } from './outputBudget';
+import { lowerReasoningLevel, pickOutputBudget } from './outputBudget';
 import { StallError, resolveStallPolicy, watchStream } from './stallWatchdog';
 import { continuationMarker, continuePartOption, continueWorkOption, trimAssistantTail, trimToBoundary } from './truncation';
 import { gatewayErrorText } from './gatewayErrors'; // (lane:gateway-client)
@@ -85,6 +85,8 @@ export interface EngineDeps {
   loadMemory?(): Promise<import('./memory').MemorySnapshot | null>;
   /** Hồ sơ prompt: 'ide' (mặc định, VS Code) hoặc 'browser' (trợ lý trong Chrome/Edge). Thông tin hay đổi (tab đang mở) KHÔNG vào system prompt. */
   profile?: 'ide' | 'browser';
+  /** (0.4.4) Bề mặt của hồ sơ 'ide': 'cli' = terminal (trợ lý tự nhận là Locaith CLI, không phải VS Code). Mặc định 'vscode'. */
+  surface?: 'vscode' | 'cli';
   /**
    * Lấy (và rút khỏi hàng đợi) các tin người dùng gửi thêm lúc agent đang chạy. Engine gọi ở RANH GIỚI giữa hai lần gọi model:
    *  1. ngay sau khi chạy xong một lượt công cụ → tin đi CHUNG tin nhắn kết quả công cụ, model đổi hướng được ngay (steering);
@@ -252,6 +254,9 @@ export class AgentEngine {
     let longWriteSeen = false;
     let lastCallHitMax = false;
     let emptyCutRetried = false; // (lane:output-timeouts) đã thử lại một lần khi max_tokens mà chưa có chữ
+    // (0.7.5) Suy luận Max/Swarm nuốt hết trần mà chưa có chữ: thử lại ĐÚNG MỘT lần ở mức Cao cho phần còn lại của lượt (mức đã chọn của phiên không đổi).
+    let emptyLowerRetried = false;
+    let levelOverride: SessionState['thinkingLevel'] | null = null;
     let stallRetried = false;
     let partialText = '';
     // (0.7.4) chống trượt sang tiếng Trung/Nhật/Hàn (languageGuard.ts): đã hỏi lại một lần trong lần chạy này? · dòng nhắc cho lần gọi kế tiếp.
@@ -374,6 +379,7 @@ export class AgentEngine {
           swarm: session.swarm === true || session.thinkingLevel === 'swarm',
           now: this.d.now?.(),
           profile: this.d.profile,
+          surface: this.d.surface,
           mcpInstructions: this.d.mcpInstructions?.(),
           providerId: session.provider,
           outputStyle: session.outputStyle ?? this.d.outputStyle?.() ?? null, // (lane:commands-agents)
@@ -439,6 +445,7 @@ export class AgentEngine {
         languageNote = null; // dòng nhắc ngôn ngữ chỉ đi kèm đúng MỘT lần gọi (lần hỏi lại)
         // (lane:output-timeouts) Trần đầu ra theo loại việc (kẹp theo cài đặt và trần thật của model) + watchdog im lặng theo bậc.
         // Lần gọi có AbortController RIÊNG: watchdog huỷ đúng lần stream này; người dùng bấm Dừng vẫn đi qua `signal` ngoài (phân biệt được).
+        const callLevel = levelOverride ?? session.thinkingLevel; // mức suy luận của CHÍNH lần gọi này (đã hạ một bậc nếu lần trước suy luận nuốt hết trần)
         const outputBudget = pickOutputBudget({
           userText: userInputText,
           maxSetting: settings.maxOutputTokens,
@@ -446,7 +453,7 @@ export class AgentEngine {
           longWriteSeen,
           continuation: lastCallHitMax,
           adaptive: settings.adaptiveOutputTokens !== false,
-          thinkingLevel: session.thinkingLevel,
+          thinkingLevel: callLevel,
         });
         const call = new AbortController();
         const onOuterAbort = () => call.abort();
@@ -462,7 +469,7 @@ export class AgentEngine {
             tools: specs,
             toolChoice: wrapUp ? 'none' : undefined,
             maxOutputTokens: outputBudget.tokens,
-            thinking: { level: session.thinkingLevel === 'swarm' ? 'max' : session.thinkingLevel, summaries: true },
+            thinking: { level: callLevel === 'swarm' ? 'max' : callLevel, summaries: true },
             signal: call.signal,
             parallelToolCalls: settings.parallelToolCalls,
             historyEdited: session.historyEdited,
@@ -619,10 +626,20 @@ export class AgentEngine {
           // (lane:output-timeouts) Chạm trần mà CHƯA có chữ nào (suy luận nuốt hết trần): không có «phần 1» để nối tiếp. Bỏ tin rỗng khỏi lịch sử
           // (Anthropic/Gemini từ chối content rỗng) và thử lại đúng một lần với trần đầy đủ; vẫn rỗng thì dừng kèm thông báo rõ nguyên nhân.
           session.messages.pop();
-          const fullTokens = pickOutputBudget({ userText: userInputText, maxSetting: settings.maxOutputTokens, modelCap: settings.modelMaxOutputTokens, longWriteSeen, continuation: true, adaptive: true, thinkingLevel: session.thinkingLevel }).tokens;
+          const fullTokens = pickOutputBudget({ userText: userInputText, maxSetting: settings.maxOutputTokens, modelCap: settings.modelMaxOutputTokens, longWriteSeen, continuation: true, adaptive: true, thinkingLevel: callLevel }).tokens;
           if (!emptyCutRetried && fullTokens > outputBudget.tokens) {
             emptyCutRetried = true;
             notice('warn', t(lang, 'maxTokensEmptyRetry'));
+            continue;
+          }
+          // (0.7.5) Đã ở trần đầy đủ nên không còn đường nâng trần. Đang ở Max/Swarm thì thử lại MỘT lần ở mức Cao (nghĩ ngắn hơn) thay vì bắt người dùng tự đổi mức
+          // rồi chờ lại từ đầu; phần còn lại của lượt giữ mức đó (lượt sau trở về mức đã chọn). Vẫn rỗng, hoặc đang ở Cao trở xuống → dừng kèm thông báo nguyên nhân.
+          const lower = lowerReasoningLevel(callLevel);
+          if (!emptyLowerRetried && lower) {
+            emptyLowerRetried = true;
+            levelOverride = lower;
+            const label = (l: string) => l.charAt(0).toUpperCase() + l.slice(1);
+            notice('warn', t(lang, 'maxTokensEmptyLower', { from: label(callLevel), to: label(lower) }));
             continue;
           }
           notice('warn', t(lang, 'maxTokensEmptyStop'));

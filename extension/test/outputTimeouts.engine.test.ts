@@ -404,6 +404,57 @@ describe('H05 — chạm trần khi chưa có chữ nào (suy luận nuốt tr�
     expect(h.provider.requests).toHaveLength(1);
     expect(eventsOf(h.events, 'notice').map((n) => n.text)).toContain(t('vi', 'maxTokensEmptyStop'));
   });
+
+  // (0.7.5) Ca thật 08/11: Locaith-v5-SI ở mức Max, 29 bước rồi lần gọi cuối «32k token ra · 32k suy luận» và KHÔNG có câu trả lời. Ở Max trần đã là trần đầy đủ nên
+  // đường «nâng trần» không còn; trước đây dừng ngay và bắt người dùng tự đổi mức rồi chờ lại từ đầu.
+  it('Max đã ở trần đầy đủ mà suy luận nuốt hết → tự thử lại MỘT lần ở mức Cao rồi trả lời; mức đã chọn của phiên không đổi', async () => {
+    const h = makeHarness([emptyCut, () => textTurn('Có rồi, ở mức Cao.')], { thinkingLevel: 'max' });
+    const r = await h.run('hỏi ngắn');
+    expect(r.stopReason).toBe('end_turn');
+    expect(h.provider.requests.map((q) => q.thinking.level)).toEqual(['max', 'high']);
+    expect(h.provider.requests.map((q) => q.maxOutputTokens)).toEqual([LONG_OUTPUT_TOKENS, LONG_OUTPUT_TOKENS]);
+    const notes = eventsOf(h.events, 'notice').map((n) => n.text);
+    expect(notes).toContain(t('vi', 'maxTokensEmptyLower', { from: 'Max', to: 'High' }));
+    expect(notes).not.toContain(t('vi', 'maxTokensEmptyStop'));
+    expect(h.session.messages.filter((m) => m.role === 'assistant').map((m) => textOf(m))).toEqual(['Có rồi, ở mức Cao.']);
+    expect(h.session.thinkingLevel).toBe('max'); // lượt kế tiếp trở về mức người dùng đã chọn
+  });
+
+  it('Swarm cũng hạ xuống Cao (mức gửi lên model: max → high)', async () => {
+    const h = makeHarness([emptyCut, () => textTurn('xong')], { thinkingLevel: 'swarm' });
+    await h.run('hỏi ngắn');
+    expect(h.provider.requests.map((q) => q.thinking.level)).toEqual(['max', 'high']);
+    expect(eventsOf(h.events, 'notice').map((n) => n.text)).toContain(t('vi', 'maxTokensEmptyLower', { from: 'Swarm', to: 'High' }));
+  });
+
+  it('hạ mức rồi vẫn rỗng → dừng với thông báo nguyên nhân: đúng hai lần gọi, không vòng lặp, không tin rỗng', async () => {
+    const h = makeHarness([emptyCut, emptyCut, () => textTurn('không được tới đây')], { thinkingLevel: 'max' });
+    const r = await h.run('hỏi ngắn');
+    expect(r.stopReason).toBe('end_turn');
+    expect(h.provider.requests.map((q) => q.thinking.level)).toEqual(['max', 'high']);
+    const notes = eventsOf(h.events, 'notice').map((n) => n.text);
+    expect(notes).toContain(t('vi', 'maxTokensEmptyLower', { from: 'Max', to: 'High' }));
+    expect(notes).toContain(t('vi', 'maxTokensEmptyStop'));
+    expect(h.session.messages.filter((m) => m.role === 'assistant')).toHaveLength(0);
+  });
+
+  it('Cao trở xuống không hạ thêm (đã ở trần đầy đủ → dừng ngay, một lần gọi)', async () => {
+    const h = makeHarness([emptyCut, () => textTurn('không được tới đây')], { thinkingLevel: 'high' });
+    await h.run('Viết báo cáo đầy đủ');
+    expect(h.provider.requests).toHaveLength(1);
+    const notes = eventsOf(h.events, 'notice').map((n) => n.text);
+    expect(notes).toContain(t('vi', 'maxTokensEmptyStop'));
+    expect(notes.some((n) => n === t('vi', 'maxTokensEmptyLower', { from: 'High', to: 'High' }))).toBe(false);
+  });
+
+  it('mức Cao hạ xuống chỉ áp cho phần còn lại CỦA LƯỢT: lần gọi sau khi dùng công cụ vẫn ở mức Cao, lượt mới trở về Max', async () => {
+    const h = makeHarness([emptyCut, () => toolTurn([{ name: 'read_file', input: { path: 'a.txt' } }]), () => textTurn('đã đọc xong')], { thinkingLevel: 'max', files: { 'a.txt': 'xin chào' } });
+    await h.run('đọc a.txt giúp mình');
+    expect(h.provider.requests.map((q) => q.thinking.level)).toEqual(['max', 'high', 'high']);
+    const next = makeHarness([() => textTurn('ok')], { thinkingLevel: 'max' });
+    await next.run('hỏi ngắn');
+    expect(next.provider.requests[0].thinking.level).toBe('max');
+  });
 });
 
 describe('H04 — mức suy luận được chừa ngân sách suy luận', () => {

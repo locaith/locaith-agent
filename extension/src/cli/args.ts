@@ -28,6 +28,8 @@ export interface ParsedArgs {
   model?: string;
   baseUrl?: string;
   cwd: string;
+  /** Người dùng truyền `--cwd` (khi đó `main` kiểm thư mục có thật — `parseArgs` giữ thuần, không đụng đĩa). */
+  cwdExplicit?: boolean;
   permissionMode?: PermissionModeArg;
   allowedTools: string[];
   disallowedTools: string[];
@@ -189,6 +191,7 @@ export function parseArgs(argv: string[], cwd: string = process.cwd()): ParsedAr
         break;
       case '--cwd':
         o.cwd = path.resolve(cwd, val());
+        o.cwdExplicit = true;
         break;
       case '--permission-mode': {
         const v = PERMISSION_ALIASES[val().toLowerCase()];

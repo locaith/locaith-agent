@@ -15,6 +15,8 @@ import type { ToolHost } from './types';
 import { outputStyleBlock, type SessionOutputStyle } from '../commands/outputStyles'; // (lane:commands-agents)
 
 export type PromptProfile = 'ide' | 'browser';
+/** Bề mặt chạy của hồ sơ 'ide': 'vscode' (mặc định) hoặc 'cli' (terminal). */
+export type PromptSurface = 'vscode' | 'cli';
 
 export interface SystemPromptInput {
   host: ToolHost;
@@ -35,6 +37,8 @@ export interface SystemPromptInput {
   now?: Date;
   /** Mặc định 'ide'. */
   profile?: PromptProfile;
+  /** (0.4.4) Bề mặt của hồ sơ 'ide': 'cli' thì lời mở đầu và khối <environment> nói đúng là TERMINAL (trước đây trợ lý ở terminal vẫn tự nhận «đang chạy trong VS Code»). Vắng/'vscode' = prompt giữ nguyên từng byte. */
+  surface?: PromptSurface;
   /** Nhà cung cấp của phiên: họ mô hình Locaith được nhắc thêm về hai kỹ năng riêng (văn bản Nghị định 30, ghi nhớ). Nhà cung cấp khác: prompt giữ nguyên từng byte. */
   providerId?: string;
   /** (lane:commands-agents) Phong cách đầu ra (`/output-style`); null/'default' = prompt giữ nguyên từng byte. */
@@ -64,8 +68,13 @@ const isToolsSection = (s: string) => s.startsWith('# Working with tools');
  * Hiến pháp theo hồ sơ. Bản trình duyệt giữ NGUYÊN các điều lệ điều phối và phần giao tiếp (một nguồn duy nhất), chỉ thay
  * lời mở đầu và phần "Working with tools" bằng nội dung riêng của trình duyệt.
  */
-export function constitutionFor(profile: PromptProfile = 'ide'): string {
-  if (profile !== 'browser') return constitution.trim(); // giữ nguyên từng byte: dấu vân tay prompt-cache của bản IDE không đổi
+const IDE_IDENTITY = "works inside the user's VS Code.";
+const CLI_IDENTITY = "works in the user's terminal, as the Locaith CLI (the `locaith` command).";
+const CLI_SURFACE_LINE = "Surface: the user's terminal (the Locaith CLI), not VS Code — there is no editor, no open-file or selection context and no diagnostics panel.";
+
+export function constitutionFor(profile: PromptProfile = 'ide', surface: PromptSurface = 'vscode'): string {
+  // giữ nguyên từng byte với VS Code: dấu vân tay prompt-cache của bản IDE không đổi. Terminal chỉ đổi đúng câu nhận diện ở đầu.
+  if (profile !== 'browser') return surface === 'cli' ? constitution.trim().replace(IDE_IDENTITY, CLI_IDENTITY) : constitution.trim();
   const base = sections(constitution);
   const over = sections(constitutionBrowser);
   const intro = over.find((s) => !s.startsWith('# ')) ?? base[0];
@@ -91,8 +100,9 @@ export function languageRule(language: 'vi' | 'en'): string {
 
 export function buildSystemPrompt(i: SystemPromptInput): string {
   const profile = i.profile ?? 'ide';
+  const surface = i.surface ?? 'vscode';
   const roots = i.host.workspaceRoots();
-  const parts: string[] = [constitutionFor(profile)];
+  const parts: string[] = [constitutionFor(profile, surface)];
   // Phần tĩnh của riêng họ mô hình Locaith đứng ngay sau hiến pháp để cùng nằm trong tiền tố được prompt-cache của hãng.
   if (profile === 'ide' && i.providerId === LOCAITH_PROVIDER_ID) parts.push(`<locaith_model>\n${locaithAddendum.trim()}\n</locaith_model>`);
 
@@ -105,6 +115,7 @@ export function buildSystemPrompt(i: SystemPromptInput): string {
           languageRule(i.language),
         ]
       : [
+          ...(surface === 'cli' ? [CLI_SURFACE_LINE] : []),
           `Operating system: ${OS_NAME[i.host.platform.os]}`,
           `Shell used by run_command: ${i.host.platform.shellLabel}`,
           roots.length

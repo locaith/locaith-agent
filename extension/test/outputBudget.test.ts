@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { LONG_OUTPUT_TOKENS, SHORT_OUTPUT_TOKENS, isLongFormRequest, pickOutputBudget } from '../src/core/engine/outputBudget';
+import { LONG_OUTPUT_TOKENS, SHORT_OUTPUT_TOKENS, isLongFormRequest, lowerReasoningLevel, pickOutputBudget } from '../src/core/engine/outputBudget';
 
 /**
  * (lane:output-timeouts · H04) Trần đầu ra thích ứng: 8k cho lượt thường, trần đầy đủ cho tài liệu dài / viết tiếp / đã ghi nội dung dài,
@@ -71,5 +71,13 @@ describe('outputBudget — ranh giới từ, tiếng Anh, ngân sách suy luận
     expect(pickOutputBudget({ ...b, thinkingLevel: 'high' }).tokens).toBe(LONG_OUTPUT_TOKENS);
     expect(pickOutputBudget({ ...b, thinkingLevel: 'max', modelCap: 20_000 }).tokens).toBe(20_000);
     expect(pickOutputBudget({ ...b, thinkingLevel: 'swarm' }).tokens).toBe(LONG_OUTPUT_TOKENS);
+  });
+});
+
+describe('lowerReasoningLevel — bậc hạ khi suy luận nuốt hết trần (0.7.5)', () => {
+  it('chỉ Max/Swarm hạ xuống Cao; Cao trở xuống và mức lạ không hạ', () => {
+    expect(lowerReasoningLevel('max')).toBe('high');
+    expect(lowerReasoningLevel('swarm')).toBe('high');
+    for (const l of ['high', 'medium', 'low', 'off', undefined] as const) expect(lowerReasoningLevel(l)).toBeNull();
   });
 });

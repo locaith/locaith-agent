@@ -8,7 +8,7 @@
  */
 
 import './strings';
-import { mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, renameSync, statSync, writeFileSync } from 'node:fs';
 import { createInterface } from 'node:readline/promises';
 import path from 'node:path';
 import process from 'node:process';
@@ -386,6 +386,15 @@ async function sessionsCmd(a: ParsedArgs, env: NodeJS.ProcessEnv): Promise<numbe
   return 0;
 }
 
+/** `--cwd` phải là thư mục có thật. Trả thông báo lỗi, hoặc null nếu hợp lệ. */
+export function checkCwd(dir: string): string | null {
+  try {
+    return statSync(dir).isDirectory() ? null : t('cli.cwd.notDir', { path: dir });
+  } catch {
+    return t('cli.cwd.missing', { path: dir });
+  }
+}
+
 async function main(argv: string[]): Promise<number> {
   const env = process.env;
   let a: ParsedArgs;
@@ -393,12 +402,24 @@ async function main(argv: string[]): Promise<number> {
     a = parseArgs(argv);
   } catch (err) {
     const lang = detectLang(env);
-    console.error(`${err instanceof Error ? err.message : String(err)}\n\n${usageText(VERSION, lang)}`);
+    setLang(lang);
+    // Chỉ dòng lỗi + MỘT câu gợi ý: in cả trang help (hơn 40 dòng) làm dòng lỗi chìm đi.
+    console.error(`${err instanceof Error ? err.message : String(err)}\n${t('cli.usage.hint')}`);
     return err instanceof UsageError ? 2 : 1;
   }
   if (a.noColor) env.NO_COLOR = '1';
   const lang = resolveLang(a, env);
   setLang(lang);
+
+  // `--cwd` sai: dừng ngay với mã 2. Trước đây vẫn chạy (thoát 0, "success") và công cụ báo lỗi từng cái — script CI tưởng đã chạy đúng thư mục.
+  if (a.cwdExplicit && a.command !== 'version' && a.command !== 'help') {
+    const problem = checkCwd(a.cwd);
+    if (problem) {
+      if (a.json || a.outputFormat === 'json') console.log(JSON.stringify({ ok: false, error: problem }));
+      else console.error(`✘ ${problem}`);
+      return 2;
+    }
+  }
 
   try {
     switch (a.command) {

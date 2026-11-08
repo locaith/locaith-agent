@@ -1075,6 +1075,7 @@ export class Runtime implements CliRuntime {
         this.scheduleStatus();
       },
       authHint: (id) => (id === LOCAITH_PROVIDER_ID ? this.tr('authHintLogin') : this.tr('authHint', { id })),
+      surface: 'cli', // trợ lý tự nhận là Locaith CLI ở terminal, không phải «đang chạy trong VS Code»
       loadInstructions: (names) => this.loadInstructions(names),
       loadMemory: () => this.loadMemory(),
       extensions: this.extensionsFor(false),

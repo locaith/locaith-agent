@@ -6,6 +6,14 @@ const CWD = path.resolve('/work/proj');
 const p = (argv: string[]) => parseArgs(argv, CWD);
 
 describe('parseArgs', () => {
+  it('--cwd đánh dấu cwdExplicit (để main kiểm thư mục có thật); không truyền thì không đánh dấu — parseArgs vẫn thuần, không đụng đĩa', () => {
+    expect(p(['-p', 'x']).cwdExplicit).toBeUndefined();
+    const a = p(['-p', 'x', '--cwd', 'khong/co/that']);
+    expect(a.cwdExplicit).toBe(true);
+    expect(a.cwd).toBe(path.resolve(CWD, 'khong/co/that'));
+  });
+
+
   it('không đối số → phiên tương tác', () => {
     const a = p([]);
     expect(a.command).toBe('chat');

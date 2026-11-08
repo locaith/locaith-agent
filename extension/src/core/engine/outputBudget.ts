@@ -34,6 +34,15 @@ export function reasoningReserve(level: ThinkingLevel | undefined): number {
   }
 }
 
+/**
+ * (0.7.5) Mức suy luận để thử lại MỘT lần khi suy luận nuốt hết trần đầu ra mà chưa có chữ nào. Chỉ Max/Swarm hạ xuống Cao: ở Max, trần đã là trần đầy đủ
+ * (không còn chỗ để nâng) và model như DeepSeek có thể «nghĩ» dài vô hạn; Cao nghĩ ngắn hơn rõ rệt. Từ Cao trở xuống không hạ nữa — ở DeepSeek Trung bình
+ * và Cao gửi cùng một mức, hạ không đổi gì mà còn thu nhỏ trần.
+ */
+export function lowerReasoningLevel(level: ThinkingLevel | undefined): ThinkingLevel | null {
+  return level === 'max' || level === 'swarm' ? 'high' : null;
+}
+
 export interface OutputBudgetInput {
   /** Mức suy luận của phiên: medium trở lên được cộng ngân sách suy luận vào trần lượt thường. */
   thinkingLevel?: ThinkingLevel;
