@@ -63,6 +63,7 @@ import type {
   FeatureSlashDef,
   RuntimeEvent,
   RuntimeOptions,
+  RunResultInfo,
   RuntimeStatus,
   SettingsApi,
   SlashRunContext,
@@ -131,6 +132,7 @@ export class Runtime implements CliRuntime {
   private shellAbort: AbortController | null = null;
   private lastStop = 'end_turn';
   private timedOut = false;
+  private lastRun: { stopReason: string; turns: number; startedAt: number; endedAt: number } = { stopReason: 'none', turns: 0, startedAt: 0, endedAt: 0 };
   private queue: QueuedTurn[] = [];
   private pendingNotes: string[] = [];
   private readonly permWaiters = new Map<string, (d: PermissionDecision) => void>();
@@ -233,7 +235,7 @@ export class Runtime implements CliRuntime {
     this.repo = new SessionRepo(this.home, this.cwd, opts.version, (l, m) => this.logger.log(l, m));
     this.git = new GitBranch(this.cwd, () => this.scheduleStatus());
     this.account = new AccountInfoCache(this.home, {
-      key: () => (this.providers.overridden ? undefined : this.providers.token()),
+      key: () => this.providers.token(),
       baseUrl: () => this.store.get<Record<string, string>>('baseUrls', {})[LOCAITH_PROVIDER_ID] || opts.baseUrl || LOCAITH_GATEWAY_URL,
       version: opts.version,
       fetchImpl: opts.fetchImpl,
@@ -283,7 +285,7 @@ export class Runtime implements CliRuntime {
     await this.attachFeatures();
     this.git.refresh(true);
     // Thông tin tài khoản: chỉ đọc bộ đệm đã có; làm mới ở nền, không chặn khởi động.
-    void this.account.refresh().catch(() => undefined);
+    if (!this.providers.overridden) void this.account.refresh().catch(() => undefined);
     for (const n of this.startupNotices) this.emit({ t: 'toast', level: 'warn', text: n });
   }
 
@@ -695,6 +697,7 @@ export class Runtime implements CliRuntime {
     try {
       await previous;
       this.lastStop = 'error';
+      this.lastRun = { stopReason: 'error', turns: 0, startedAt: Date.now(), endedAt: 0 };
       await fn();
       await this.drainQueue();
     } catch (err) {
@@ -819,8 +822,10 @@ export class Runtime implements CliRuntime {
       timer.unref?.();
     }
     try {
+      const startedAt = Date.now();
       const res = await engine.run({ session: this.session, content, signal: abort.signal });
       this.lastStop = res.stopReason;
+      this.lastRun = { stopReason: this.timedOut ? 'timeout' : res.stopReason, turns: res.turns, startedAt, endedAt: Date.now() };
       this.logger.log('info', `Lượt chạy kết thúc: ${res.stopReason} sau ${res.turns} vòng (${this.session.provider}:${this.session.model})`);
       if (this.timedOut) this.notice('warn', this.tr('turnTimeout', { sec: sec ?? 0 }));
     } finally {
@@ -838,6 +843,18 @@ export class Runtime implements CliRuntime {
       }
     }
     return { blocked: false };
+  }
+
+  /** Kết quả lượt chạy gần nhất (cho mã thoát và câu trả lời của chế độ in một lần). */
+  lastResult(): RunResultInfo {
+    const last = [...this.session.messages].reverse().find((m) => m.role === 'assistant' && m.content.some((b) => b.type === 'text' && b.text.trim()));
+    const text = (last?.content ?? [])
+      .filter((b): b is Extract<ContentBlock, { type: 'text' }> => b.type === 'text')
+      .map((b) => b.text)
+      .join(String.fromCharCode(10))
+      .trim();
+    const r = this.lastRun;
+    return { stopReason: r.stopReason as RunResultInfo['stopReason'], turns: r.turns, text, ms: Math.max(0, (r.endedAt || Date.now()) - r.startedAt) };
   }
 
   setRunning(running: boolean): void {

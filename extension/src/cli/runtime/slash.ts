@@ -269,7 +269,7 @@ export function registerBuiltinSlash(rt: Runtime): void {
       if (a.consent !== undefined) lines.push(`${tr('whoamiConsent')}: ${a.consent ? tr('yes') : tr('whoamiConsentNo')}`);
     }
     lines.push(`${tr('stModel')}: ${rt.session.provider}:${rt.session.model}`);
-    const others = rt.providers.usableIds().filter((i) => i !== LOCAITH_PROVIDER_ID);
+    const others = rt.providers.overridden ? [] : rt.providers.usableIds().filter((i) => i !== LOCAITH_PROVIDER_ID);
     if (others.length) lines.push(`${tr('whoamiByok')}: ${others.join(', ')}`);
     ctx.output(lines.map((l) => `- ${l}`).join('\n'), 'markdown');
   }, { needsIdle: false });

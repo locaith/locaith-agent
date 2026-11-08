@@ -199,3 +199,95 @@ describe('dispose', () => {
     expect(result).toBeNull();
   });
 });
+
+describe('lastResult (mã thoát chế độ in một lần)', () => {
+  it('end_turn + câu trả lời cuối khi xong; error khi nhà cung cấp lỗi; timeout khi quá hạn; error khi chưa đăng nhập', async () => {
+    const ok = await harness({ script: [() => textTurn('Kết quả cuối')], interactive: false });
+    expect(ok.rt.lastResult!().stopReason).toBe('none');
+    await ok.rt.submit('làm đi');
+    await ok.rt.idle();
+    expect(ok.rt.lastResult!()).toMatchObject({ stopReason: 'end_turn', text: 'Kết quả cuối' });
+    expect(ok.rt.lastResult!().turns).toBe(1);
+    await ok.cleanup();
+
+    const bad = await harness({
+      interactive: false,
+      script: [
+        async () => {
+          throw new ProviderError('hỏng', { kind: 'server', providerId: 'fake', status: 500, retryable: false });
+        },
+      ],
+    });
+    await bad.rt.submit('làm đi');
+    await bad.rt.idle();
+    expect(bad.rt.lastResult!().stopReason).toBe('error');
+    await bad.cleanup();
+
+    const slow = await harness({
+      interactive: false,
+      timeoutSec: 0.2,
+      script: [
+        async () => {
+          await new Promise((r) => setTimeout(r, 1200));
+          return textTurn('muộn');
+        },
+      ],
+    });
+    await slow.rt.submit('chậm');
+    await slow.rt.idle();
+    expect(slow.rt.lastResult!().stopReason).toBe('timeout');
+    await slow.cleanup();
+  }, 15_000);
+});
+
+describe('/login bằng token dán vào', () => {
+  /** Hộp hỏi thứ `n` (đếm từ 1) của cả phiên kiểm thử: chờ nó xuất hiện rồi trả về. */
+  const nthAsk = async (events: Array<{ t: string; ask?: { id: string; kind: string } }>, n: number) => {
+    await waitFor(() => events.filter((e) => e.t === 'ask').length >= n, 3000, 'hộp hỏi ' + n);
+    return events.filter((e) => e.t === 'ask')[n - 1].ask!;
+  };
+
+  it('token đúng được kiểm với cổng rồi mới ghi vào cli.json (quyền 600); token sai thì không ghi', async () => {
+    const home = tmpDir('lc-home-');
+    const good = 'lat_' + 'g'.repeat(43);
+    const fetchImpl = (async (_u: unknown, init?: RequestInit) => {
+      const auth = String((init?.headers as Record<string, string> | undefined)?.authorization ?? '');
+      if (auth.includes(good)) return new Response(JSON.stringify({ ok: true, account: { name: 'Anh Tuấn', email_masked: 't***@x.vn', plan: 'pro' } }), { status: 200 });
+      return new Response('{}', { status: 401 });
+    }) as unknown as typeof fetch;
+    const h = await harness({ home, fetchImpl, script: [] });
+    const events = h.events as unknown as Array<{ t: string; ask?: { id: string; kind: string } }>;
+
+    h.rt.submit('/login');
+    let ask = await nthAsk(events, 1);
+    expect(ask.kind).toBe('pick');
+    h.rt.answer(ask.id, 'token');
+    ask = await nthAsk(events, 2);
+    expect(ask.kind).toBe('input');
+    h.rt.answer(ask.id, 'lat_' + 'b'.repeat(43)); // sai
+    await h.rt.idle();
+    expect(fs.existsSync(path.join(home, '.locaith', 'cli.json'))).toBe(false);
+    expect(h.outputs().pop()).toMatch(/không hợp lệ|hết hạn/);
+
+    h.rt.submit('/login');
+    ask = await nthAsk(events, 3);
+    h.rt.answer(ask.id, 'token');
+    ask = await nthAsk(events, 4);
+    h.rt.answer(ask.id, good);
+    await h.rt.idle();
+    const saved = JSON.parse(fs.readFileSync(path.join(home, '.locaith', 'cli.json'), 'utf8'));
+    expect(saved.apiKey).toBe(good);
+    if (process.platform !== 'win32') expect(fs.statSync(path.join(home, '.locaith', 'cli.json')).mode & 0o077).toBe(0);
+    expect(h.outputs().pop()).toContain('cli.json');
+    await h.rt.submit('/whoami');
+    expect(h.outputs().pop()).toMatch(/pro|Anh Tuấn/);
+    await h.cleanup();
+  });
+
+  it('không tương tác thì /login chỉ hướng dẫn', async () => {
+    const h = await harness({ interactive: false, script: [] });
+    await h.rt.submit('/login');
+    expect(h.outputs().pop()).toContain('locaith login');
+    await h.cleanup();
+  });
+});

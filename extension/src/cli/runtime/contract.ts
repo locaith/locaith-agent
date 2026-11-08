@@ -127,6 +127,17 @@ export interface Completion {
   detail?: string;
 }
 
+/** (cli-rt) Kết quả lượt chạy gần nhất — để chế độ in một lần quyết định mã thoát và in câu trả lời. */
+export interface RunResultInfo {
+  /** end_turn = xong; max_turns / error / aborted / refusal; 'timeout' khi quá hạn `timeoutSec`; 'none' = chưa có lượt nào chạy. */
+  stopReason: 'end_turn' | 'max_turns' | 'error' | 'aborted' | 'refusal' | 'timeout' | 'none';
+  turns: number;
+  /** Văn bản câu trả lời cuối của trợ lý (rỗng nếu chưa có). */
+  text: string;
+  /** Thời gian chạy (ms) của lượt gần nhất. */
+  ms: number;
+}
+
 export interface CliRuntime {
   /** Đăng ký người nghe; trả về hàm huỷ. */
   on(listener: (e: RuntimeEvent) => void): () => void;
@@ -167,6 +178,8 @@ export interface CliRuntime {
   /** Đóng sạch: dừng tác vụ nền, đóng MCP, ghi phiên. Gọi đúng một lần khi thoát. */
   dispose(): Promise<void>;
 
+  /** (cli-rt, tuỳ chọn) Kết quả lượt chạy gần nhất (mã thoát chế độ in một lần). */
+  lastResult?(): RunResultInfo;
   /** (cli-rt, tuỳ chọn) Cài đặt hợp nhất user < project < local < env — để giao diện đọc `ui.theme`… */
   readonly settings?: SettingsApi;
 }
