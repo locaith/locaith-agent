@@ -359,16 +359,18 @@ describe('BrowserController', () => {
 
   it('cài đặt trình duyệt: giá trị sai kiểu/ngoài khoảng bị bỏ hoặc kẹp lại và được lưu bền', async () => {
     const r = await make();
-    await r.ctl.onMessage({ type: 'set_browser_setting', key: 'maxTurns', value: 'nhiều' });
-    expect(r.config.browser().maxTurns).toBe(30);
-    await r.ctl.onMessage({ type: 'set_browser_setting', key: 'maxTurns', value: 9999 });
-    expect(r.config.browser().maxTurns).toBe(100);
+    await r.ctl.onMessage({ type: 'set_browser_setting', key: 'pinTab', value: 'có' });
+    expect(r.config.browser().pinTab).toBe(true); // sai kiểu → bỏ
+    // (0.7.4) Không còn cài đặt «số vòng tối đa»: khoá cũ từ giao diện/bản cũ bị bỏ qua, và engine không có trần vòng.
+    await r.ctl.onMessage({ type: 'set_browser_setting', key: 'maxTurns' as never, value: 12 });
+    expect('maxTurns' in r.config.browser()).toBe(false);
+    expect(r.config.engine().maxTurns).toBe(Number.POSITIVE_INFINITY);
     await r.ctl.onMessage({ type: 'set_browser_setting', key: 'nonsense' as never, value: true });
     await r.ctl.onMessage({ type: 'set_browser_setting', key: 'customInstructions', value: 'Xưng hô anh/chị' });
     const again = new BrowserConfig(r.kv);
     await again.load();
     expect(again.browser().customInstructions).toBe('Xưng hô anh/chị');
-    expect(again.browser().maxTurns).toBe(100);
+    expect('maxTurns' in again.browser()).toBe(false);
   });
 
   it('hướng dẫn riêng đi vào system prompt', async () => {

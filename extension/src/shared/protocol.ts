@@ -676,7 +676,6 @@ export interface BrowserSettings {
   defaultMode: PermissionMode;
   /** Cho phép chọn chế độ 'bypass' (không hỏi gì) — nguy hiểm, mặc định tắt. */
   allowBypass: boolean;
-  maxTurns: number;
   /** Bật dòng trạng thái tóm tắt bằng model nhỏ. */
   summarizer: boolean;
   autoCompact: boolean;
@@ -695,7 +694,6 @@ export interface BrowserSettings {
 export const DEFAULT_BROWSER_SETTINGS: BrowserSettings = {
   defaultMode: 'default',
   allowBypass: false,
-  maxTurns: 30,
   summarizer: true,
   autoCompact: true,
   attachTabContext: true,
@@ -1014,6 +1012,9 @@ export type HostMessage =
   | { type: 'cleanup_stats'; stats?: CleanupStatsView; busy?: boolean; error?: string }
   /** Cuộn tới một thẻ trong màn Cài đặt (lệnh `locaithAgent.cleanup` mở thẻ «Dọn dẹp bộ nhớ»). */
   | { type: 'focus_section'; section: 'cleanup' }
+  // ── (0.7.4) Lịch sử các tin đã gõ — phím ↑/↓ ở ô nhập ──
+  /** Danh sách các tin người dùng đã gõ (cũ → mới), lưu bền theo thư mục làm việc. Gửi ngay sau `init`; CHỈ cho khung chat trong VS Code/trình duyệt, không phát lại cho Remote. */
+  | { type: 'prompt_history'; items: string[] }
   // ── (lane:customer-bugs) ──
   // ── (lane:gateway-client) ──
   // ── (lane:mcp-parity) ──

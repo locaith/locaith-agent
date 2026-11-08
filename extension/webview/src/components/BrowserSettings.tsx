@@ -3,7 +3,6 @@ import { useRef, useState } from 'preact/hooks';
 import type { BrowserSettings, CustomProviderInput, PermissionMode, ViewState } from '../../../src/shared/protocol';
 import { CUSTOM_PRESETS } from '../../../src/core/providers/presets';
 import { useApp } from '../ctx';
-import { formatDecimal } from '../format';
 import { post } from '../vscode';
 import { Icon } from './Icons';
 import { Badge, Button, Segmented, Switch } from './ui';
@@ -184,7 +183,7 @@ const MODES: PermissionMode[] = ['default', 'acceptEdits', 'plan'];
 
 /** Quyền truy cập trang web + hành vi + hướng dẫn riêng. */
 export function BrowserSettingsSections({ view }: { view: ViewState }) {
-  const { t, lang } = useApp();
+  const { t } = useApp();
   const instr = useRef<HTMLTextAreaElement>(null);
   const b = view.browser;
   if (!b) return null;
@@ -235,23 +234,6 @@ export function BrowserSettingsSections({ view }: { view: ViewState }) {
             <div>{t('set.allowBypass.hint')}</div>
           </div>
         )}
-
-        <div class="field">
-          <label class="field-label" for="set-turns">
-            {t('set.maxTurns')} <span class="field-value">{formatDecimal(s.maxTurns, lang, 0)}</span>
-          </label>
-          <input
-            id="set-turns"
-            class="range"
-            type="range"
-            min={3}
-            max={100}
-            step={1}
-            value={s.maxTurns}
-            style={{ '--fill': `${((s.maxTurns - 3) / 97) * 100}%` }}
-            onChange={(e) => set('maxTurns', Number((e.target as HTMLInputElement).value))}
-          />
-        </div>
 
         <div class="field field-inline">
           <span class="field-label">{t('set.summarizer')}</span>

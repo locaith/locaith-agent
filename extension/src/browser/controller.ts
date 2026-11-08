@@ -446,6 +446,9 @@ export class BrowserController {
       rating: shouldAskRating(rating) ? { sends: rating.sends } : undefined,
     };
     this.post({ type: 'init', state: this.view });
+    void this.d.config.promptHistory().then((items) => {
+      if (!this.disposed) this.post({ type: 'prompt_history', items: [...items] }); // (0.7.4) ↑/↓ ở ô nhập
+    });
     void this.refreshProvidersInBackground();
     void this.flushRating();
   }
@@ -660,6 +663,7 @@ export class BrowserController {
         return;
       }
       case 'send':
+        void this.d.config.addPromptHistory(m.text); // (0.7.4) lịch sử ↑/↓
         return this.send(m.text, Array.isArray(m.attachments) ? m.attachments : []);
       case 'stop':
         return this.stop();
@@ -844,6 +848,7 @@ export class BrowserController {
         await this.syncRating();
         return;
       case 'slash':
+        void this.d.config.addPromptHistory(`/${String(m.command ?? '').replace(/^\//, '')}${m.args ? ` ${m.args}` : ''}`);
         return void (await this.handleSlash(m.command, m.args));
       case 'retry':
         return this.retryLast(false);

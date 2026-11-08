@@ -23,7 +23,7 @@ Tài liệu này ánh xạ **từng thành phần** trong *Tài liệu đặc t�
 └───────────────▲────────────────────────────────────────────────────────────┘
                 │ ProviderEvent (đã chuẩn hoá)
 ┌───────────────┴────────────────────────────────────────────────────────────┐
-│ AgentEngine: while (turn < maxTurns)                                         │   Tầng 3
+│ AgentEngine: while (!dừng) — maxTurns chỉ cho sub-agent / -p               │   Tầng 3
 │   Context Builder → Provider.stream() → Dispatcher (song song) → nối kết quả │
 └───┬───────────────────────┬──────────────────────────┬─────────────────────┘
     ▼                       ▼                          ▼

@@ -156,10 +156,12 @@ describe('tin cậy thư mục', () => {
 });
 
 describe('ánh xạ sang EngineSettings', () => {
-  it('đọc compactAtPercent, clearToolResultsAtPercent, keepRecentMessages, maxTurns, language…', () => {
+  it('đọc compactAtPercent, clearToolResultsAtPercent, keepRecentMessages, language… — KHÔNG có trần vòng trừ khi gõ --max-turns (như Claude Code)', () => {
+    // `agent.maxTurns` trong settings.json của bản cũ KHÔNG còn được đọc (0.7.4): nếu không, một giá trị 50 cũ vẫn chặn việc dài bằng thông báo «đạt số vòng tối đa».
     const { s } = store({ user: { agent: { compactAtPercent: 90, clearToolResultsAtPercent: 30, keepRecentMessages: 10, compactAtTokens: 123456, maxTurns: 17, instructionFiles: ['MYRULES.md'] } } });
     const e = buildEngineSettings(s, { lang: 'en', contextWindow: 1_000_000, modelMaxOutputTokens: 64_000 });
-    expect(e).toMatchObject({ compactAt: 0.9, clearToolResultsAtPercent: 30, keepRecentMessages: 10, compactAtTokens: 123456, maxTurns: 17, language: 'en', contextWindow: 1_000_000, modelMaxOutputTokens: 64_000, compactAtUserSet: true });
+    expect(e).toMatchObject({ compactAt: 0.9, clearToolResultsAtPercent: 30, keepRecentMessages: 10, compactAtTokens: 123456, language: 'en', contextWindow: 1_000_000, modelMaxOutputTokens: 64_000, compactAtUserSet: true });
+    expect(e.maxTurns).toBe(Number.POSITIVE_INFINITY);
     expect(e.instructionFiles).toEqual(['MYRULES.md']);
     expect(buildEngineSettings(s, { lang: 'vi', contextWindow: 1, maxTurns: 3 }).maxTurns).toBe(3); // cờ --max-turns thắng
     const d = buildEngineSettings(store().s, { lang: 'vi', contextWindow: 200_000 });

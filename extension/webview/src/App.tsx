@@ -22,6 +22,7 @@ import { AccountGate } from './components/AccountGate';
 import { AppContext, type AppContextValue } from './ctx';
 import { applyUiSettings } from './fonts';
 import { makeT } from './i18n';
+import { setPromptHistory } from './promptHistory';
 import { post } from './vscode';
 
 let toastSeq = 0;
@@ -111,6 +112,9 @@ export function App() {
         case 'focus_section':
           setScreen('settings');
           bus.focusSection.emit(m.section);
+          break;
+        case 'prompt_history':
+          setPromptHistory(m.items); // (0.7.4) ↑/↓ ở ô nhập
           break;
         case 'test_result':
           bus.testResult.emit({ provider: m.provider, ok: m.ok, message: m.message });

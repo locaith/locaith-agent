@@ -48,7 +48,8 @@ import { BIO_SERVER_NAME } from '../core/mcp/catalog';
 const BIO_INSTALL_WATCHDOG_MS = 10 * 60_000;
 /** Sau một lần thất bại, không tự cài lại mỗi tin nhắn mà chờ khoảng này (Thử lại thủ công thì không bị chặn). */
 const BIO_RETRY_COOLDOWN_MS = 5 * 60_000;
-import { imageKey, reconcileTranscript } from '../shared/transcriptRebuild';
+import { healInterrupted, imageKey, reconcileTranscript } from '../shared/transcriptRebuild';
+import { addPrompt, sanitizeHistory } from '../shared/promptHistory';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { docCharBudget } from '../shared/docKinds';
@@ -203,6 +204,10 @@ export function coalesceEvents(events: UiEvent[]): UiEvent[] {
 
 /** Số tin tối đa được xếp hàng khi trợ lý đang chạy. */
 const MAX_QUEUED = 20;
+/** (0.7.4) Khoá workspaceState: id cuộc trò chuyện đang dở của khung bên, để mở lại sau khi khởi động lại extension/VS Code. */
+const LAST_SESSION_KEY = 'locaithAgent.lastSessionId';
+/** (0.7.4) Khoá lưu lịch sử các tin đã gõ (phím ↑/↓ ở ô nhập). Theo thư mục làm việc (workspaceState); cửa sổ không mở thư mục thì globalState. */
+const PROMPT_HISTORY_KEY = 'locaithAgent.promptHistory';
 
 /** Tin từ webview vẫn được xử lý khi CHƯA đăng nhập tài khoản Locaith: nạp giao diện, đăng nhập/đăng xuất, đổi ngôn ngữ/giao diện, mở liên kết/cài đặt. */
 const SIGNED_OUT_OK = new Set<string>(['ready', 'account_sign_in', 'account_cancel', 'account_sign_out', 'account_enter_code', 'account_manage', 'set_ui_setting', 'open_external', 'open_vscode_settings']);
@@ -270,6 +275,8 @@ export class ChatController implements vscode.Disposable {
   private docStash: { id: string; docs: AttachmentInfo[] } | null = null;
   /** Bộ đếm cho kiểm thử tích hợp: webview đã gửi eady chưa (chứng tỏ CSP, font, script nạp được). */
   readonly stats = { ready: 0, messages: 0 };
+  /** (0.7.4) Đang mở lại cuộc trò chuyện của lần chạy trước (khung bên). Mọi thao tác chờ nó xong để không giẫm lên nhau. */
+  private restoring: Promise<void> | null = null;
 
   constructor(
     private readonly d: ControllerDeps,
@@ -355,6 +362,59 @@ export class ChatController implements vscode.Disposable {
     });
     // Chrome xin kết nối (ghép đôi không mã) / đã quyết định / hết hạn → cập nhật thẻ «Cho phép / Từ chối» trong khung chat.
     this.chromeUnsub = d.chrome?.onChange?.(() => this.syncChromePair());
+    // (0.7.4) Khởi động lại extension/VS Code: mở lại ĐÚNG cuộc trò chuyện đang dở thay vì một cuộc trống bắt người dùng vào Lịch sử chọn lại.
+    this.restoring = this.restoreLast()
+      .catch((err) => this.d.logger.log('warn', `Không mở lại được cuộc trò chuyện trước: ${err instanceof Error ? err.message : String(err)}`))
+      .finally(() => {
+        this.restoring = null;
+      });
+  }
+
+  /**
+   * Ghi nhớ cuộc trò chuyện hiện tại (chỉ khung bên, chỉ khi đã có nội dung). `clear` = cuộc mới/đã xoá (còn trống): quên dấu nhớ để lần khởi động sau
+   * vào cuộc trống. Lưu một cuộc TRỐNG bình thường KHÔNG xoá dấu nhớ (nếu không, mở lại cuộc cũ sẽ tự xoá dấu của chính nó giữa chừng).
+   */
+  private rememberSession(clear = false): void {
+    if (this.surface !== 'sidebar') return;
+    const ws = this.d.context.workspaceState;
+    if (!ws) return;
+    if (this.session.messages.length > 0) void Promise.resolve(ws.update(LAST_SESSION_KEY, this.session.id)).catch(() => undefined);
+    else if (clear) void Promise.resolve(ws.update(LAST_SESSION_KEY, undefined)).catch(() => undefined);
+  }
+
+  /** Mở lại cuộc trò chuyện của lần chạy trước (khung bên). Lặng lẽ: không có gì để mở / mở không được thì để nguyên cuộc trống. */
+  private async restoreLast(): Promise<void> {
+    if (this.surface !== 'sidebar') return;
+    const id = this.d.context.workspaceState?.get<string>(LAST_SESSION_KEY);
+    if (!id || this.session.messages.length > 0 || this.busy) return;
+    await this.loadSession(id, { quiet: true });
+  }
+
+  /** Nơi lưu lịch sử tin đã gõ: theo thư mục làm việc đang mở (như Claude Code theo dự án); cửa sổ không mở thư mục thì dùng chung toàn máy. */
+  private historyMemento(): { get<T>(k: string): T | undefined; update(k: string, v: unknown): Thenable<void> | Promise<void> | void } | undefined {
+    const hasFolder = (vscode.workspace.workspaceFolders ?? []).length > 0;
+    return (hasFolder ? this.d.context.workspaceState : undefined) ?? this.d.context.globalState;
+  }
+
+  /** Các tin đã gõ (cũ → mới), đọc từ kho mỗi lần: khung bên và khung tab dùng chung một kho nên không lệch nhau. */
+  promptHistory(): readonly string[] {
+    return sanitizeHistory(this.historyMemento()?.get<unknown>(PROMPT_HISTORY_KEY));
+  }
+
+  /** Ghi nhớ một tin người dùng vừa gửi (kể cả lệnh gạch chéo). Tin rỗng, quá dài hoặc trùng tin mới nhất thì thôi. Lỗi ghi không bao giờ làm hỏng việc gửi. */
+  private recordPrompt(text: unknown): void {
+    if (typeof text !== 'string') return;
+    const mem = this.historyMemento();
+    if (!mem) return;
+    const cur = sanitizeHistory(mem.get<unknown>(PROMPT_HISTORY_KEY));
+    const next = addPrompt(cur, text);
+    if (next === cur) return;
+    void Promise.resolve(mem.update(PROMPT_HISTORY_KEY, [...next])).catch(() => undefined);
+  }
+
+  /** Đẩy lịch sử cho khung chat (CHỈ khung ở máy này; Remote có ô nhập riêng và không nhận lịch sử của chủ máy). */
+  private pushPromptHistory(): void {
+    void this.webview?.postMessage({ type: 'prompt_history', items: [...this.promptHistory()] } satisfies HostMessage);
   }
 
   /** Dải trạng thái đang hiện (Trí nhớ sinh học đang cài, Chrome xin kết nối) phải sống qua «cuộc trò chuyện mới» / mở cuộc khác: chúng không thuộc về một cuộc trò chuyện. */
@@ -767,9 +827,11 @@ export class ChatController implements vscode.Disposable {
   }
 
   async sendInit(screen?: ViewState['screen']): Promise<void> {
+    if (this.restoring) await this.restoring; // (0.7.4) cuộc trò chuyện của lần chạy trước phải vào trước khi dựng trạng thái giao diện
     await this.refreshView(screen ?? 'chat');
     this.syncChromePair(true);
     this.post({ type: 'init', state: this.view });
+    this.pushPromptHistory();
     for (const n of this.pendingLocal.splice(0)) void this.webview?.postMessage({ type: 'toast', level: n.level, text: n.text } satisfies HostMessage);
     // Làm mới danh sách model ở nền (bộ đệm 1 giờ nên rất rẻ), rồi cập nhật giao diện.
     void this.refreshProvidersInBackground();
@@ -933,6 +995,7 @@ export class ChatController implements vscode.Disposable {
         }
       }
       await this.d.store.save(this.session, this.view.transcript);
+      this.rememberSession();
     } catch (err) {
       this.d.logger.log('warn', `Không lưu được hội thoại: ${err instanceof Error ? err.message : err}`);
     }
@@ -1004,6 +1067,7 @@ export class ChatController implements vscode.Disposable {
 
   private async onMessage(m: WebviewMessage): Promise<void> {
     this.stats.messages++;
+    if (this.restoring) await this.restoring; // (0.7.4) chưa mở lại xong cuộc trò chuyện trước thì chưa nhận thao tác nào
     const acc = this.d.account;
     if (acc && !acc.usable && !SIGNED_OUT_OK.has(m.type)) {
       this.requireAccount();
@@ -1040,6 +1104,7 @@ export class ChatController implements vscode.Disposable {
       case 'locaith_consent':
         return this.onLocaithConsent(m.action);
       case 'send': {
+        this.recordPrompt(m.text); // (0.7.4) lịch sử ↑/↓: mọi tin người dùng gửi, kể cả tin vào hàng đợi và tin từ Remote
         if (this.viewing) {
           if (this.busy) {
             // Cuộc khác ĐANG chạy: chưa gửi được. Báo một lần (không lặp mỗi lần bấm).
@@ -1203,6 +1268,7 @@ export class ChatController implements vscode.Disposable {
         return;
       }
       case 'slash':
+        this.recordPrompt(`/${String(m.command ?? '').replace(/^\//, '')}${m.args ? ` ${m.args}` : ''}`);
         return void (await this.handleSlash(m.command, m.args));
       case 'retry':
         return this.retryLast(false);
@@ -1759,12 +1825,13 @@ export class ChatController implements vscode.Disposable {
     await this.saveNow();
     void this.hookService().sessionEnd(this.session.id, 'clear'); // (lane:hooks)
     this.session = this.freshSession();
+    this.rememberSession(true); // cuộc mới còn trống → quên dấu nhớ (khởi động lại sẽ vào cuộc trống, đúng ý người dùng)
     this.seenArtifacts.clear();
     this.view = { ...this.baseView(), ...this.meterPatch([]), providers: this.view.providers, ...this.carryStrips(), ...(await this.listings()), screen: 'chat' };
     this.post({ type: 'init', state: this.view });
   }
 
-  private async loadSession(id: string): Promise<void> {
+  private async loadSession(id: string, opts: { quiet?: boolean } = {}): Promise<void> {
     // Đang chạy: mở cuộc KHÁC = chỉ đổi thứ đang hiển thị, phiên đang chạy tiếp tục ở nền (không bắt dừng tác vụ).
     if (this.busy && id !== this.session.id) {
       const p = await this.d.store.load(id);
@@ -1773,19 +1840,20 @@ export class ChatController implements vscode.Disposable {
         return;
       }
       const rec = reconcileTranscript(p.session.messages, p.transcript);
+      const shown = healInterrupted(rec.items).items; // chỉ để HIỂN THỊ: lượt dở của bản lưu cũ không được hiện như đang chạy
       this.viewing = id;
       this.post({
         type: 'init',
         state: {
           ...this.baseView(),
-          ...this.meterPatch(rec.items, p.session), // (lane:sessions-ux)
+          ...this.meterPatch(shown, p.session), // (lane:sessions-ux)
           sessionId: p.session.id,
           title: p.session.title,
           provider: p.session.provider,
           model: p.session.model,
           mode: p.session.mode,
           todos: p.session.todos,
-          transcript: rec.items,
+          transcript: shown,
           running: false,
           queued: [],
           canQueue: false,
@@ -1806,6 +1874,11 @@ export class ChatController implements vscode.Disposable {
     }
     const p = await this.d.store.load(id);
     if (!p) {
+      if (opts.quiet) {
+        // Mở lại lúc khởi động mà cuộc đó không còn (đã xoá/dọn): quên dấu nhớ, để nguyên cuộc trống — không báo lỗi.
+        void Promise.resolve(this.d.context.workspaceState?.update(LAST_SESSION_KEY, undefined)).catch(() => undefined);
+        return;
+      }
       this.toast('error', this.lang === 'vi' ? 'Không mở được cuộc trò chuyện này.' : 'Could not open this conversation.');
       return;
     }
@@ -1826,8 +1899,12 @@ export class ChatController implements vscode.Disposable {
     // Phiên cũ có thể thiếu transcript (chỉ còn vài lượt cuối): dựng lại từ messages, giữ bản gốc, rồi ghi bản đã hàn gắn.
     const rec = reconcileTranscript(p.session.messages, p.transcript);
     if (rec.rebuilt) await this.d.store.backupRaw(p.session.id);
-    this.view = { ...this.baseView(), ...this.meterPatch(rec.items), transcript: rec.items, providers: this.view.providers, ...this.carryStrips(), ...(await this.listings()), screen: 'chat' };
-    this.post({ type: 'init', state: this.view });
+    // Lượt dở do extension/máy tắt giữa chừng: đóng lại (xem healInterrupted) — nếu không, gõ «tiếp tục» sẽ làm HAI lượt cùng sáng.
+    const healed = healInterrupted(rec.items);
+    this.view = { ...this.baseView(), ...this.meterPatch(healed.items), transcript: healed.items, providers: this.view.providers, ...this.carryStrips(), ...(await this.listings()), screen: 'chat' };
+    if (!opts.quiet) this.post({ type: 'init', state: this.view });
+    this.rememberSession();
+    if (healed.healed > 0) void this.saveNow(); // ghi bản đã đóng lại để lần mở sau không phải sửa nữa
     if (p.migrated) {
       const n = rec.rebuilt ? '' : this.lang === 'vi' ? ' Cuộc trò chuyện này đã được nâng cấp theo bản mới — dùng tiếp bình thường.' : ' This conversation was upgraded to the current version — just continue it.';
       this.toast('info', this.lang === 'vi' ? `Đã áp dụng thay đổi của bản ${String(this.d.context.extension.packageJSON.version ?? '')} cho cuộc trò chuyện cũ.${n}` : `Applied version ${String(this.d.context.extension.packageJSON.version ?? '')} changes to this earlier conversation.${n}`);
@@ -1849,6 +1926,7 @@ export class ChatController implements vscode.Disposable {
       await this.d.store.moveToTrash(id);
       void this.hookService().sessionEnd(this.session.id, 'delete'); // (lane:hooks)
       this.session = this.freshSession();
+      this.rememberSession(true);
       this.view = { ...this.baseView(), ...this.meterPatch([]), providers: this.view.providers, ...this.carryStrips(), ...(await this.listings()), screen: 'history' };
       this.post({ type: 'init', state: this.view });
       this.toast('info', trashedMsg);

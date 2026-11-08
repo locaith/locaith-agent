@@ -293,7 +293,7 @@ Trong lúc mô hình suy nghĩ, khối "Suy nghĩ…" hiện số token đang ch
 | `language` | `vi` / `en` — ngôn ngữ giao diện và trả lời mặc định |
 | `defaultModel` | `nhà-cung-cấp:model` cho cuộc trò chuyện mới |
 | `agent.permissionMode`, `agent.thinkingLevel` | mặc định cho phiên mới |
-| `agent.maxTurns`, `agent.maxOutputTokens` | giới hạn vòng lặp và độ dài mỗi lần gọi |
+| `agent.maxOutputTokens` | giới hạn độ dài mỗi lần gọi (số vòng lặp KHÔNG bị giới hạn, như Claude Code — bấm Dừng khi cần) |
 | `summarizer.enabled`, `summarizer.model` | bộ tóm tắt nền (`auto` = model rẻ của cùng nhà cung cấp) |
 | `search.backend` | `duckduckgo` (không cần khoá) · `brave` · `tavily` · `serper` · `searxng` |
 | `terminal.shell`, `terminal.timeoutSeconds` | shell và thời gian tối đa mỗi lệnh |

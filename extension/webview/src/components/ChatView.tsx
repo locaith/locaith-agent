@@ -63,6 +63,13 @@ export function ChatView({ view, hasAnyKey }: { view: ViewState; hasAnyKey: bool
     return -1;
   })();
 
+  // (0.7.4) CHỈ lượt trả lời CUỐI CÙNG được «sáng» (đang xử lý). Một mục dở dang còn sót trong phiên cũ (extension bị tắt giữa lúc chạy) không bao giờ
+  // được làm hai lượt cùng chạy cạnh nhau — host cũng đóng chúng lúc nạp phiên (healInterrupted); đây là chốt chặn thứ hai cho dữ liệu đã lưu/Remote cũ.
+  const lastAssistantIdx = (() => {
+    for (let i = view.transcript.length - 1; i >= 0; i--) if (view.transcript[i].kind === 'assistant') return i;
+    return -1;
+  })();
+
   // (lane:checkpoints-rewind) id tin mở lượt (không phải tin chen giữa) của từng mục — để gắn thanh thay đổi và thẻ «Quay lại» đúng lượt.
   const turnOf: (string | null)[] = [];
   {
@@ -98,7 +105,7 @@ export function ChatView({ view, hasAnyKey }: { view: ViewState; hasAnyKey: bool
                 item.kind === 'user' ? (
                   <UserMessage item={item} canEdit={i === lastUserIdx && !view.running} busy={view.running} />
                 ) : item.kind === 'assistant' ? (
-                  <AssistantTurn item={item} live={view.running && !item.done} isLast={isLast} />
+                  <AssistantTurn item={item} live={view.running && !item.done && i === lastAssistantIdx} isLast={isLast} />
                 ) : (
                   <StandaloneNotice item={item} canRetry={isLast && !view.running} />
                 );

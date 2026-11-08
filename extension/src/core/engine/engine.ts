@@ -30,6 +30,7 @@ import { compactIfNeeded, compactNoticeOf, stripThinking } from './compaction';
 import { compactTuningFrom } from './compactTuning'; // (lane:ctx-compaction)
 import type { CompactInfo } from '../../shared/protocol'; // (lane:ctx-compaction)
 import { turnBudgetNote, withBudgetNote } from './completion';
+import { joinTailNotes, languageDrift, languageRetryNote } from './languageGuard'; // (0.7.4)
 import { limitImagesInContext } from './imageContext'; // (0.7.2)
 import { coreRunExtensions } from './extensions';
 import { repairToolArgs } from './guards/jsonRepair'; // (lane:loop-guards)
@@ -251,6 +252,9 @@ export class AgentEngine {
     let emptyCutRetried = false; // (lane:output-timeouts) đã thử lại một lần khi max_tokens mà chưa có chữ
     let stallRetried = false;
     let partialText = '';
+    // (0.7.4) chống trượt sang tiếng Trung/Nhật/Hàn (languageGuard.ts): đã hỏi lại một lần trong lần chạy này? · dòng nhắc cho lần gọi kế tiếp.
+    let languageRetried = false;
+    let languageNote: string | null = null;
     /** Chữ của lần gọi bị treo thứ nhất (đã xoá khỏi giao diện để thử lại) — dùng lại nếu lần thử lại cũng treo mà không sinh gì. */
     let erasedPartial = '';
 
@@ -429,7 +433,8 @@ export class AgentEngine {
         // (0.6.31) Dòng ngân sách vòng: model không thể biết còn bao nhiêu lượt nếu harness không nói.
         // Gắn vào ĐUÔI tin nhắn cuối của payload (không sửa lịch sử đã lưu) → tiền tố nguyên vẹn cho prompt-cache.
         // (0.7.2) Ảnh cũ ngoài `maxImagesInContext` ảnh gần nhất → dòng chữ trong bản gửi (lịch sử đã lưu không đổi).
-        const payload = limitImagesInContext(withBudgetNote(session.messages, turnBudgetNote(turns, settings.maxTurns, lang)), settings.maxImagesInContext, lang);
+        const payload = limitImagesInContext(withBudgetNote(session.messages, joinTailNotes(turnBudgetNote(turns, settings.maxTurns, lang), languageNote)), settings.maxImagesInContext, lang);
+        languageNote = null; // dòng nhắc ngôn ngữ chỉ đi kèm đúng MỘT lần gọi (lần hỏi lại)
         // (lane:output-timeouts) Trần đầu ra theo loại việc (kẹp theo cài đặt và trần thật của model) + watchdog im lặng theo bậc.
         // Lần gọi có AbortController RIÊNG: watchdog huỷ đúng lần stream này; người dùng bấm Dừng vẫn đi qua `signal` ngoài (phân biệt được).
         const outputBudget = pickOutputBudget({
@@ -531,6 +536,23 @@ export class AgentEngine {
         if (!prefixChanged || atBoundary) session.promptFingerprint = fingerprint;
         // Adapter đã phải bỏ suy luận cũ để API chấp nhận yêu cầu: lịch sử đã lưu phải khớp với những gì thực sự được gửi.
         if (done.droppedReplayedThinking) stripThinking(session);
+
+        // (0.7.4) Chống trượt ngôn ngữ: câu trả lời CUỐI (không gọi công cụ) toàn chữ Trung/Nhật/Hàn trong khi người dùng không viết/nhắc tới các thứ tiếng đó
+        // → bỏ khỏi màn hình và lịch sử, hỏi lại đúng một lần kèm dòng nhắc ở cuối payload. Lần gọi bỏ đi vẫn tốn token thật nên vẫn được tính.
+        if (!languageRetried && toolUsesOf(done.message).length === 0) {
+          const rawReply = textOf(done.message);
+          const forced = languageDrift(this.d.thinkTags ? splitThinkTags(rawReply).text : rawReply, session.messages, lang); // phần suy luận trong <think> không tính là «câu trả lời»
+          if (forced) {
+            languageRetried = true;
+            this.recordUsage(session, done.usage, id);
+            if (partialText) emit({ t: 'text', id, delta: '', trimTail: partialText.length });
+            languageNote = languageRetryNote(forced);
+            notice('info', t(lang, 'languageRetry'));
+            turns--; // lần hỏi lại không tính vào ngân sách vòng
+            trace.turns = turns;
+            continue;
+          }
+        }
 
         const message = this.normalizeAssistant(done.message, session);
         session.messages.push(message);

@@ -146,3 +146,37 @@ export function reconcileTranscript(messages: readonly ChatMessage[], transcript
   }
   return { items: rebuilt, rebuilt: true, added: want - have };
 }
+
+export interface Healed {
+  items: TItem[];
+  /** Số lượt đã đóng lại (0 = không có gì dở dang; `items` khi đó là CHÍNH `transcript` truyền vào). */
+  healed: number;
+}
+
+/**
+ * Đóng các lượt DỞ DANG của một phiên vừa nạp từ đĩa. Khi extension/máy bị tắt giữa lúc trợ lý đang chạy, tệp phiên đã được lưu lúc lượt đang diễn ra:
+ * mục trả lời còn `done:false`, khối công cụ còn «đang chạy»/«chờ duyệt», dòng trạng thái còn nhấp nháy, artifact còn «đang viết».
+ * Nạp lại mà để nguyên thì giao diện coi đó là lượt ĐANG CHẠY (dòng «Đang xử lý» chạy mãi) — và khi người dùng gõ «tiếp tục» có HAI lượt cùng sáng.
+ *
+ * Đóng lại = `done:true`, `stopReason:'aborted'` (giao diện hiện «Đã dừng» + nút Thử lại như khi người dùng bấm Dừng), công cụ dở → `cancelled`
+ * (khớp việc engine sửa lệnh gọi mồ côi ở lượt sau), pill → không active, artifact → `ready`. Hàm THUẦN: không sửa `transcript` đầu vào; mục không dở dang giữ nguyên tham chiếu.
+ * CHỈ gọi lúc NẠP phiên — không bao giờ trên transcript của lượt đang chạy thật.
+ */
+export function healInterrupted(transcript: TItem[]): Healed {
+  let healed = 0;
+  const items = transcript.map((it) => {
+    if (it.kind !== 'assistant' || it.done) return it;
+    healed++;
+    const blocks = it.blocks.map((b) => {
+      if (b.type === 'tool' && (b.state === 'running' || b.state === 'awaiting_permission')) {
+        const { permission: _gone, ...rest } = b;
+        return { ...rest, state: 'cancelled' as const };
+      }
+      if (b.type === 'pill' && b.active) return { ...b, active: false };
+      if (b.type === 'artifact' && b.state === 'writing') return { ...b, state: 'ready' as const };
+      return b;
+    });
+    return { ...it, blocks, done: true, stopReason: it.stopReason ?? 'aborted' } satisfies AssistantItem;
+  });
+  return healed === 0 ? { items: transcript, healed: 0 } : { items, healed };
+}

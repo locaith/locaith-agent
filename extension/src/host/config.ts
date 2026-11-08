@@ -122,7 +122,7 @@ export class ConfigService {
     return {
       ...d,
       language: this.language(),
-      maxTurns: c.get<number>('agent.maxTurns', d.maxTurns),
+      // (0.7.4) KHÔNG còn cài đặt `agent.maxTurns`: như Claude Code, khung chat tương tác không có trần vòng (giá trị cũ trong settings.json bị bỏ qua).
       maxOutputTokens: c.get<number>('agent.maxOutputTokens', d.maxOutputTokens),
       parallelToolCalls: c.get<boolean>('agent.parallelToolCalls', d.parallelToolCalls),
       autoCompact: c.get<boolean>('agent.autoCompact', d.autoCompact),

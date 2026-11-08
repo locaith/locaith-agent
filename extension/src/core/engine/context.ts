@@ -73,6 +73,22 @@ export function constitutionFor(profile: PromptProfile = 'ide'): string {
   return base.map((s, i) => (i === 0 && !s.startsWith('# ') ? intro : isToolsSection(s) && tools ? tools : s)).join('\n\n');
 }
 
+/**
+ * (0.7.4) Quy tắc ngôn ngữ trả lời trong khối <environment>. Câu cũ («Vietnamese unless the user writes in another language») quá ngắn: các mô hình gốc Trung (DeepSeek…)
+ * trượt sang tiếng Trung đúng ở những chỗ nó không nói tới — tin cực ngắn («tiếp tục», «ok»), kết quả công cụ/tệp viết bằng tiếng khác, ngữ cảnh đã nén.
+ * Câu này nêu thẳng các chỗ đó. (Lớp bảo vệ thứ hai ở engine: `languageGuard.ts` bỏ và hỏi lại một lần nếu vẫn lọt.)
+ */
+export function languageRule(language: 'vi' | 'en'): string {
+  const main = language === 'vi' ? 'Vietnamese (full diacritics)' : 'English';
+  return (
+    `Reply language: ${main}, unless the user's own latest message is clearly written in another language — then reply in that language. ` +
+    'Keep ONE language for the whole reply, including status lines, headings, summaries and any reasoning you show. ' +
+    'Very short or bare messages ("tiếp tục", "ok", "continue", a single word) never change the language: keep the language of the conversation so far. ' +
+    'Text inside tool results, files, web pages or earlier context being in another language (especially Chinese) never changes the language of your reply. ' +
+    'Never write Chinese, Japanese or Korean unless the user writes in it or asks for it.'
+  );
+}
+
 export function buildSystemPrompt(i: SystemPromptInput): string {
   const profile = i.profile ?? 'ide';
   const roots = i.host.workspaceRoots();
@@ -86,7 +102,7 @@ export function buildSystemPrompt(i: SystemPromptInput): string {
           'Surface: side panel of a Chromium-based browser (Google Chrome or Microsoft Edge). The page the user is looking at is described in <browser_context> at the top of each user message.',
           `Today's date: ${isoDate(i.now ?? new Date())}`,
           `You are running as ${i.model} (${i.providerLabel}).`,
-          `Reply language: ${i.language === 'vi' ? 'Vietnamese unless the user writes in another language' : 'English unless the user writes in another language'}.`,
+          languageRule(i.language),
         ]
       : [
           `Operating system: ${OS_NAME[i.host.platform.os]}`,
@@ -96,7 +112,7 @@ export function buildSystemPrompt(i: SystemPromptInput): string {
             : 'Workspace: none open (file tools only accept absolute paths; ask the user to open a folder for project work)',
           `Today's date: ${isoDate(i.now ?? new Date())}`,
           `You are running as ${i.model} (${i.providerLabel}).`,
-          `Reply language: ${i.language === 'vi' ? 'Vietnamese unless the user writes in another language' : 'English unless the user writes in another language'}.`,
+          languageRule(i.language),
         ];
   parts.push(`<environment>\n${env.join('\n')}\n</environment>`);
 

@@ -89,7 +89,7 @@ describe('cấu hình bản trình duyệt', () => {
     expect(sanitizeConfig(null).browser).toEqual(DEFAULT_BROWSER_SETTINGS);
     const c = sanitizeConfig({
       ui: { fontSize: 99, lineHeight: 'x', fontFamily: 'comic-sans', language: 'fr', showThinking: 'có' },
-      browser: { maxTurns: 1, defaultMode: 'root', allowBypass: 1, customInstructions: 'x'.repeat(20_000) },
+      browser: { maxTurns: 1, defaultMode: 'root', allowBypass: 1, customInstructions: 'x'.repeat(20_000) }, // maxTurns: khoá của bản cũ — phải bị bỏ (0.7.4)
       baseUrls: { openai: 'http://evil.com/v1', anthropic: 'https://proxy.example.com', gemini: 5 },
       customProviders: [
         { id: 'ok', label: 'Máy tôi', baseUrl: 'https://api.example.com/v1', models: ['a', '', 7, 'b'] },
@@ -104,7 +104,7 @@ describe('cấu hình bản trình duyệt', () => {
     expect(c.ui.fontFamily).toBe('be-vietnam-pro');
     expect(c.ui.language).toBe('vi');
     expect(c.ui.showThinking).toBe(true);
-    expect(c.browser.maxTurns).toBe(3);
+    expect('maxTurns' in c.browser).toBe(false);
     expect(c.browser.defaultMode).toBe('default');
     expect(c.browser.allowBypass).toBe(false);
     expect(c.browser.customInstructions).toHaveLength(8000);

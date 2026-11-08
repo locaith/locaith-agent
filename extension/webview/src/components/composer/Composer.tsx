@@ -13,6 +13,8 @@ import { basename, filterByQuery, mentionAtCaret, parseSlashCommand, relativizeU
 import { imageKey } from '../../../../src/shared/transcriptRebuild';
 import { applyLineMentions, keepableFrag, lineMentionSig, parseLineMentions, PROBLEMS_HIT_PATH, splitMentionQuery } from '../../../../src/shared/lineMentions'; // (lane:ide-context)
 import { persistableAttachments } from '../../draftState';
+import { NO_NAV, historyKey, navDetached, type HistoryNav } from '../../../../src/shared/promptHistory'; // (0.7.4) ↑/↓ duyệt lại tin đã gõ
+import { getPromptHistory, recordPrompt } from '../../promptHistory';
 import { cx, readFileAsBase64 } from '../../util';
 import { makeThumb, shrinkImage } from '../../imageShrink';
 import { loadUiState, post, saveUiState } from '../../vscode';
@@ -184,6 +186,8 @@ export function Composer({ view }: { view: ViewState }) {
   const draftTimer = useRef<number | undefined>(undefined);
   const warnedDrop = useRef(false);
   const docReqCounter = useRef(0);
+  /** (0.7.4) Đang duyệt lịch sử tin đã gõ bằng ↑/↓: tin đang hiện + bản nháp để trả lại khi ↓ qua tin mới nhất. */
+  const histNav = useRef<HistoryNav>(NO_NAV);
   /** Bản sao đồng bộ của `reading` để các hàm bất đồng bộ/vòng lặp thấy ngay giá trị mới nhất. */
   const readingRef = useRef<ReadingDoc[]>([]);
   const docTimers = useRef(new Map<number, number>());
@@ -411,6 +415,7 @@ export function Composer({ view }: { view: ViewState }) {
       ta.value = '';
       ta.style.height = 'auto';
     }
+    histNav.current = NO_NAV; // gửi xong: lần ↑ kế tiếp lại bắt đầu từ tin mới nhất
     setHasText(false);
     setAttachments([]);
     readingRef.current.forEach((r) => stopReading(r.id));
@@ -431,6 +436,7 @@ export function Composer({ view }: { view: ViewState }) {
         toast('info', t('composer.queue.noCommand'));
         return;
       }
+      recordPrompt(`/${cmd.command.replace(/^\//, '')}${cmd.args ? ` ${cmd.args}` : ''}`); // cùng dạng host ghi (chatController: case 'slash')
       post({ type: 'slash', command: cmd.command, args: cmd.args });
       clearAll();
       return;
@@ -443,6 +449,7 @@ export function Composer({ view }: { view: ViewState }) {
     // Bỏ chip tệp tạo từ @mention mà người dùng đã xoá khỏi nội dung.
     const kept = attachments.filter((a) => !(a.path && mentionPaths.current.has(a.path)) || text.includes(`@${a.path}`));
     const atts = applyLineMentions(text, kept); // (lane:ide-context) «@tệp#L10-20» → chip vùng chọn
+    recordPrompt(text); // (0.7.4) lịch sử ↑/↓ — thêm ngay để ↑ dùng được tức thì (host cũng ghi lại, bền qua lần khởi động)
     post({ type: 'send', text, attachments: atts });
     clearAll();
   };
@@ -634,9 +641,24 @@ export function Composer({ view }: { view: ViewState }) {
       post({ type: 'stop' });
       return;
     }
-    if (e.key === 'ArrowUp' && !taRef.current?.value && attachments.length === 0 && !running) {
+    // (0.7.4) ↑/↓ duyệt lại các tin đã gõ như terminal và Claude Code (trước đây ↑ ở ô trống là «sửa tin cuối» — thao tác phá huỷ, nay nằm ở menu của tin).
+    // Chỉ nhận khi con trỏ ở dòng đầu (↑) / dòng cuối (↓) và không chọn vùng chữ, không giữ Shift/Alt/Ctrl/Cmd; nếu không phím vẫn di con trỏ như thường.
+    if ((e.key === 'ArrowUp' || e.key === 'ArrowDown') && !menuOpen) {
+      const ta = taRef.current;
+      if (!ta) return;
+      const list = getPromptHistory();
+      if (navDetached(list, histNav.current, ta.value)) histNav.current = NO_NAV; // chữ đã bị sửa/đổi → thoát chế độ duyệt, bản đang có thành bản nháp mới
+      const step = historyKey(
+        { key: e.key, shift: e.shiftKey, alt: e.altKey, ctrl: e.ctrlKey, meta: e.metaKey, value: ta.value, selStart: ta.selectionStart ?? 0, selEnd: ta.selectionEnd ?? 0 },
+        list,
+        histNav.current,
+      );
+      if (!step) return;
       e.preventDefault();
-      post({ type: 'edit_last' });
+      histNav.current = step.nav;
+      // ↑ đặt con trỏ cuối DÒNG ĐẦU (tin nhiều dòng: ↑ tiếp theo đi tiếp ngay, không phải leo từng dòng); ↓ đặt ở cuối chữ (↓ tiếp theo đi tiếp ngay).
+      const firstLineEnd = step.text.indexOf('\n');
+      setTextValue(step.text, e.key === 'ArrowUp' && firstLineEnd >= 0 ? firstLineEnd : step.text.length);
     }
   };
 

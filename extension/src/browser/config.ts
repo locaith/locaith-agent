@@ -7,6 +7,7 @@ import { DEFAULT_ENGINE_SETTINGS, type EngineSettings } from '../core/engine/typ
 import type { CustomProviderConfig } from '../core/providers/registry';
 import { EMPTY_RATING, addComment, countRatingSend, denyRating, markRated, markSent, sanitizeRating, submitStars, type RatingKind, type RatingState } from './rating';
 import { isAllowedBaseUrl } from '../shared/baseUrl';
+import { addPrompt, sanitizeHistory } from '../shared/promptHistory';
 import {
   DEFAULT_BROWSER_SETTINGS,
   DEFAULT_UI_SETTINGS,
@@ -21,6 +22,8 @@ import type { KeyValueStore } from './kv';
 const KEY = 'nd.config';
 /** Trạng thái lời mời đánh giá — khoá riêng, xem BrowserConfig.rating(). */
 const RATING_KEY = 'nd.rating';
+/** (0.7.4) Lịch sử các tin đã gõ (↑/↓ ở ô nhập) — khoá riêng, xem BrowserConfig.promptHistory(). */
+const HISTORY_KEY = 'nd.promptHistory';
 
 interface Stored {
   ui: UiSettings;
@@ -97,7 +100,6 @@ export function sanitizeConfig(raw: unknown): Stored {
     browser: {
       defaultMode: oneOf(br.defaultMode, PERMISSION_MODES, dB.defaultMode),
       allowBypass: bool(br.allowBypass, dB.allowBypass),
-      maxTurns: Math.round(clamp(br.maxTurns, 3, 100, dB.maxTurns)),
       summarizer: bool(br.summarizer, dB.summarizer),
       autoCompact: bool(br.autoCompact, dB.autoCompact),
       attachTabContext: bool(br.attachTabContext, dB.attachTabContext),
@@ -167,7 +169,8 @@ export class BrowserConfig {
 
   engine(): EngineSettings {
     const b = this.data.browser;
-    return { ...DEFAULT_ENGINE_SETTINGS, language: this.language(), maxTurns: b.maxTurns, autoCompact: b.autoCompact, instructionFiles: [] };
+    // (0.7.4) Không còn thanh «số vòng tối đa»: như Claude Code, không có trần vòng (mặc định của engine); người dùng bấm Dừng khi cần.
+    return { ...DEFAULT_ENGINE_SETTINGS, language: this.language(), autoCompact: b.autoCompact, instructionFiles: [] };
   }
 
   defaultMode(): PermissionMode {
@@ -300,5 +303,28 @@ export class BrowserConfig {
     const next = markSent(await this.rating(), kind);
     await this.saveRating(next);
     return next;
+  }
+
+  // ── (0.7.4) Lịch sử các tin đã gõ — phím ↑/↓ ở ô nhập ─────────────────────────
+  // Khoá riêng (như đánh giá): đổi/hỏng cấu hình không làm mất lịch sử. Ghi tuần tự để hai tin gửi sát nhau không ghi đè nhau.
+
+  private historyChain: Promise<void> = Promise.resolve();
+
+  async promptHistory(): Promise<readonly string[]> {
+    await this.historyChain; // chờ các lần ghi đang chạy (chuỗi này không bao giờ bị từ chối)
+    return sanitizeHistory(await this.kv.get(HISTORY_KEY));
+  }
+
+  /** Ghi nhớ một tin vừa gửi (kể cả lệnh gạch chéo). Tin rỗng/quá dài/trùng tin mới nhất thì thôi. Không bao giờ ném lỗi. */
+  addPromptHistory(text: unknown): Promise<void> {
+    if (typeof text !== 'string') return this.historyChain;
+    this.historyChain = this.historyChain
+      .then(async () => {
+        const cur = sanitizeHistory(await this.kv.get(HISTORY_KEY));
+        const next = addPrompt(cur, text);
+        if (next !== cur) await this.kv.set(HISTORY_KEY, [...next]);
+      })
+      .catch(() => undefined);
+    return this.historyChain;
   }
 }

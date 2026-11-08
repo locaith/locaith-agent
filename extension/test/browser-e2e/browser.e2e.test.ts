@@ -461,18 +461,19 @@ describe.skipIf(BROWSERS.length === 0)('bản trình duyệt (tiện ích MV3) t
       await c.panel.evaluate(async () => {
         const ctl = (window as any).__nd.controller;
         await ctl.onMessage({ type: 'set_browser_setting', key: 'customInstructions', value: 'Luôn xưng hô là anh/chị.' });
-        await ctl.onMessage({ type: 'set_browser_setting', key: 'maxTurns', value: 12 });
+        await ctl.onMessage({ type: 'set_browser_setting', key: 'focusTabs', value: true });
       });
       const r = await runScript(c, [{ text: 'Vâng.' }], 'Chào');
       expect(r.requests[0].system).toContain('Luôn xưng hô là anh/chị.');
       expect(r.requests[0].system).toContain('Chrome or Microsoft Edge');
       expect(r.requests[0].system).not.toContain('VS Code');
       const saved = await c.panel.evaluate(async () => ((await chrome.storage.local.get('nd.config')) as any)['nd.config'].browser);
-      expect(saved.maxTurns).toBe(12);
+      expect(saved.focusTabs).toBe(true);
+      expect('maxTurns' in saved).toBe(false); // 0.7.4: không còn trần vòng
       await c.panel.evaluate(async () => {
         const ctl = (window as any).__nd.controller;
         await ctl.onMessage({ type: 'set_browser_setting', key: 'customInstructions', value: '' });
-        await ctl.onMessage({ type: 'set_browser_setting', key: 'maxTurns', value: 30 });
+        await ctl.onMessage({ type: 'set_browser_setting', key: 'focusTabs', value: false });
       });
     });
 

@@ -298,6 +298,11 @@ export function newSession(partial: Partial<SessionState> & Pick<SessionState, '
 // ─────────────────────────────────────────────────────────────────────────────
 
 export interface EngineSettings {
+  /**
+   * Số vòng (mỗi vòng = một lần gọi model + chạy công cụ) tối đa cho MỘT lần chạy. `Infinity` = không giới hạn — mặc định cho mọi khung chat tương tác,
+   * như Claude Code (không có trần khi chạy tương tác; người dùng bấm Dừng). Chỉ chế độ in `locaith -p --max-turns N`, sub-agent và kiểm tra độc lập
+   * đặt số hữu hạn; chạm trần thì engine cho MỘT lượt tổng kết (xem `wrapUp`).
+   */
   maxTurns: number;
   maxOutputTokens: number;
   parallelToolCalls: boolean;
@@ -339,9 +344,9 @@ export interface EngineSettings {
 }
 
 export const DEFAULT_ENGINE_SETTINGS: EngineSettings = {
-  // Gần như không trần (Claude Code không đặt giới hạn): 200 vòng là quá đủ cho một việc lớn, và khi chạm trần
-  // engine vẫn cho MỘT lượt tổng kết thay vì cắt ngang công việc.
-  maxTurns: 200,
+  // KHÔNG có trần vòng (0.7.4): Claude Code không đặt giới hạn khi chạy tương tác (chỉ `--max-turns` tuỳ chọn ở chế độ in, mặc định không giới hạn),
+  // nên thông báo «đạt số vòng tối đa» tự dừng việc giữa chừng là sai. Chống chạy vòng vô ích đã có chốt khác: lặp lệnh y hệt, im lặng quá lâu, nút Dừng.
+  maxTurns: Number.POSITIVE_INFINITY,
   maxOutputTokens: 32000,
   parallelToolCalls: true,
   language: 'vi',

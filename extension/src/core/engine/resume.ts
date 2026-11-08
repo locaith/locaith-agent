@@ -33,8 +33,11 @@ export interface ResumeTodo {
  * Chỉ dẫn gắn thêm khi người dùng gõ "tiếp tục". `null` = không phải câu tiếp tục, giữ nguyên tin nhắn.
  * Có việc còn tồn thì nêu đúng tên việc để model dọn nốt thay vì đoán.
  */
-export function resumeInstruction(text: string, todos: readonly ResumeTodo[], lang: 'vi' | 'en'): string | null {
+export function resumeInstruction(text: string, todos: readonly ResumeTodo[], uiLang: 'vi' | 'en'): string | null {
   if (!isBareContinue(text)) return null;
+  // (0.7.4) Ngôn ngữ theo CHÍNH câu người dùng gõ («continue» → en, «tiếp tục» → vi), không theo ngôn ngữ giao diện: tin cực ngắn này là chỗ các mô hình gốc Trung
+  // hay trượt sang tiếng Trung (anh chụp màn hình 08/11/2026), nên chỉ dẫn nói thẳng phải trả lời bằng ngôn ngữ nào.
+  const lang = continueLanguage(text, uiLang);
   const pending = todos.filter((x) => x.status !== 'completed' && x.status !== 'blocked').map((x) => x.title.trim()).filter(Boolean);
   const list = pending.slice(0, 8).map((t) => `- ${t.slice(0, 120)}`).join('\n');
   // (lane:loop-guards) Việc 'blocked' KHÔNG tính là còn mở (không kích hoạt cổng nhắc), nhưng nêu riêng để model gỡ nếu gỡ được.
@@ -50,13 +53,23 @@ export function resumeInstruction(text: string, todos: readonly ResumeTodo[], la
       '[Continue after a stop — do not restart.] Pick up exactly where you stopped and finish ALL outstanding work before you report.\n' +
       'Any tool call marked as cancelled in the history was interrupted: do not run it again unless it is still needed.\n' +
       (pending.length ? `Still open (${pending.length}):\n${list}\nUpdate the task list to match reality as you go, then verify and report.` : 'Nothing is left open — finish the last step, verify it, and report the result.') +
-      (blockedList ? `\nBlocked earlier (not counted as open; retry only if you can now unblock them):\n${blockedList}` : '')
+      (blockedList ? `\nBlocked earlier (not counted as open; retry only if you can now unblock them):\n${blockedList}` : '') +
+      '\nReply in English, the same language as the conversation so far — do not switch languages.'
     );
   }
   return (
     '[Tiếp tục sau khi dừng — không làm lại từ đầu.] Làm tiếp đúng chỗ đã dừng và hoàn tất TẤT CẢ việc còn tồn trước khi báo xong.\n' +
     'Lệnh nào trong lịch sử bị đánh dấu đã huỷ thì đã bị gián đoạn: đừng chạy lại trừ khi vẫn còn cần.\n' +
     (pending.length ? `Còn tồn (${pending.length}):\n${list}\nVừa làm vừa cập nhật danh sách việc cho đúng thực tế, rồi kiểm chứng và báo kết quả.` : 'Không còn việc nào đang mở — làm nốt bước cuối, kiểm chứng rồi báo kết quả.') +
-    (blockedList ? `\nĐã bị chặn trước đó (không tính là còn mở; chỉ làm lại nếu giờ gỡ được):\n${blockedList}` : '')
+    (blockedList ? `\nĐã bị chặn trước đó (không tính là còn mở; chỉ làm lại nếu giờ gỡ được):\n${blockedList}` : '') +
+    '\nTrả lời bằng tiếng Việt, đúng ngôn ngữ của cuộc trò chuyện từ đầu — không chuyển sang ngôn ngữ khác.'
   );
+}
+
+/** Ngôn ngữ của câu «tiếp tục» người dùng gõ. */
+function continueLanguage(text: string, fallback: 'vi' | 'en'): 'vi' | 'en' {
+  const s = text.replace(/\s+/g, ' ').trim();
+  if (/^(?:continue|go on|keep going|carry on|resume)\b/i.test(s)) return 'en';
+  if (/^(?:tiếp|cứ tiếp|chạy tiếp|làm tiếp)/i.test(s)) return 'vi';
+  return fallback;
 }

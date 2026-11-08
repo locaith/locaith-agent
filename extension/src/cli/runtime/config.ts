@@ -360,7 +360,8 @@ export function buildEngineSettings(
   return {
     ...d,
     language: o.lang,
-    maxTurns: o.maxTurns && o.maxTurns > 0 ? Math.floor(o.maxTurns) : clamp(Math.floor(num(g('agent.maxTurns', d.maxTurns), d.maxTurns)), 1, 1000),
+    // (0.7.4) Như Claude Code: không giới hạn trừ khi gõ `--max-turns N` (chế độ in). Khoá cài đặt `agent.maxTurns` cũ không còn được đọc.
+    maxTurns: o.maxTurns && o.maxTurns > 0 ? Math.floor(o.maxTurns) : d.maxTurns,
     maxOutputTokens: Math.max(256, Math.floor(num(g('agent.maxOutputTokens', d.maxOutputTokens), d.maxOutputTokens))),
     parallelToolCalls: g<boolean>('agent.parallelToolCalls', d.parallelToolCalls) !== false,
     autoCompact: g<boolean>('agent.autoCompact', d.autoCompact) !== false,

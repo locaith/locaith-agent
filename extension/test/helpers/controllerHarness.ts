@@ -40,6 +40,12 @@ export interface ControllerHarnessOptions {
   configValues?: Record<string, unknown>;
   /** Kho globalState có nhớ (mặc định: không nhớ gì). */
   globalState?: Map<string, unknown>;
+  /** (0.7.4) Khung chat: chỉ 'sidebar' tự mở lại cuộc trò chuyện của lần chạy trước (mặc định 'tab'). */
+  surface?: 'sidebar' | 'tab';
+  /** (0.7.4) workspaceState có nhớ (dấu nhớ cuộc trò chuyện đang dở nằm ở đây). Mặc định: không có workspaceState. */
+  workspaceState?: Map<string, unknown>;
+  /** (0.7.4) Ghi đè các hàm của kho phiên (load/save/listAll…); mặc định kho rỗng không lưu gì. */
+  store?: Record<string, unknown>;
 }
 
 export interface ControllerHarness {
@@ -77,6 +83,14 @@ export function makeControllerHarness(opts: ControllerHarnessOptions): Controlle
   const deps = {
     context: {
       ...(storageDir ? { globalStorageUri: { fsPath: storageDir } } : {}),
+      ...(opts.workspaceState
+        ? {
+            workspaceState: {
+              get: (k: string, d?: unknown) => (opts.workspaceState!.has(k) ? opts.workspaceState!.get(k) : d),
+              update: async (k: string, v: unknown) => void (v === undefined ? opts.workspaceState!.delete(k) : opts.workspaceState!.set(k, v)),
+            },
+          }
+        : {}),
       globalState: opts.globalState
         ? { get: (k: string, d?: unknown) => (opts.globalState!.has(k) ? opts.globalState!.get(k) : d), update: async (k: string, v: unknown) => void opts.globalState!.set(k, v) }
         : { get: () => undefined, update: async () => undefined },
@@ -115,7 +129,7 @@ export function makeControllerHarness(opts: ControllerHarnessOptions): Controlle
     }),
     skills: new SkillRegistry(builtinSkills()),
     skillDirs: () => [],
-    store: autoFake({ save: async () => undefined, listAll: async () => [], listTrash: async () => [], load: async () => null }),
+    store: autoFake({ save: async () => undefined, listAll: async () => [], listTrash: async () => [], load: async () => null, ...(opts.store ?? {}) }),
     artifacts: autoFake(),
     diffs: autoFake(),
     editor: autoFake({ current: () => null, selection: () => undefined }),
@@ -130,7 +144,7 @@ export function makeControllerHarness(opts: ControllerHarnessOptions): Controlle
     onRunStateChanged: () => undefined,
   } as unknown as ControllerDeps;
 
-  const ctl = new ChatController(deps, 'tab');
+  const ctl = new ChatController(deps, opts.surface ?? 'tab');
   const posted: HostMessage[] = [];
   const events: UiEvent[] = [];
   ctl.addMirror((m) => {
