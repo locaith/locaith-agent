@@ -91,6 +91,8 @@ export function sanitizeConfig(raw: unknown): Stored {
       codeFont: oneOf(ui.codeFont, CODE_FONTS, dU.codeFont),
       showThinking: bool(ui.showThinking, dU.showThinking),
       workingCharacters: bool(ui.workingCharacters, dU.workingCharacters),
+      htmlOpenIn: oneOf(ui.htmlOpenIn, ['browser', 'vscode'] as const, dU.htmlOpenIn),
+      liteMode: bool(ui.liteMode, dU.liteMode),
     },
     browser: {
       defaultMode: oneOf(br.defaultMode, PERMISSION_MODES, dB.defaultMode),

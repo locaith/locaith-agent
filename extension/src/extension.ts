@@ -35,6 +35,8 @@ import { ProviderService } from './host/providerService';
 import { RemoteBridge, RemoteService } from './host/remote';
 import { SecretsService } from './host/secrets';
 import { SessionStore } from './host/sessionStore';
+import { autoCleanImages } from './host/cleanup'; // (lane:v072-fixes)
+import { DEFAULT_STORAGE_IMAGE_LIMITS, LITE_STORAGE_IMAGE_LIMITS } from './shared/transcript'; // (lane:v072-fixes)
 
 let shutdown: (() => void) | undefined;
 
@@ -85,6 +87,9 @@ export async function activate(context: vscode.ExtensionContext): Promise<TestAp
 
   const controllers = new Set<ChatController>();
   const all = () => [...controllers];
+  // (0.7.2) Chế độ nhẹ: transcript chỉ giữ bản xem trước nhỏ của ảnh (xem shared/transcript.ts).
+  const applyStoreLimits = () => store.setImageLimits(config.liteMode() ? LITE_STORAGE_IMAGE_LIMITS : DEFAULT_STORAGE_IMAGE_LIMITS);
+  applyStoreLimits();
   const vi = () => config.language() === 'vi';
 
   // ── Điều phối nhiều AI: kho model (chỉ các khoá đã nhập) + nhà cung cấp ảo "Locaith Auto" ─────────────────────
@@ -311,6 +316,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<TestAp
     marketService,
     plugins,
     chrome: chromeSvc,
+    openSessionIds: () => all().flatMap((c) => c.openSessionIds()),
     onRunStateChanged: () => updateStatus(),
   };
 
@@ -387,6 +393,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<TestAp
       else void refreshEverywhere();
     }),
     config.onDidChange(async (e) => {
+      if (e.affectsConfiguration('locaithAgent.ui.liteMode')) applyStoreLimits();
       if (e.affectsConfiguration('locaithAgent.baseUrls') || e.affectsConfiguration('locaithAgent.customProviders') || e.affectsConfiguration('locaithAgent.anthropic')) {
         providers.reconfigure();
         void providers.refresh();
@@ -418,6 +425,20 @@ export async function activate(context: vscode.ExtensionContext): Promise<TestAp
   ];
   context.subscriptions.push(...subs);
   shutdown = () => all().forEach((c) => c.stop());
+
+  // (0.7.2) Tự dọn ảnh cũ ở nền (chỉ khi người dùng bật `history.autoCleanImagesDays`; luôn giữ chữ; không đụng cuộc đang mở). Chờ khởi động xong rồi mới chạy.
+  const autoDays = config.autoCleanImagesDays();
+  if (autoDays > 0 && process.env.ND_AGENT_TEST !== '1') {
+    const t = setTimeout(() => {
+      autoCleanImages(store, autoDays, all().flatMap((c) => c.openSessionIds()))
+        .then((r) => {
+          if (r.images > 0) logger.log('info', `Tự dọn ảnh cũ hơn ${autoDays} ngày: xoá ${r.images} ảnh, giải phóng ${Math.round(r.bytes / 1024)} KB (chữ được giữ).`);
+        })
+        .catch((e) => logger.log('warn', `Tự dọn ảnh: ${e instanceof Error ? e.message : String(e)}`));
+    }, 30_000);
+    t.unref?.();
+    context.subscriptions.push({ dispose: () => clearTimeout(t) });
+  }
 
   updateStatus();
   logger.log('info', `Locaith AI ${version} đã kích hoạt (VS Code ${vscode.version}).`);

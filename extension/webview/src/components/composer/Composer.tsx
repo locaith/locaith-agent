@@ -14,6 +14,7 @@ import { imageKey } from '../../../../src/shared/transcriptRebuild';
 import { applyLineMentions, keepableFrag, lineMentionSig, parseLineMentions, PROBLEMS_HIT_PATH, splitMentionQuery } from '../../../../src/shared/lineMentions'; // (lane:ide-context)
 import { persistableAttachments } from '../../draftState';
 import { cx, readFileAsBase64 } from '../../util';
+import { makeThumb, shrinkImage } from '../../imageShrink';
 import { loadUiState, post, saveUiState } from '../../vscode';
 import { AttachmentChip, attachmentText } from '../Chips';
 import { Icon } from '../Icons';
@@ -23,6 +24,8 @@ import { RunClock } from './RunClock'; // (lane:cc-timeline-ui)
 import { ContextMeter, ModelPicker, ModePicker, SwarmToggle, ThinkingPicker } from './Pickers';
 import { isModeCycleKey, nextMode } from '../../modeCycle'; // (lane:perm-rules)
 
+/** Ảnh đầu vào tối đa (trước khi thu nhỏ); sau khi thu nhỏ vẫn phải ≤ MAX_IMAGE_BYTES (host từ chối ảnh > 5 MB). */
+const MAX_IMAGE_INPUT_BYTES = 25 * 1024 * 1024;
 const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
 const MAX_TEXTAREA_PX = 260;
 /** Quá hạn này mà host chưa trả lời thì thôi chờ (để chip "đang đọc" không chặn việc gửi mãi). */
@@ -39,23 +42,6 @@ interface ReadingDoc {
 
 /** Thứ tự người dùng chọn tệp tải lên: chip giữ đúng thứ tự đó dù tệp nhỏ đọc xong trước tệp lớn. */
 const docSeq = new WeakMap<AttachmentInfo, number>();
-
-/** Ảnh thu nhỏ (JPEG ≤ 320 px) để hiện trong tin đã gửi mà không phải giữ cả ảnh gốc ở giao diện. */
-async function makeThumb(file: Blob, max = 320): Promise<string | undefined> {
-  try {
-    const bmp = await createImageBitmap(file);
-    const k = Math.min(1, max / Math.max(bmp.width, bmp.height));
-    const c = document.createElement('canvas');
-    c.width = Math.max(1, Math.round(bmp.width * k));
-    c.height = Math.max(1, Math.round(bmp.height * k));
-    c.getContext('2d')?.drawImage(bmp, 0, 0, c.width, c.height);
-    bmp.close?.();
-    const url = c.toDataURL('image/jpeg', 0.72);
-    return url.slice(url.indexOf(',') + 1);
-  } catch {
-    return undefined; // định dạng trình duyệt không giải mã được (hiếm): vẫn gửi được, chỉ thiếu bản thu nhỏ
-  }
-}
 
 function sameAttachment(a: AttachmentInfo, b: AttachmentInfo): boolean {
   return a.kind === b.kind && a.path === b.path && a.range?.[0] === b.range?.[0] && a.range?.[1] === b.range?.[1] && a.label === b.label && a.sizeBytes === b.sizeBytes;
@@ -184,7 +170,7 @@ function QueueList({ items }: { items: QueuedInfo[] }) {
 }
 
 export function Composer({ view }: { view: ViewState }) {
-  const { t, lang, toast, editor, platform, openSettings } = useApp();
+  const { t, lang, toast, editor, platform, openSettings, settings } = useApp();
   const isBrowser = platform === 'browser';
   const placeholderKey = isBrowser ? 'composer.placeholder.browser' : 'composer.placeholder';
   const taRef = useRef<HTMLTextAreaElement>(null);
@@ -511,21 +497,27 @@ export function Composer({ view }: { view: ViewState }) {
   };
 
   const addImage = async (file: Blob, name?: string) => {
-    if (file.size > MAX_IMAGE_BYTES) {
+    if (file.size > MAX_IMAGE_INPUT_BYTES) {
       toast('error', t('composer.imageTooBig'));
       return;
     }
     try {
-      const data = await readFileAsBase64(file);
+      // (0.7.2) Thu nhỏ ngay lúc đính kèm: cạnh dài ≤ 1568 px, ảnh lớn không trong suốt nén JPEG q0,85. Ảnh 1,7 MB thành vài trăm KB.
+      const small = await shrinkImage(file);
+      if (small.bytes > MAX_IMAGE_BYTES) {
+        toast('error', t('composer.imageTooBig'));
+        return;
+      }
       imageCounter.current += 1;
       addAttachment({
         kind: 'image',
         label: name || t('composer.imageName', { n: imageCounter.current }),
-        mediaType: file.type || 'image/png',
-        data,
-        sizeBytes: file.size,
-        thumb: await makeThumb(file),
-        imgKey: imageKey(data),
+        mediaType: small.mediaType,
+        data: small.data,
+        sizeBytes: small.bytes,
+        // Transcript chỉ giữ bản xem trước nhỏ (≤ 480 px, ~≤ 60 KB; chế độ nhẹ: 320 px) — ảnh đầy đủ nằm ở lịch sử gửi model.
+        thumb: await makeThumb(file, settings.liteMode),
+        imgKey: imageKey(small.data),
       });
     } catch {
       toast('error', t('composer.imageTooBig'));

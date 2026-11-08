@@ -30,6 +30,7 @@ import { compactIfNeeded, compactNoticeOf, stripThinking } from './compaction';
 import { compactTuningFrom } from './compactTuning'; // (lane:ctx-compaction)
 import type { CompactInfo } from '../../shared/protocol'; // (lane:ctx-compaction)
 import { turnBudgetNote, withBudgetNote } from './completion';
+import { limitImagesInContext } from './imageContext'; // (0.7.2)
 import { coreRunExtensions } from './extensions';
 import { repairToolArgs } from './guards/jsonRepair'; // (lane:loop-guards)
 import { beginExtensions, newTrace, type ActiveExtension, type FinalizeContext, type FinalizeDecision, type RunExtension, type RunScope, type RunTrace, type TraceCall, type TurnInfo } from './seams';
@@ -424,7 +425,8 @@ export class AgentEngine {
         let queued = false;
         // (0.6.31) Dòng ngân sách vòng: model không thể biết còn bao nhiêu lượt nếu harness không nói.
         // Gắn vào ĐUÔI tin nhắn cuối của payload (không sửa lịch sử đã lưu) → tiền tố nguyên vẹn cho prompt-cache.
-        const payload = withBudgetNote(session.messages, turnBudgetNote(turns, settings.maxTurns, lang));
+        // (0.7.2) Ảnh cũ ngoài `maxImagesInContext` ảnh gần nhất → dòng chữ trong bản gửi (lịch sử đã lưu không đổi).
+        const payload = limitImagesInContext(withBudgetNote(session.messages, turnBudgetNote(turns, settings.maxTurns, lang)), settings.maxImagesInContext, lang);
         // (lane:output-timeouts) Trần đầu ra theo loại việc (kẹp theo cài đặt và trần thật của model) + watchdog im lặng theo bậc.
         // Lần gọi có AbortController RIÊNG: watchdog huỷ đúng lần stream này; người dùng bấm Dừng vẫn đi qua `signal` ngoài (phân biệt được).
         const outputBudget = pickOutputBudget({

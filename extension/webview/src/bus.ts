@@ -1,5 +1,5 @@
 /** Kênh sự kiện nhỏ để chuyển tin nhắn host → component cụ thể mà không phải truyền prop qua nhiều tầng. */
-import type { AttachmentInfo, DocInfo, FileHit, MediaItem } from '../../src/shared/protocol';
+import type { AttachmentInfo, CleanupStatsView, DocInfo, FileHit, MediaItem } from '../../src/shared/protocol';
 
 type Handler<T> = (payload: T) => void;
 
@@ -51,6 +51,10 @@ export const bus = {
   fullAccess: createChannel<void>(),
   /** Ảnh đầy đủ host gửi về theo khoá (sau `get_image`) — hộp xem ảnh đang mở tự đổi từ bản thu nhỏ sang bản đẹp. */
   imageData: createChannel<{ key: string; mediaType: string; data: string }>(),
+  /** (0.7.2) Số liệu dọn bộ nhớ từ host (thẻ «Dọn dẹp bộ nhớ» trong Cài đặt). */
+  cleanupStats: createChannel<{ stats?: CleanupStatsView; busy?: boolean; error?: string }>(),
+  /** (0.7.2) Lệnh `locaithAgent.cleanup`: cuộn tới thẻ trong Cài đặt (có bộ đệm: thẻ mới dựng sau khi màn Cài đặt mở). */
+  focusSection: createChannel<'cleanup'>({ buffer: 1 }),
   /** Điền sẵn gợi ý vào ô nhập (bấm vào gợi ý ở màn hình chào). */
   prefill: createChannel<string>(),
 };

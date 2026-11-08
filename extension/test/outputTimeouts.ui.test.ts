@@ -87,7 +87,7 @@ describe('giao diện & cài đặt — hai ngôn ngữ, khai báo đủ', () =>
   it('OptionsBar: bộ nút toàn kind continue vẽ gọn một dòng (chấm + nhãn + nút), vẫn gửi prompt như nút thường, có nút ẩn', () => {
     const src = read('webview/src/components/OptionsBar.tsx');
     expect(src).toContain("options.every((o) => o.kind === 'continue')");
-    expect(src).toContain('class="options options-continue"');
+    expect(src).toContain('class="options options-inline options-continue"'); // (0.7.2) thêm options-inline: nằm trong dòng hội thoại
     expect(src).toContain('class="dot dot-warn"');
     expect(src).toContain("post({ type: 'send', text: o.prompt, attachments: [] })");
     const css = read('webview/src/styles/components.css');

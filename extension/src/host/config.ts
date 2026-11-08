@@ -1,4 +1,5 @@
 import * as vscode from 'vscode';
+import { normalizeHtmlOpenIn, type HtmlOpenIn } from '../shared/artifactOpen';
 import type { OrchestrationMode, PermissionMode, ThinkingLevel, UiSettings } from '../shared/protocol';
 import { sanitizeServerConfig, type McpServerConfig } from '../core/mcp/client';
 import { DEFAULT_UI_SETTINGS } from '../shared/protocol';
@@ -28,6 +29,7 @@ const SECURE_KEYS = new Set([
   'baseUrls',
   'customProviders',
   'artifacts.autoOpen',
+  'artifacts.htmlOpenIn', // (0.7.2) mở HTML bằng trình duyệt hay VS Code — cùng nhóm với autoOpen
   // Điều phối nhiều hãng quyết định dữ liệu đi tới hãng nào; MCP/plugin quyết định chương trình nào được chạy → chỉ từ cài đặt người dùng.
   'orchestration.mode',
   'mcp.servers',
@@ -61,6 +63,8 @@ const UI_KEYS: Record<keyof UiSettings, string> = {
   codeFont: 'ui.codeFont',
   showThinking: 'ui.showThinking',
   workingCharacters: 'ui.workingCharacters',
+  htmlOpenIn: 'artifacts.htmlOpenIn',
+  liteMode: 'ui.liteMode',
 };
 
 /** Đọc cấu hình `locaithAgent.*` thành các kiểu có kiểu rõ ràng. */
@@ -96,6 +100,8 @@ export class ConfigService {
       codeFont: c.get('ui.codeFont', d.codeFont),
       showThinking: c.get('ui.showThinking', d.showThinking),
       workingCharacters: c.get('ui.workingCharacters', d.workingCharacters),
+      htmlOpenIn: this.htmlOpenIn(),
+      liteMode: c.get<boolean>('ui.liteMode', d.liteMode) === true,
     };
   }
 
@@ -105,6 +111,7 @@ export class ConfigService {
     if (!target) return;
     const sample = DEFAULT_UI_SETTINGS[key];
     if (typeof value !== typeof sample) return;
+    if (key === 'htmlOpenIn' && value !== 'browser' && value !== 'vscode') return;
     if (typeof value === 'number' && !Number.isFinite(value)) return;
     await this.cfg().update(target, value, vscode.ConfigurationTarget.Global);
   }
@@ -126,6 +133,7 @@ export class ConfigService {
       adaptiveOutputTokens: c.get<boolean>('agent.adaptiveOutputTokens', true) !== false,
       modelStallSeconds: stallSetting(c.get<unknown>('agent.modelStallSeconds', 'auto')),
       modelCallMaxSeconds: clamp(Number(c.get<number>('agent.modelCallMaxSeconds', 600)), 30, 3600),
+      maxImagesInContext: clamp(Math.floor(Number(c.get<number>('agent.maxImagesInContext', 8))) || 0, 0, 100), // (0.7.2) 0 = không giới hạn
     };
   }
 
@@ -323,6 +331,22 @@ export class ConfigService {
   artifactsAutoOpen(): 'never' | 'static' | 'always' | 'browser' {
     const v = this.get<string>('artifacts.autoOpen', 'static');
     return v === 'never' || v === 'always' || v === 'browser' ? v : 'static';
+  }
+
+  /** (0.7.2) Artifact HTML mở bằng `browser` (mặc định) hay `vscode` (tab bên cạnh). */
+  htmlOpenIn(): HtmlOpenIn {
+    return normalizeHtmlOpenIn(this.get<string>('artifacts.htmlOpenIn', 'browser'));
+  }
+
+  /** (0.7.2) Tự xoá ảnh của cuộc trò chuyện cũ hơn N ngày ở nền khi khởi động (0 = tắt, mặc định). Số nguyên 0–3650. */
+  autoCleanImagesDays(): number {
+    const n = Math.floor(Number(this.get<number>('history.autoCleanImagesDays', 0)));
+    return Number.isFinite(n) && n >= 1 ? Math.min(3650, n) : 0;
+  }
+
+  /** (0.7.2) Chế độ nhẹ: tắt hiệu ứng + không tự xem trước media + chỉ lưu bản xem trước nhỏ của ảnh. */
+  liteMode(): boolean {
+    return this.get<boolean>('ui.liteMode', false) === true;
   }
 
   debug(): boolean {

@@ -279,6 +279,67 @@ export class CheckpointStore {
     return removed;
   }
 
+  /** (0.7.2) Dung lượng kho điểm quay lại trên đĩa (byte, đệ quy) và số phiên có dữ liệu. */
+  async usage(): Promise<{ sessions: number; bytes: number }> {
+    let names: string[];
+    try {
+      names = await fs.promises.readdir(this.root);
+    } catch {
+      return { sessions: 0, bytes: 0 };
+    }
+    let bytes = 0;
+    for (const n of names) bytes += await dirBytes(path.join(this.root, n));
+    return { sessions: names.length, bytes };
+  }
+
+  /**
+   * (0.7.2) Dọn điểm quay lại CŨ HƠN `days` ngày (do người dùng bấm, khác `gc` tự chạy theo hạn mặc định): bỏ các lượt quá hạn của mọi phiên rồi xoá
+   * blob không còn lượt nào tham chiếu; phiên hết lượt thì xoá cả thư mục. `except` = phiên đang mở (không đụng).
+   * `dryRun` chỉ tính dung lượng sẽ giải phóng. Trả về số lượt bị bỏ và số byte.
+   */
+  async pruneOlderThan(days: number, opts: { except?: readonly string[]; dryRun?: boolean } = {}): Promise<{ turns: number; bytes: number }> {
+    let names: string[];
+    try {
+      names = await fs.promises.readdir(this.root);
+    } catch {
+      return { turns: 0, bytes: 0 };
+    }
+    const limit = this.now() - Math.max(0, days) * 86_400_000;
+    const skip = new Set((opts.except ?? []).map(sessionKey));
+    let turnsGone = 0;
+    let bytes = 0;
+    for (const name of names) {
+      if (skip.has(name)) continue;
+      const dir = path.join(this.root, name);
+      let all: StoredTurn[] = [];
+      try {
+        const raw = JSON.parse(await fs.promises.readFile(path.join(dir, 'turns.json'), 'utf8')) as unknown;
+        if (Array.isArray(raw)) all = raw.filter(isStoredTurn);
+      } catch {
+        /* hỏng/thiếu → coi như không có lượt nào còn hạn */
+      }
+      const keep = all.filter((t) => t.startedAt >= limit);
+      if (keep.length === all.length && all.length > 0) continue;
+      turnsGone += all.length - keep.length;
+      const before = await dirBytes(dir);
+      if (opts.dryRun) {
+        bytes += before - (keep.length === 0 ? 0 : await liveBlobBytes(dir, keep));
+        continue;
+      }
+      await this.locked(name, async () => {
+        if (keep.length === 0) {
+          this.cache.delete(name);
+          await fs.promises.rm(dir, { recursive: true, force: true });
+        } else {
+          await this.gcBlobs(name, keep);
+          await this.save(name, keep);
+        }
+      });
+      bytes += Math.max(0, before - (await dirBytes(dir)));
+    }
+    return { turns: turnsGone, bytes };
+  }
+
   /** Tóm tắt cho giao diện (không mang đường dẫn tuyệt đối, không mang hash). */
   summarize(turns: readonly StoredTurn[]): CheckpointTurn[] {
     return turns.map((t) => ({
@@ -325,6 +386,51 @@ export class CheckpointStore {
     await fs.promises.mkdir(dir, { recursive: true });
     await atomicWrite(path.join(dir, 'turns.json'), JSON.stringify(turns));
   }
+}
+
+async function dirBytes(dir: string): Promise<number> {
+  let total = 0;
+  let entries: fs.Dirent[];
+  try {
+    entries = await fs.promises.readdir(dir, { withFileTypes: true });
+  } catch {
+    return 0;
+  }
+  for (const e of entries) {
+    const p = path.join(dir, e.name);
+    if (e.isDirectory()) total += await dirBytes(p);
+    else {
+      try {
+        total += (await fs.promises.stat(p)).size;
+      } catch {
+        /* đã mất */
+      }
+    }
+  }
+  return total;
+}
+
+/** Dung lượng phần còn giữ lại của một thư mục phiên (turns.json + blob còn được tham chiếu) — cho `dryRun`. */
+async function liveBlobBytes(dir: string, keep: readonly StoredTurn[]): Promise<number> {
+  const refs = new Set<string>();
+  for (const t of keep) for (const f of t.files) {
+    if (f.before) refs.add(f.before);
+    if (f.after) refs.add(f.after);
+  }
+  let total = 0;
+  try {
+    total += (await fs.promises.stat(path.join(dir, 'turns.json'))).size;
+  } catch {
+    /* không có */
+  }
+  for (const h of refs) {
+    try {
+      total += (await fs.promises.stat(path.join(dir, 'blobs', h))).size;
+    } catch {
+      /* blob đã mất */
+    }
+  }
+  return total;
 }
 
 export function fileKey(abs: string): string {

@@ -2685,6 +2685,29 @@ button.chip-main:hover {
   opacity: 0.55;
 }
 
+/* (0.7.2) Bảng lựa chọn nằm TRONG dòng hội thoại, ngay sau lượt trả lời cuối: PHẲNG — không khung kín, không tô nền, không vạch dọc. */
+.options-inline {
+  margin: 10px 0 4px;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+.options-inline.options-continue {
+  padding: 4px 0;
+}
+.options-inline .options-head {
+  padding: 0 2px;
+}
+.option-all {
+  font-weight: 600;
+  border-style: dashed;
+}
+.option-all-icon {
+  flex: none;
+  opacity: 0.7;
+}
+
 /* (lane:output-timeouts) nút «Chạy tiếp (phần N)»: MỘT dòng gọn kiểu Claude Code — chấm + nhãn xám nhỏ + nút; không khung kín, không tô nền. */
 .options-continue {
   flex-direction: row;
@@ -2847,4 +2870,81 @@ button.chip-main:hover {
 .run-group.has-fail {
   box-shadow: inset 2px 0 0 var(--danger);
   border-radius: 6px;
+}
+
+/* ── (0.7.2) Dọn dẹp bộ nhớ (Cài đặt) — PHẲNG: không vạch dọc, không khung lồng khung ── */
+.cleanup-card .cleanup-error {
+  color: var(--danger, #e5484d);
+  font-size: var(--nd-fs-sm);
+}
+.cleanup-total {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: var(--nd-fs-sm);
+  color: var(--fg-muted);
+}
+.cleanup-total strong {
+  color: var(--fg);
+}
+.cleanup-spacer {
+  flex: 1;
+}
+.cleanup-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 12px;
+  padding: 8px 0;
+}
+.cleanup-info {
+  flex: 1 1 200px;
+  min-width: 0;
+}
+.cleanup-label {
+  font-weight: 600;
+  font-size: var(--nd-fs-sm);
+  overflow-wrap: anywhere;
+}
+.cleanup-figure {
+  color: var(--accent-text);
+  font-size: var(--nd-fs-xs);
+}
+.cleanup-hint {
+  color: var(--fg-faint);
+  font-size: var(--nd-fs-xs);
+}
+.cleanup-act {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.cleanup-days {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: var(--nd-fs-xs);
+  color: var(--fg-muted);
+}
+.cleanup-days input {
+  width: 56px;
+  padding: 3px 6px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface-1);
+  color: var(--fg);
+  font: inherit;
+}
+.cleanup-auto {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  font-size: var(--nd-fs-xs);
+  color: var(--fg-muted);
+}
+.media-lite {
+  font-size: var(--nd-fs-xs);
 }

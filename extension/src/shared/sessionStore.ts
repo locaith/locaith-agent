@@ -17,7 +17,8 @@ import type { SessionState } from '../core/engine/types';
 import { TRASH_DAYS, type SessionSummary, type TItem, type TrashSummary } from './protocol';
 import { SESSION_SCHEMA, migrateSession } from './sessionMigrate';
 import { parseBackup, type BackupSession } from './sessionBackup';
-import { trimTranscriptForStorage } from './transcript';
+import { countImages, stripImages, charsToBytes } from './sessionCleanup';
+import { DEFAULT_STORAGE_IMAGE_LIMITS, trimTranscriptForStorage, type StorageImageLimits } from './transcript';
 
 export interface PersistedSession {
   version: 1;
@@ -77,8 +78,40 @@ export interface ImportSummary {
   trashed: number;
 }
 
+/** (0.7.2) Dung lượng kho phiên — đọc từ tệp thật, KHÔNG phụ thuộc chỉ mục. */
+export interface StorageStats {
+  sessions: { count: number; bytes: number };
+  trash: { count: number; bytes: number };
+  /** `bytes` = ước lượng dung lượng ảnh (mọi bản sao) mà «Xoá ảnh» sẽ giải phóng. */
+  images: { count: number; bytes: number };
+}
+
+export interface CleanupResult {
+  /** Số cuộc trò chuyện bị tác động. */
+  sessions: number;
+  images: number;
+  /** Dung lượng giải phóng (hoặc sẽ giải phóng nếu `dryRun`). */
+  bytes: number;
+}
+
+export interface CleanupOptions {
+  /** Chỉ cuộc có `updatedAt` cũ hơn từng ấy mili-giây. */
+  olderThanMs: number;
+  /** Cuộc không được đụng tới (đang mở…). */
+  exceptIds?: readonly string[];
+  now?: number;
+  /** Chỉ tính, không ghi/xoá gì. */
+  dryRun?: boolean;
+}
+
 export class BaseSessionStore {
   private queue: Promise<unknown> = Promise.resolve();
+  /** (0.7.2) Trần ảnh khi lưu transcript — chế độ nhẹ đặt chặt hơn (xem transcript.ts). */
+  private imageLimits: StorageImageLimits = DEFAULT_STORAGE_IMAGE_LIMITS;
+
+  setImageLimits(limits: StorageImageLimits): void {
+    this.imageLimits = limits;
+  }
 
   constructor(
     private readonly io: StoreIO,
@@ -296,7 +329,7 @@ export class BaseSessionStore {
         workspace: this.workspaceKey,
         ...(this.workspaceName ? { workspaceName: this.workspaceName } : {}),
         session,
-        transcript: trimTranscriptForStorage(transcript),
+        transcript: trimTranscriptForStorage(transcript, 4000, this.imageLimits),
       };
       await this.io.write(`${session.id}.json`, enc.encode(JSON.stringify(payload)));
 
@@ -401,6 +434,134 @@ export class BaseSessionStore {
       await this.refreshTrash();
       return mine.length;
     });
+  }
+
+  // ─────────────────────── (0.7.2) Dọn bộ nhớ ───────────────────────
+
+  /** Tên các tệp phiên đang sống (không gồm chỉ mục, Thùng rác, bản sao hàn gắn). */
+  private async liveIds(): Promise<string[]> {
+    return (await this.io.names()).filter((n) => SESSION_FILE.test(n) && n !== INDEX && !n.endsWith('.healbak.json')).map((n) => n.slice(0, -'.json'.length));
+  }
+
+  /** Dung lượng kho phiên + số ảnh. Đọc từng tệp một (không giữ nhiều tệp trong bộ nhớ); chạy đồng thời với lưu được vì mọi ghi là nguyên tử. */
+  async storageStats(): Promise<StorageStats> {
+    const st: StorageStats = { sessions: { count: 0, bytes: 0 }, trash: { count: 0, bytes: 0 }, images: { count: 0, bytes: 0 } };
+    for (const id of await this.liveIds()) {
+      let bytes: Uint8Array;
+      try {
+        bytes = await this.io.read(`${id}.json`);
+      } catch {
+        continue;
+      }
+      st.sessions.count++;
+      st.sessions.bytes += bytes.byteLength;
+      const text = dec.decode(bytes);
+      if (!/"(?:image|images|thumb)"/.test(text) && !text.includes('"mediaType"')) continue; // không có ảnh → khỏi phân tích
+      try {
+        const c = countImages(JSON.parse(text) as Parameters<typeof countImages>[0]);
+        st.images.count += c.images;
+        st.images.bytes += charsToBytes(c.chars);
+      } catch {
+        /* tệp hỏng: bỏ qua phần đếm ảnh */
+      }
+    }
+    for (const n of await this.io.names()) {
+      if (!TRASH_FILE.test(n)) continue;
+      try {
+        st.trash.bytes += (await this.io.read(n)).byteLength;
+        st.trash.count++;
+      } catch {
+        /* đã bị xoá giữa chừng */
+      }
+    }
+    return st;
+  }
+
+  /**
+   * Xoá ảnh (GIỮ CHỮ) khỏi các cuộc trò chuyện cũ hơn `olderThanMs`, trừ `exceptIds`. Không đụng `updatedAt` (thứ tự Lịch sử giữ nguyên) và không
+   * qua migrateSession (không đổi định dạng của dữ liệu cũ). Mỗi tệp ghi nguyên tử, tuần tự qua hàng đợi chung với lưu/xoá.
+   */
+  async purgeImages(o: CleanupOptions): Promise<CleanupResult> {
+    const now = o.now ?? Date.now();
+    const except = new Set(o.exceptIds ?? []);
+    const res: CleanupResult = { sessions: 0, images: 0, bytes: 0 };
+    for (const id of await this.liveIds()) {
+      if (except.has(id)) continue;
+      await this.enqueue(async () => {
+        let bytes: Uint8Array;
+        try {
+          bytes = await this.io.read(`${id}.json`);
+        } catch {
+          return;
+        }
+        const text = dec.decode(bytes);
+        if (!text.includes('"mediaType"') && !/"(?:thumb|images)"/.test(text)) return;
+        let raw: { session?: { updatedAt?: number; messages?: unknown[] }; transcript?: unknown[] };
+        try {
+          raw = JSON.parse(text);
+        } catch {
+          return;
+        }
+        const updatedAt = typeof raw.session?.updatedAt === 'number' ? raw.session.updatedAt : 0;
+        if (now - updatedAt < o.olderThanMs) return;
+        const gone = o.dryRun ? countImages(raw) : stripImages(raw);
+        if (gone.images === 0 && gone.chars === 0) return;
+        res.sessions++;
+        res.images += gone.images;
+        if (o.dryRun) {
+          res.bytes += charsToBytes(gone.chars);
+          return;
+        }
+        const out = enc.encode(JSON.stringify(raw));
+        await this.io.write(`${id}.json`, out);
+        res.bytes += Math.max(0, bytes.byteLength - out.byteLength);
+      });
+    }
+    return res;
+  }
+
+  /** Các cuộc của workspace này cũ hơn `olderThanMs` (không ghim, không nằm trong `exceptIds`), kèm dung lượng tệp. */
+  private async staleSessions(o: CleanupOptions): Promise<{ id: string; bytes: number }[]> {
+    const now = o.now ?? Date.now();
+    const except = new Set(o.exceptIds ?? []);
+    const out: { id: string; bytes: number }[] = [];
+    for (const s of await this.list()) {
+      if (s.pinned || except.has(s.id) || now - s.updatedAt < o.olderThanMs) continue;
+      let bytes = 0;
+      try {
+        bytes = (await this.io.read(`${s.id}.json`)).byteLength;
+      } catch {
+        continue;
+      }
+      out.push({ id: s.id, bytes });
+    }
+    return out;
+  }
+
+  /** Chuyển cuộc trò chuyện CŨ (của workspace này, không ghim) vào Thùng rác — khôi phục được TRASH_DAYS ngày. */
+  async trashStale(o: CleanupOptions): Promise<CleanupResult> {
+    const stale = await this.staleSessions(o);
+    const res: CleanupResult = { sessions: 0, images: 0, bytes: 0 };
+    for (const s of stale) {
+      if (!o.dryRun && !(await this.moveToTrash(s.id))) continue;
+      res.sessions++;
+      res.bytes += s.bytes;
+    }
+    return res;
+  }
+
+  /** Dung lượng Thùng rác của workspace này (số cuộc + byte) — để hộp xác nhận «Dọn Thùng rác» nói đúng. */
+  async trashUsage(): Promise<{ count: number; bytes: number }> {
+    const idx = (await this.listTrash()).map((t) => t.id);
+    let bytes = 0;
+    for (const id of idx) {
+      try {
+        bytes += (await this.io.read(`trash.${id}.json`)).byteLength;
+      } catch {
+        /* đã mất */
+      }
+    }
+    return { count: idx.length, bytes };
   }
 
   // ─────────────────────── Sao lưu / khôi phục ───────────────────────

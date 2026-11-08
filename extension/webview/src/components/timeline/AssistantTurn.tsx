@@ -84,7 +84,7 @@ function WorkingIndicator({ empty, blocks, turnId }: { empty: boolean; blocks: r
   const stat = [tokens > 0 ? t('act.thinkTokens', { n: shown.toLocaleString(lang === 'vi' ? 'vi-VN' : 'en-US') }) : '', secs !== null && secs >= 1 ? formatSeconds(secs * 1000, lang) : ''].filter(Boolean).join(' · ');
   return (
     <div class="working cc-working" role="status">
-      {settings.workingCharacters !== false ? <LoActor seed={seed} /> : <LoSpinner size={15} />}
+      {settings.workingCharacters !== false && settings.liteMode !== true ? <LoActor seed={seed} /> : <LoSpinner size={15} />}
       <span class="cc-working-label">{empty ? t('turn.preparing') : t('act.working')}</span>
       {stat && <span class="work-stat">{stat}</span>}
     </div>

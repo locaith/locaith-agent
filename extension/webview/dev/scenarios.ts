@@ -993,6 +993,20 @@ export function locaithState(o: LocaithSceneOptions = {}): ViewState {
   };
 }
 
+// ── (0.7.2) bảng lựa chọn «hướng đi» ở cuối hội thoại + chip «Tất cả» ──
+export function optionsDirectionsState(): ViewState {
+  const base = cutContinueState();
+  return {
+    ...base,
+    title: 'Chọn hướng tối ưu quảng cáo',
+    options: [
+      { id: 'o1', label: 'Tạm dừng Retarget 30 ngày', prompt: 'Tạm dừng chiến dịch Retarget 30 ngày và chuyển 30 triệu sang Lookalike 1%.', detail: 'Tiết kiệm ngay, rủi ro thấp' },
+      { id: 'o2', label: 'Loại trùng đối tượng', prompt: 'Loại đối tượng trùng giữa Retarget 30 ngày và Lookalike 1% rồi chạy lại hai chiến dịch.' },
+      { id: 'o3', label: 'Viết lại nội dung quảng cáo', prompt: 'Viết 3 phiên bản nội dung quảng cáo mới cho nhóm Lookalike 1% để thử A/B.', detail: 'Cần thêm ngân sách thử' },
+    ],
+  };
+}
+
 // ── (lane:output-timeouts) câu trả lời bị cắt ở ranh giới câu + nút «Chạy tiếp phần 2» ──
 export function cutContinueState(opts: { forced?: boolean } = {}): ViewState {
   const answer =
