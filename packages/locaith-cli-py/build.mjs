@@ -1,6 +1,6 @@
 // Dựng gói PyPI `locaith-cli`: bundle lõi Node (esbuild, nén) → locaith_cli/bin/locaith.cjs → wheel + sdist → twine check.
 //
-//   node build.mjs --extension C:\locaith-agent-wt\<tên>\extension [--python "py -3.11"] [--no-python] [--keep]
+//   node build.mjs --extension C:\locaith\extension\locaith-agent-wt\<tên>\extension [--python "py -3.11"] [--no-python] [--keep]
 //
 // KHÔNG đăng PyPI ở đây: đăng là bước riêng, có chủ ý (twine upload) — xem packages/locaith-cli-py/README (mục «Phát hành») và docs/CLI.md.
 import { createRequire } from 'node:module';

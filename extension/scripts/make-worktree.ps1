@@ -1,7 +1,7 @@
 # Tao mot git worktree rieng (nhanh moi) cho extension + noi san node_modules va market, de lam viec/ chay test song song ma khong dong vao cay chinh.
 # ASCII only: Windows PowerShell 5.1 doc tep khong BOM theo ANSI nen chu co dau se vo.
 #
-#   powershell -File extension\scripts\make-worktree.ps1 -Name tools-parity            # nhanh feat/tools-parity tu main -> C:\locaith-agent-wt\tools-parity
+#   powershell -File extension\scripts\make-worktree.ps1 -Name tools-parity            # nhanh feat/tools-parity tu main -> C:\locaith\extension\locaith-agent-wt\tools-parity
 #   powershell -File extension\scripts\make-worktree.ps1 -Name fix-x -BaseBranch main
 #
 # Luu y:
@@ -11,10 +11,10 @@
 param(
   [Parameter(Mandatory = $true)][string]$Name,
   [string]$BaseBranch = 'main',
-  [string]$Repo = 'C:\locaith-agent-repo',
-  [string]$Root = 'C:\locaith-agent-wt',
-  [string]$NodeModules = 'C:\locaith\extension\locaith-agent-vscode\locaith-extension-main\node_modules',
-  [string]$Market = 'C:\locaith\extension\locaith-agent-vscode\locaith-extension-main\market'
+  [string]$Repo = 'C:\locaith\extension\locaith-agent-repo',
+  [string]$Root = 'C:\locaith\extension\locaith-agent-wt',
+  [string]$NodeModules = 'C:\locaith\extension\locaith-agent-repo\extension\node_modules',
+  [string]$Market = 'C:\locaith\extension\locaith-agent-repo\extension\market'
 )
 if (-not (Test-Path $NodeModules)) { throw "Khong thay node_modules: $NodeModules" }
 New-Item -ItemType Directory -Force -Path $Root | Out-Null
