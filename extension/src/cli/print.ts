@@ -9,10 +9,14 @@ import type { CliRuntime, RuntimeEvent, RuntimeOptions } from './runtime/contrac
 import type { UiEvent } from '../shared/protocol';
 import { t } from './i18n';
 
+/** Chờ byte đầu của stdin khi đã có câu lệnh (như Claude CLI: 3 giây). */
+export const STDIN_FIRST_BYTE_MS = 3000;
+
 export interface PrintDeps {
   /** Tạo runtime (đã tính khoá/tin cậy); tách ra để test chèn nhà cung cấp giả. */
   createRuntime(opts: RuntimeOptions): Promise<CliRuntime>;
-  readStdin(): Promise<string>;
+  /** Đọc stdin; `firstByteMs` = hạn chờ byte đầu (ống im lặng → null, chạy tiếp không có nó). */
+  readStdin(firstByteMs?: number): Promise<string | null>;
   /** stdin có phải ống/tệp (không phải terminal) không. */
   stdinPiped: boolean;
   out(line: string): void;
@@ -43,10 +47,18 @@ function lastAssistantText(blocksByAssistant: Map<string, string[]>, lastId: str
 }
 
 export async function runPrint(a: ParsedArgs, d: PrintDeps): Promise<number> {
-  const stdinText = d.stdinPiped ? await d.readStdin() : '';
-  const prompt = buildPrompt(a.prompt, stdinText);
   const json = a.outputFormat === 'json' || a.json;
   const stream = a.outputFormat === 'stream-json';
+  // Có sẵn câu lệnh thì stdin chỉ là phụ (cat log | locaith -p "tóm tắt"): chờ tối đa vài giây cho byte đầu rồi chạy tiếp.
+  // Không có câu lệnh thì stdin LÀ việc cần làm: chờ tới hết.
+  let stdinText = '';
+  if (d.stdinPiped) {
+    const got = await d.readStdin(a.prompt?.trim() ? STDIN_FIRST_BYTE_MS : undefined);
+    if (got === null) {
+      if (!json && !stream && !a.quiet) d.err(t('cli.print.noStdin', { secs: STDIN_FIRST_BYTE_MS / 1000 }));
+    } else stdinText = got;
+  }
+  const prompt = buildPrompt(a.prompt, stdinText);
   if (!prompt) {
     const msg = t('cli.print.noPrompt');
     if (json) d.out(JSON.stringify({ ok: false, type: 'result', is_error: true, error: msg }));

@@ -127,5 +127,6 @@ describe('Locaith CLI — chạy đầu-cuối với API tương thích OpenAI',
     const j = JSON.parse(r.out);
     expect(j.ok).toBe(false);
     expect(String(j.error).length).toBeGreaterThan(3);
-  });
+    // Cổng không tới được: bộ thử lại dùng chung với extension (4 lần, 1+2+4+8 giây) rồi mới báo lỗi; cộng 3 giây chờ stdin ngỏ.
+  }, 60_000);
 });

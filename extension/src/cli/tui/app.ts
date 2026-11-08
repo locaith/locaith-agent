@@ -48,6 +48,8 @@ export interface TuiOptions {
   banner?: boolean;
   /** Văn bản điền sẵn vào ô nhập. */
   initialInput?: string;
+  /** Câu mở đầu GỬI NGAY khi giao diện sẵn sàng (`locaith "việc cần làm"`), khác `initialInput` chỉ điền sẵn. */
+  initialPrompt?: string;
   /** Thay thế đọc ảnh clipboard (kiểm thử). */
   readImage?: () => Promise<Attachment | null>;
 }
@@ -170,6 +172,11 @@ export class TuiApp {
       this.printNewNotices();
       if (this.running) this.startTicker();
       this.screen.flush();
+      const first = this.o.initialPrompt?.trim();
+      if (first) {
+        this.history.add(first);
+        void this.send(first, false);
+      }
     }).then(async (code) => {
       await this.shutdown();
       return code;
@@ -384,7 +391,7 @@ export class TuiApp {
     }
   }
 
-  private onAction(action: 'exit' | 'redraw' | 'clear_screen' | 'open_editor' | 'copy', payload?: string): void {
+  private onAction(action: 'exit' | 'redraw' | 'clear_screen' | 'open_editor' | 'copy' | 'insert', payload?: string): void {
     switch (action) {
       case 'exit':
         this.exit(0);
@@ -404,6 +411,15 @@ export class TuiApp {
       case 'open_editor':
         void this.externalEdit(payload ?? this.editor.text);
         return;
+      case 'insert': {
+        // Tin đang xếp hàng bị trả về khi dừng lượt (hoặc hook chặn tin): đưa lại vào ô nhập, giữ nguyên điều người dùng đang gõ dở.
+        const back = (payload ?? '').trim();
+        if (!back) return;
+        const cur = this.editor.text;
+        this.loadText(cur ? `${back}
+${cur}` : back);
+        return;
+      }
     }
   }
 

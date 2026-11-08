@@ -165,8 +165,8 @@ export async function doctor(o: DoctorOptions): Promise<number> {
               ? 'This machine is ready for Locaith CLI.'
               : 'Máy này sẵn sàng chạy Locaith CLI.'
           : o.lang === 'en'
-            ? 'Fix the ✘ items above, then run `locaith doctor` again.'
-            : 'Sửa các mục ✘ ở trên rồi chạy lại `locaith doctor`.'),
+            ? 'Some ✘ items need fixing — fix them above, then run `locaith doctor` again.'
+            : 'Còn mục ✘ cần sửa — sửa các mục ở trên rồi chạy lại `locaith doctor`.'),
     );
   }
   return ok ? 0 : 1;

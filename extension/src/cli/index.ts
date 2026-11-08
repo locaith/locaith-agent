@@ -8,7 +8,7 @@
  */
 
 import './strings';
-import { readFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { createInterface } from 'node:readline/promises';
 import path from 'node:path';
 import process from 'node:process';
@@ -56,10 +56,34 @@ async function isTrusted(cwd: string, env: NodeJS.ProcessEnv): Promise<boolean> 
   }
 }
 
-async function readStdin(): Promise<string> {
-  const chunks: Buffer[] = [];
-  for await (const c of process.stdin) chunks.push(Buffer.isBuffer(c) ? c : Buffer.from(c));
-  return Buffer.concat(chunks).toString('utf8');
+/**
+ * Đọc stdin tới hết (EOF). `firstByteMs`: sau chừng đó mà chưa có byte nào (ống mở nhưng im lặng — hay gặp khi một chương trình khác
+ * gọi `locaith -p "việc"` và để ngỏ stdin) thì thôi, trả null để chạy tiếp mà không có dữ liệu ống. Đã có byte đầu thì đọc tới EOF.
+ */
+function readStdin(firstByteMs?: number): Promise<string | null> {
+  return new Promise((resolve) => {
+    const chunks: Buffer[] = [];
+    let timer: NodeJS.Timeout | undefined;
+    const stdin = process.stdin;
+    const finish = (v: string | null): void => {
+      if (timer) clearTimeout(timer);
+      stdin.off('data', onData);
+      stdin.off('end', onEnd);
+      stdin.off('error', onEnd);
+      if (v === null) stdin.pause(); // không giữ tiến trình sống vì một ống im lặng
+      resolve(v);
+    };
+    const onData = (c: Buffer | string): void => {
+      if (timer) clearTimeout(timer);
+      timer = undefined;
+      chunks.push(Buffer.isBuffer(c) ? c : Buffer.from(c));
+    };
+    const onEnd = (): void => finish(Buffer.concat(chunks).toString('utf8'));
+    stdin.on('data', onData);
+    stdin.once('end', onEnd);
+    stdin.once('error', onEnd);
+    if (firstByteMs && firstByteMs > 0) timer = setTimeout(() => finish(null), firstByteMs);
+  });
 }
 
 function accountDeps(a: ParsedArgs, env: NodeJS.ProcessEnv): AccountDeps {
@@ -148,7 +172,7 @@ async function consent(a: ParsedArgs, env: NodeJS.ProcessEnv): Promise<number> {
 
 function printDeps(a: ParsedArgs, env: NodeJS.ProcessEnv, lang: Lang): PrintDeps {
   return {
-    createRuntime: (opts) => createRuntime({ ...opts, env }),
+    createRuntime: (opts) => createRuntime({ ...opts, env, home: homeDir(env) }),
     readStdin,
     stdinPiped: !process.stdin.isTTY,
     out: (l) => console.log(l),
@@ -157,6 +181,54 @@ function printDeps(a: ParsedArgs, env: NodeJS.ProcessEnv, lang: Lang): PrintDeps
     isTrusted: (cwd) => isTrusted(cwd, env),
     lang,
   };
+}
+
+/** Ghi `language` vào ~/.locaith/settings.json (giữ nguyên các khoá khác; tệp hỏng thì KHÔNG ghi đè). Quyền 600. */
+function saveLanguage(l: Lang, env: NodeJS.ProcessEnv): void {
+  const file = path.join(homeDir(env), '.locaith', 'settings.json');
+  let cur: Record<string, unknown> = {};
+  try {
+    const raw = readFileSync(file, 'utf8');
+    const j = JSON.parse(raw) as unknown;
+    if (!j || typeof j !== 'object' || Array.isArray(j)) return;
+    cur = j as Record<string, unknown>;
+  } catch (e) {
+    if ((e as NodeJS.ErrnoException).code !== 'ENOENT') return;
+  }
+  cur.language = l;
+  try {
+    mkdirSync(path.dirname(file), { recursive: true });
+    const tmp = `${file}.${process.pid}.tmp`;
+    writeFileSync(tmp, JSON.stringify(cur, null, 2) + '\n', { mode: 0o600 });
+    renameSync(tmp, file);
+  } catch {
+    /* không ghi được thì thôi: lần sau hỏi lại */
+  }
+}
+
+function gatewayClient(a: ParsedArgs, timeoutMs?: number): LocaithGatewayClient {
+  return new LocaithGatewayClient({ baseUrl: () => a.baseUrl ?? LOCAITH_GATEWAY_URL, ...(timeoutMs ? { timeoutMs } : {}) });
+}
+
+/** Tài khoản (khoá Locaith) đã đồng ý thông báo dữ liệu chưa? Không rõ (khoá hãng khác, mất mạng) → true: không chặn người dùng vì lỗi mạng. */
+async function consentAlreadyAccepted(a: ParsedArgs, env: NodeJS.ProcessEnv): Promise<boolean> {
+  const key = readApiKey(env);
+  if (!key) return true;
+  const cur = await gatewayClient(a, 4000).getConsent(key);
+  return !cur.ok || cur.state.accepted;
+}
+
+/** Bấm «Tôi đồng ý» ở onboarding → ghi nhận ở cổng (cùng bản ghi với `locaith consent --yes` và bản VS Code). */
+async function acceptConsentNow(a: ParsedArgs, env: NodeJS.ProcessEnv): Promise<{ ok: boolean; message?: string }> {
+  const key = readApiKey(env);
+  if (!key) return { ok: true };
+  const client = gatewayClient(a);
+  const cur = await client.getConsent(key);
+  if (!cur.ok) return { ok: false, message: t(cur.error === 'unauthorized' ? 'cli.consent.unauthorized' : 'cli.consent.network') };
+  if (cur.state.accepted) return { ok: true };
+  const r = await client.postConsent(key, cur.state.current, 'cli');
+  if (r.ok) return { ok: true };
+  return { ok: false, message: r.error === 'unauthorized' ? t('cli.consent.unauthorized') : r.error === 'network' ? t('cli.consent.network') : t('cli.consent.rejected', { why: r.message ?? '—' }) };
 }
 
 async function chat(a: ParsedArgs, env: NodeJS.ProcessEnv, lang: Lang): Promise<number> {
@@ -168,14 +240,36 @@ async function chat(a: ParsedArgs, env: NodeJS.ProcessEnv, lang: Lang): Promise<
     return 2;
   }
 
+  const home = homeDir(env);
   let trusted = await isTrusted(a.cwd, env);
-  const needLogin = !readApiKey(env) && !hasByokKey(env);
-  const firstRun = !savedLang(env);
-  if (needLogin || !trusted || firstRun) {
-    // TODO(integrate): khớp chữ ký thật của runOnboarding (lane cli-tui).
-    const r = await runOnboarding({ cwd: a.cwd, lang, version: VERSION, needLogin, needTrust: !trusted, needLang: firstRun, baseUrl: a.baseUrl, accountDeps: accountDeps(a, env) } as never);
-    if (r.cancelled) return 1;
-    if (r.lang) setLang(r.lang);
+  const loggedIn = !!readApiKey(env) || hasByokKey(env);
+  const languageChosen = !!a.lang || !!env.LOCAITH_LANG?.trim() || !!savedLang(env);
+  let curLang = lang;
+  if (!loggedIn || !trusted || !languageChosen) {
+    const r = await runOnboarding({
+      version: VERSION,
+      lang,
+      cwd: a.cwd,
+      env,
+      noColor: a.noColor,
+      languageChosen,
+      loggedIn,
+      consentAccepted: loggedIn ? await consentAlreadyAccepted(a, env) : false,
+      trusted,
+      accountDeps: (io) => ({ ...accountDeps(a, env), ask: io.ask, out: io.out, err: io.err }),
+      acceptConsent: () => acceptConsentNow(a, env),
+      saveLang: (l) => saveLanguage(l, env),
+      saveTrust: (v) => {
+        if (v) trustDir(home, a.cwd);
+      },
+    });
+    if (r.cancelled) {
+      if (r.reason === 'untrusted') console.error(t('cli.trust.declined'));
+      else if (r.reason === 'byok-missing') console.error(t('cli.byok.missing'));
+      return 1;
+    }
+    curLang = r.lang;
+    setLang(curLang);
     trusted = r.trusted;
   }
 
@@ -183,6 +277,7 @@ async function chat(a: ParsedArgs, env: NodeJS.ProcessEnv, lang: Lang): Promise<
   try {
     rt = await createRuntime({
       cwd: a.cwd,
+      home,
       version: VERSION,
       interactive: true,
       model: a.model,
@@ -197,7 +292,7 @@ async function chat(a: ParsedArgs, env: NodeJS.ProcessEnv, lang: Lang): Promise<
       mcpConfig: a.mcpConfig,
       resume: a.resume ?? (a.continueLast ? true : undefined),
       noPersist: a.noPersist,
-      lang,
+      lang: curLang,
       verbose: a.verbose,
       trusted,
       env,
@@ -210,8 +305,7 @@ async function chat(a: ParsedArgs, env: NodeJS.ProcessEnv, lang: Lang): Promise<
     throw err;
   }
   try {
-    // TODO(integrate): chuyển a.prompt làm tin mở đầu (đối số `initialPrompt` của runTui).
-    return await runTui(rt, { version: VERSION, lang, initialPrompt: a.prompt } as never);
+    return await runTui(rt, { version: VERSION, lang: curLang, cwd: a.cwd, env, noColor: a.noColor, home, initialPrompt: a.prompt });
   } finally {
     await rt.dispose();
   }

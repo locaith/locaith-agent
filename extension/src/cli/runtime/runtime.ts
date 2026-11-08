@@ -293,8 +293,9 @@ export class Runtime implements CliRuntime {
 
     await this.attachFeatures();
     this.git.refresh(true);
-    // Thông tin tài khoản: chỉ đọc bộ đệm đã có; làm mới ở nền, không chặn khởi động.
-    if (!this.providers.overridden) void this.account.refresh().catch(() => undefined);
+    // Thông tin tài khoản: chỉ đọc bộ đệm đã có; làm mới ở nền, không chặn khởi động. Chế độ in một lần (-p) không hiện thông tin này
+    // nên khỏi gọi mạng thêm (đồng ý thông báo dữ liệu thiếu sẽ lộ ra ở chính lượt chạy qua mã 403 của cổng).
+    if (this.opts.interactive && !this.providers.overridden) void this.account.refresh().catch(() => undefined);
     for (const n of this.startupNotices) this.emit({ t: 'toast', level: 'warn', text: n });
   }
 

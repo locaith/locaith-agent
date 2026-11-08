@@ -16,7 +16,17 @@ USAGE
   locaith                       interactive session (needs a terminal)
   locaith "task"                interactive session, with this first message sent for you
   locaith -p "task"             print once and exit (also reads stdin: cat log | locaith -p "summarize")
-  locaith <command>             doctor · login · logout · whoami · consent · update · sessions · config · help [topic] · version
+  locaith ask "task"            same as -p (the old name, kept so existing scripts still work)
+
+COMMANDS
+  locaith doctor                check this machine: Node, git, ffmpeg, key, a real call to the gateway (add --json for scripts)
+  locaith login | logout        sign in (opens the browser, or --no-browser to paste a token) / delete the saved key
+  locaith whoami                account, plan, usable models, whether the data notice is accepted
+  locaith consent --yes         record acceptance of the data notice for the account (once, by the account owner)
+  locaith sessions [--all]      list saved sessions (reopen with  locaith -r <id>  or  locaith -c)
+  locaith config                show where settings, key, sessions, MCP and memory live
+  locaith update [--check]      check for / upgrade to a newer version on PyPI
+  locaith help [topic]          detailed guides         locaith version   print the version
 
 COMMON OPTIONS
   -p, --print                   non-interactive: print the answer and exit
@@ -25,6 +35,7 @@ COMMON OPTIONS
   -r, --resume [id]             resume a session (no id: pick from a list)
   --model <id>                  model (default locaith-v5-flash; also: locaith-v5-si)
   --permission-mode <m>         default | acceptEdits | plan | bypassPermissions
+  --allow none|reads|all        (old CLI 0.3.x name: none = plan, reads = default, all = bypassPermissions)
   --allowedTools <rules>        e.g. "Bash(npm test:*)" "Read"      (also --disallowedTools)
   --add-dir <dir>               allow reading one more folder
   --append-system-prompt <t>    extra instructions for this run
@@ -40,7 +51,17 @@ CÁCH DÙNG
   locaith                       phiên tương tác (cần terminal)
   locaith "việc cần làm"        phiên tương tác, gửi sẵn câu này
   locaith -p "việc"             in một lần rồi thoát (nhận cả stdin: cat log | locaith -p "tóm tắt")
-  locaith <lệnh>                doctor · login · logout · whoami · consent · update · sessions · config · help [chủ đề] · version
+  locaith ask "việc"            như -p (tên cũ, giữ để script cũ vẫn chạy)
+
+LỆNH
+  locaith doctor                kiểm tra máy: Node, git, ffmpeg, khoá, kết nối thật tới cổng (thêm --json cho script)
+  locaith login | logout        đăng nhập (mở trình duyệt, hoặc --no-browser để dán token) / xoá khoá đã lưu
+  locaith whoami                tài khoản, gói, model dùng được, đã đồng ý thông báo dữ liệu chưa
+  locaith consent --yes         ghi nhận đồng ý thông báo dữ liệu cho tài khoản (một lần, bởi chủ tài khoản)
+  locaith sessions [--all]      liệt kê phiên đã lưu (mở lại bằng  locaith -r <id>  hoặc  locaith -c)
+  locaith config                chỉ ra các tệp cài đặt, khoá, phiên, MCP, bộ nhớ
+  locaith update [--check]      kiểm tra/nâng cấp lên bản mới trên PyPI
+  locaith help [chủ đề]         hướng dẫn chi tiết      locaith version   in phiên bản
 
 TUỲ CHỌN THƯỜNG DÙNG
   -p, --print                   không tương tác: in câu trả lời rồi thoát
@@ -49,6 +70,7 @@ TUỲ CHỌN THƯỜNG DÙNG
   -r, --resume [id]             mở lại một phiên (không có id: chọn từ danh sách)
   --model <id>                  model (mặc định locaith-v5-flash; còn locaith-v5-si)
   --permission-mode <m>         default | acceptEdits | plan | bypassPermissions
+  --allow none|reads|all        (tên cũ của CLI 0.3.x: none = plan, reads = default, all = bypassPermissions)
   --allowedTools <luật>         ví dụ "Bash(npm test:*)" "Read"      (và --disallowedTools)
   --add-dir <thư mục>           cho đọc thêm một thư mục
   --append-system-prompt <t>    chỉ dẫn thêm cho lượt này
@@ -99,7 +121,7 @@ Mã thoát: 0 xong · 1 lỗi/chưa xong · 2 dùng sai · 127 thiếu Node · 1
   <dự-án>/.locaith/settings.json        dự án (chia sẻ qua git)
   <dự-án>/.locaith/settings.local.json  cục bộ (không commit)
   Ví dụ: { "agent": { "compactAtPercent": 90 }, "permissions": { "allow": ["Bash(npm test:*)"] }, "checkpoints": { "enabled": true } }
-Biến môi trường: LOCAITH_API_KEY, LOCAITH_LANG=vi|en, NO_COLOR, LOCAITH_ASCII=1, LOCAITH_HOME (đổi thư mục ~/.locaith).
+Biến môi trường: LOCAITH_API_KEY, LOCAITH_LANG=vi|en, NO_COLOR, LOCAITH_ASCII=1, LOCAITH_HOME (đổi thư mục «nhà»: dữ liệu nằm ở $LOCAITH_HOME/.locaith thay vì ~/.locaith).
 Cài đặt của dự án chỉ có tác dụng đầy đủ khi bạn TIN CẬY thư mục (hỏi lần đầu); chưa tin cậy thì chỉ được thêm luật ask/deny.`,
   permissions: `QUYỀN
 Chế độ (Shift+Tab hoặc --permission-mode): default (hỏi trước khi sửa/chạy lệnh) · acceptEdits (tự nhận chỉnh sửa tệp) · plan (chỉ đọc và lập kế hoạch) · bypassPermissions (không hỏi — thận trọng).
@@ -170,7 +192,7 @@ Exit codes: 0 done · 1 error/unfinished · 2 usage · 127 Node missing · 130 i
   <project>/.locaith/settings.json      project (shared via git)
   <project>/.locaith/settings.local.json  local (not committed)
   Example: { "agent": { "compactAtPercent": 90 }, "permissions": { "allow": ["Bash(npm test:*)"] }, "checkpoints": { "enabled": true } }
-Environment: LOCAITH_API_KEY, LOCAITH_LANG=vi|en, NO_COLOR, LOCAITH_ASCII=1, LOCAITH_HOME (relocate ~/.locaith).
+Environment: LOCAITH_API_KEY, LOCAITH_LANG=vi|en, NO_COLOR, LOCAITH_ASCII=1, LOCAITH_HOME (changes the "home" folder: data lives in $LOCAITH_HOME/.locaith instead of ~/.locaith).
 Project settings only take full effect when you TRUST the folder (asked on first run); untrusted folders can only add ask/deny rules.`,
   permissions: `PERMISSIONS
 Modes (Shift+Tab or --permission-mode): default (ask before edits/commands) · acceptEdits (auto-accept file edits) · plan (read-only planning) · bypassPermissions (no prompts — be careful).
