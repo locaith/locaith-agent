@@ -84,6 +84,10 @@ describe('wrapAnsi', () => {
     expect(wrapAnsi('  a  b', 20, { pre: true })).toEqual(['  a  b']);
     expect(wrapAnsi('abcdefgh', 3, { pre: true })).toEqual(['abc', 'def', 'gh']);
   });
+  it('chế độ pre giữ mã ANSI đúng vị trí (không dồn về cuối dòng)', () => {
+    const r = wrapAnsi('\x1b[1mab\x1b[0m cd', 20, { pre: true });
+    expect(r).toEqual(['\x1b[1mab\x1b[0m cd']);
+  });
   it('CJK ngắt giữa chữ', () => {
     const r = wrapAnsi('日本語のテキスト', 6);
     for (const l of r) expect(stringWidth(l)).toBeLessThanOrEqual(6);

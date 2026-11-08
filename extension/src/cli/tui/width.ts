@@ -270,7 +270,8 @@ export function wrapAnsi(input: string, width: number, o: WrapOptions = {}): str
     startLine();
     for (const t of toks) {
       if (t.esc !== undefined) {
-        word.push(t);
+        if (o.pre) emitTok(t);
+        else word.push(t);
         continue;
       }
       if (isSpaceTok(t) && !o.pre) {

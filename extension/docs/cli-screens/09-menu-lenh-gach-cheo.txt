@@ -1,0 +1,22 @@
+╭──────────────────────────────────────────────────────────────────────────────────────────────────╮
+│                                                                                                  │
+│    ▄███▄                                                                                         │
+│   ▄█▀ ██             Locaith CLI v0.4.0                                                          │
+│   ██  ██             Trợ lý lập trình trong terminal                                             │
+│  ██▀ ██   ▄█████▄                                                                                │
+│  ██ ▄██  ██    ▀██   Tài khoản: tu***@gmail.com · Plus                                           │
+│ ██▀ ███████    ▄██   Model: locaith-v5-flash                                                     │
+│ ██▄       ▀█████▀    Thư mục: C:/Dev/demo-app (⎇ main)                                           │
+│  ▀████████████▀                                                                                  │
+│                                                                                                  │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
+  /help · @ nhắc tệp · ! chạy shell · Shift+Tab đổi chế độ · Esc dừng · Ctrl+O mở rộng kết quả      
+  Mẹo: /resume mở lại một phiên cũ · /compact nén ngữ cảnh
+
+╭──────────────────────────────────────────────────────────────────────────────────────────────────╮
+│ > /co                                                                                            │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
+❯ /compact  Nén ngữ cảnh (có thể kèm điều cần giữ)                                                  
+  /context  Xem mức dùng ngữ cảnh
+  /cost     Token và chi phí của phiên
+  Enter gửi · Ctrl+J xuống dòng                             locaith-v5-flash · ngữ cảnh 4% · ⎇ main 

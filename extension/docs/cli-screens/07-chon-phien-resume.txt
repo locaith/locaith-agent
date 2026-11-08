@@ -1,0 +1,29 @@
+╭──────────────────────────────────────────────────────────────────────────────────────────────────╮
+│                                                                                                  │
+│    ▄███▄                                                                                         │
+│   ▄█▀ ██             Locaith CLI v0.4.0                                                          │
+│   ██  ██             Trợ lý lập trình trong terminal                                             │
+│  ██▀ ██   ▄█████▄                                                                                │
+│  ██ ▄██  ██    ▀██   Tài khoản: tu***@gmail.com · Plus                                           │
+│ ██▀ ███████    ▄██   Model: locaith-v5-flash                                                     │
+│ ██▄       ▀█████▀    Thư mục: C:/Dev/demo-app (⎇ main)                                           │
+│  ▀████████████▀                                                                                  │
+│                                                                                                  │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
+  /help · @ nhắc tệp · ! chạy shell · Shift+Tab đổi chế độ · Esc dừng · Ctrl+O mở rộng kết quả      
+  Mẹo: /resume mở lại một phiên cũ · /compact nén ngữ cảnh
+
+> /resume
+
+╭─ Mở lại phiên ───────────────────────────────────────────────────────────────────────────────────╮
+│ Tìm:                                                                                             │
+│                                                                                                  │
+│ ── Hôm nay                                                                                       │
+│ ❯ Sửa lỗi đăng nhập trên trang quản trị      18 tin · 12 phút trước                              │
+│   Viết test cho module thanh toán            42 tin · 3 giờ trước                                │
+│ ── Trước đó                                                                                      │
+│   Refactor parseArgs và thêm cờ --no-color   9 tin · hôm qua                                     │
+│   Dựng workflow GitHub Actions để phát hành  31 tin · 4 ngày trước                               │
+│   Khảo sát vì sao build chậm                 12 tin · 5 ngày trước                               │
+╰─ ↑↓ chọn · Enter xác nhận · Esc huỷ ─────────────────────────────────────────────────────────────╯
+                                                            locaith-v5-flash · ngữ cảnh 4% · ⎇ main 

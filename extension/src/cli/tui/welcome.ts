@@ -7,7 +7,7 @@ import { LOGO_ASCII, LOGO_ROWS, LOGO_SMALL_ASCII, LOGO_SMALL_ROWS, LOGO_SMALL_WI
 import './strings';
 import type { Theme } from './theme';
 import { box } from './widgets';
-import { padEnd, stringWidth, truncateAnsi, truncatePlain } from './width';
+import { padEnd, stringWidth, truncateAnsi, wrapAnsi } from './width';
 
 export interface WelcomeInfo {
   version: string;
@@ -93,7 +93,7 @@ export function renderWelcome(i: WelcomeInfo): string[] {
     }
   } else body.push(...infoRows);
   const framed = box(['', ...body, ''], W, th, { border: th.faint });
-  const tips = th.faint('  ' + truncatePlain(tr('tui.banner.tips'), W - 3));
-  const tip = th.muted('  ' + truncatePlain(i.tipIndex === undefined ? pickTip() : pickTip(i.tipIndex), W - 3));
-  return i.compact ? [...body.map((l) => '  ' + l), tip] : [...framed, tips, tip];
+  const tips = wrapAnsi(th.faint(tr('tui.banner.tips')), W - 3, { first: '  ', rest: '  ' });
+  const tip = wrapAnsi(th.muted(i.tipIndex === undefined ? pickTip() : pickTip(i.tipIndex)), W - 3, { first: '  ', rest: '  ' });
+  return i.compact ? [...body.map((l) => '  ' + l), ...tip] : [...framed, ...tips, ...tip];
 }

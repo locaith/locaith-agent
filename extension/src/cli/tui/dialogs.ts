@@ -54,7 +54,7 @@ export class PermissionDialog implements Dialog<PermDecision> {
       case 'allow_session': {
         const r = this.req;
         const what = r.suggest?.[0];
-        if (what) return tr('tui.perm.session', { what: '`' + what + '`' });
+        if (what) return tr('tui.perm.session', { what });
         if (r.sessionLabel) return r.sessionLabel;
         return tr('tui.perm.session.generic');
       }

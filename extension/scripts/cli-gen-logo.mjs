@@ -51,7 +51,7 @@ function raster(W) {
       const t = on(cov[r][x]);
       const b = on(cov[r + 1][x]);
       s += t && b ? '█' : t ? '▀' : b ? '▄' : ' ';
-      a += t && b ? '#' : t ? '"' : b ? '_' : ' ';
+      a += t || b ? '#' : ' ';
     }
     rows.push(s.replace(/\s+$/, ''));
     ascii.push(a.replace(/\s+$/, ''));

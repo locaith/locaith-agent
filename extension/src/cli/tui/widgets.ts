@@ -165,6 +165,7 @@ export function renderFooter(o: FooterOptions): string {
     if (o.expanded) parts.push(th.muted(tr('tui.hint.expanded')));
     left = parts.join(sep);
   }
+  if (left) left = '  ' + left;
   // bớt phần phải cho vừa
   let r = right.slice();
   const fit = (): boolean => stringWidth(left) + 2 + stringWidth(r.join(sep)) <= W;
@@ -265,8 +266,8 @@ export function renderShortcuts(th: Theme, width: number): string[] {
   const colW = Math.floor((width - 2) / 2);
   const out: string[] = [th.bold(' ' + tr('tui.help.title'))];
   for (let i = 0; i < items.length; i += 2) {
-    const a = ' ' + truncatePlain(items[i], colW - 1);
-    const b = items[i + 1] ? truncatePlain(items[i + 1], colW - 1) : '';
+    const a = ' ' + truncatePlain(items[i], colW - 3);
+    const b = items[i + 1] ? truncatePlain(items[i + 1], colW - 2) : '';
     out.push(th.muted(padEnd(a, colW)) + th.muted(b));
   }
   return out.map((l) => truncateAnsi(l, width - 1));

@@ -21,6 +21,7 @@ import { Editor } from './editor';
 import { History, defaultHistoryFile } from './history';
 import { isPrintable, type Key, type KeyEvent } from './keys';
 import { Screen, type OutStream } from './screen';
+import { renderSprite } from './sprite';
 import './strings';
 import { Menu, applyCompletion, fileContext, filterSlash, slashContext } from './suggest';
 import { TerminalSession, type InStream, type WriteStream } from './terminal';
@@ -1060,6 +1061,7 @@ ${cur}` : back);
 
     // spinner + bảng việc
     if (this.running && !dlgEntry) {
+      if (H >= 26) out.push(...renderSprite(th, Date.now() - this.runStart, W, this.o.env));
       const hint = this.conv.spinnerHint();
       out.push(
         renderSpinner({

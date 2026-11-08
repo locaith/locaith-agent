@@ -245,7 +245,7 @@ export function makeTheme(caps: Caps): Theme {
 
   const P = dark
     ? { muted: '#9aa0b8', faint: '#6b7088', ok: '#4ade80', warn: '#fbbf24', err: '#f87171', code: '#7dd3fc', userBg: '#262a36', addBg: '#10361f', delBg: '#4a1b24', addWordBg: '#1d6a3a', delWordBg: '#8a2c3b', sel: '#3a3f55', kw: '#c4a7ff', str: '#86efac', num: '#fbbf77', com: '#6b7280', fn: '#7dd3fc', ty: '#f9a8d4', punct: '#9aa0b8' }
-    : { muted: '#5b6178', faint: '#9096ad', ok: '#15803d', warn: '#b45309', err: '#dc2626', code: '#0369a1', userBg: '#e6e9f2', addBg: '#d3f2dd', delBg: '#fbd9dd', addWordBg: '#9be0b3', delWordBg: '#f4a3ae', sel: '#d5d9ea', kw: '#7c3aed', str: '#15803d', num: '#b45309', com: '#8a90a2', fn: '#0369a1', ty: '#be185d', punct: '#5b6178' };
+    : { muted: '#5b6178', faint: '#7d839c', ok: '#15803d', warn: '#b45309', err: '#dc2626', code: '#0369a1', userBg: '#e6e9f2', addBg: '#d3f2dd', delBg: '#fbd9dd', addWordBg: '#9be0b3', delWordBg: '#f4a3ae', sel: '#d5d9ea', kw: '#7c3aed', str: '#15803d', num: '#b45309', com: '#8a90a2', fn: '#0369a1', ty: '#be185d', punct: '#5b6178' };
 
   const from = hexToRgb(BRAND_FROM);
   const to = hexToRgb(BRAND_TO);
