@@ -25,7 +25,8 @@ import { doctor } from './doctor';
 import { HELP_TOPICS, helpTopicText, topicList, usageText } from './help';
 import { detectLang, setLang, t, type Lang } from './i18n';
 import { runPrint, type PrintDeps } from './print';
-import { createRuntime, NotLoggedInError } from './runtime';
+import { createRuntime, isDirTrusted, NotLoggedInError, trustDir } from './runtime';
+import { SessionRepo } from './runtime/sessions';
 import { runOnboarding, runTui } from './tui';
 import { compareVersions, latestKnown, runUpdate, updateAvailable } from './update';
 
@@ -46,13 +47,10 @@ function resolveLang(a: ParsedArgs, env: NodeJS.ProcessEnv): Lang {
   return a.lang ?? savedLang(env) ?? detectLang(env);
 }
 
-// TODO(integrate): thay bằng API tin cậy của runtime (runtime/trust.ts).
+/** Thư mục (hoặc thư mục cha của nó) đã được tin cậy? Cùng danh sách `~/.locaith/trusted.json` mà lõi chạy dùng. */
 async function isTrusted(cwd: string, env: NodeJS.ProcessEnv): Promise<boolean> {
   try {
-    const j = JSON.parse(readFileSync(path.join(homeDir(env), '.locaith', 'trusted.json'), 'utf8')) as { paths?: string[] } | string[];
-    const list = Array.isArray(j) ? j : j.paths ?? [];
-    const norm = (p: string): string => path.resolve(p).toLowerCase();
-    return list.some((p) => norm(cwd) === norm(p) || norm(cwd).startsWith(norm(p) + path.sep));
+    return isDirTrusted(homeDir(env), cwd);
   } catch {
     return false;
   }
@@ -256,24 +254,19 @@ function configCmd(a: ParsedArgs, env: NodeJS.ProcessEnv): number {
 }
 
 async function sessionsCmd(a: ParsedArgs, env: NodeJS.ProcessEnv): Promise<number> {
-  // TODO(integrate): dùng danh sách phiên của runtime (runtime/sessions.ts) thay vì dựng runtime đầy đủ.
-  const rt = await createRuntime({ cwd: a.cwd, version: VERSION, interactive: false, noPersist: true, lang: getLangSafe(), env });
-  try {
-    const rows = await rt.sessions(a.flags.all ? 'all' : 'cwd');
-    if (rows.length === 0) {
-      console.log(t('cli.sessions.none'));
-      return 0;
-    }
-    console.log(t('cli.sessions.header'));
-    for (const s of rows.slice(0, 40)) console.log(`  ${s.id.slice(0, 8)}  ${new Date(s.updatedAt).toLocaleString()}  ${s.model.padEnd(18)} ${s.title}`);
+  const repo = new SessionRepo(homeDir(env), a.cwd, VERSION);
+  const rows = await repo.list(a.flags.all ? 'all' : 'cwd');
+  if (a.json || a.outputFormat === 'json') {
+    console.log(JSON.stringify(rows, null, 2));
     return 0;
-  } finally {
-    await rt.dispose();
   }
-}
-
-function getLangSafe(): Lang {
-  return detectLang();
+  if (rows.length === 0) {
+    console.log(t('cli.sessions.none'));
+    return 0;
+  }
+  console.log(t('cli.sessions.header'));
+  for (const s of rows.slice(0, 40)) console.log(`  ${s.id.slice(0, 8)}  ${new Date(s.updatedAt).toLocaleString()}  ${(s.model ?? '').padEnd(18)} ${s.title}`);
+  return 0;
 }
 
 async function main(argv: string[]): Promise<number> {

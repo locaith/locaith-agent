@@ -135,10 +135,15 @@ export async function runPrint(a: ParsedArgs, d: PrintDeps): Promise<number> {
     }
   };
 
+  // Kết quả của lệnh gạch chéo (`locaith -p "/cost"`) đi qua sự kiện `output`, không qua lượt model.
+  const outputs: string[] = [];
   const off = rt.on((e: RuntimeEvent) => {
     if (e.t === 'ui') onUi(e.ev);
     else if (e.t === 'toast' && e.level !== 'info' && !json && !stream && !a.quiet) d.err(`${e.level === 'error' ? '✘' : '!'} ${e.text}`);
-    else if (e.t === 'output' && e.kind === 'error') sum.errors.push(e.text);
+    else if (e.t === 'output') {
+      if (e.kind === 'error') sum.errors.push(e.text);
+      else outputs.push(e.text);
+    }
   });
 
   let interrupted = false;
@@ -165,7 +170,18 @@ export async function runPrint(a: ParsedArgs, d: PrintDeps): Promise<number> {
   }
 
   const status = rt.status();
-  sum.text = lastAssistantText(textBy, lastAssistant);
+  // Nguồn sự thật là lõi (`lastResult`): nó biết lượt cuối thật sự dừng vì lý do gì (kể cả hết giờ). Sự kiện chỉ là phương án dự phòng.
+  const res = rt.lastResult?.();
+  const ran = !!res && res.stopReason !== 'none';
+  sum.text = (ran ? res!.text : '') || lastAssistantText(textBy, lastAssistant);
+  if (ran) {
+    sum.stopReason = res!.stopReason;
+    sum.turns = res!.turns || sum.turns;
+  } else if (sum.turns === 0 && outputs.length > 0 && sum.errors.length === 0) {
+    // Chỉ chạy một lệnh gạch chéo: coi là xong, in kết quả của lệnh.
+    sum.stopReason = 'end_turn';
+    sum.text = outputs.join('\n\n').trim();
+  }
   const ok = !interrupted && sum.errors.length === 0 && sum.stopReason === 'end_turn';
   const ms = Date.now() - t0;
   const tokens = status.usage.input + status.usage.output;
@@ -173,7 +189,7 @@ export async function runPrint(a: ParsedArgs, d: PrintDeps): Promise<number> {
   if (json || stream) {
     const result = {
       type: 'result',
-      subtype: ok ? 'success' : interrupted ? 'interrupted' : sum.stopReason === 'max_turns' ? 'error_max_turns' : 'error',
+      subtype: ok ? 'success' : interrupted ? 'interrupted' : sum.stopReason === 'max_turns' ? 'error_max_turns' : sum.stopReason === 'timeout' ? 'error_timeout' : 'error',
       is_error: !ok,
       result: sum.text,
       ...(sum.errors.length ? { error: sum.errors[0] } : {}),
@@ -197,6 +213,12 @@ export async function runPrint(a: ParsedArgs, d: PrintDeps): Promise<number> {
     if (!a.quiet) {
       d.err(`\n— ${t('cli.print.footer', { turns: sum.turns, tokens, secs: Math.round(ms / 100) / 10 })}`);
       if (sum.denied > 0) d.err(t('cli.print.denied', { n: sum.denied }));
+      if (!ok && !interrupted && sum.errors.length === 0) {
+        // Lỗi đã in một dòng riêng (notice/toast); các lý do dừng "êm" thì nói rõ ở đây để người dùng biết vì sao mã thoát khác 0.
+        if (sum.stopReason === 'timeout') d.err(t('cli.print.timeout', { secs: a.timeoutSec ?? 900 }));
+        else if (sum.stopReason === 'max_turns') d.err(t('cli.print.maxTurns'));
+        else d.err(t('cli.print.failed', { reason: sum.stopReason }));
+      }
     }
   }
 
