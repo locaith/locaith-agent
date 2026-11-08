@@ -4,6 +4,8 @@ import { MockRuntime } from '../../../src/cli/tui/mockRuntime';
 import { Editor } from '../../../src/cli/tui/editor';
 import { detectCaps, hexToRgb, makeTheme, rgbTo16, rgbTo256 } from '../../../src/cli/tui/theme';
 import { renderFooter, renderInputBox, renderSpinner, renderTodos } from '../../../src/cli/tui/widgets';
+import { typeFrame } from '../../../src/shared/typewriter';
+import { SPINNER_VERBS } from '../../../src/cli/tui/strings';
 import { stringWidth, stripAnsi } from '../../../src/cli/tui/width';
 import { KEY, boot, type Booted } from './helpers/boot';
 import { FakeIn, VT } from './helpers/vt';
@@ -177,5 +179,57 @@ describe('độ bền', () => {
     await b.tick(150);
     expect(b.screenText()).toContain('Locaith CLI');
     expect(b.screenText()).toContain('Nhập việc cần làm');
+  });
+});
+
+describe('spinner: từ trạng thái gõ từng chữ ra', () => {
+  const th = makeTheme(detectCaps({ env: E({ COLORTERM: 'truecolor', LANG: 'vi_VN.UTF-8' }) }));
+  const plain = (o: Partial<Parameters<typeof renderSpinner>[0]> = {}): string => stripAnsi(renderSpinner({ theme: th, width: 100, lang: 'vi', frame: 1, elapsedMs: 0, tokens: 0, seed: 3, ...o }));
+
+  it('lúc đầu chỉ có con trỏ, rồi từng chữ của từ gốc «Đang xử lý…» hiện ra', () => {
+    expect(plain({ elapsedMs: 0 })).not.toContain('Đ');
+    const verbs = SPINNER_VERBS.vi.map((v) => v + '…');
+    for (const ms of [60, 180, 350, 560]) {
+      const f = typeFrame(verbs, ms, 3);
+      expect(f.verb).toBe('Đang xử lý…');
+      const line = plain({ elapsedMs: ms });
+      expect(line, `${ms}ms`).toContain(f.text);
+      if (f.text.length < f.verb.length) expect(line).not.toContain(f.verb);
+    }
+    expect(plain({ elapsedMs: 700 })).toContain('Đang xử lý…'); // gõ xong, đang giữ
+  });
+
+  it('phần «(12s · …)» bên phải KHÔNG nhảy trong lúc gõ một từ (đệm theo từ đầy đủ)', () => {
+    const at = (ms: number): number => plain({ elapsedMs: ms }).indexOf('(');
+    const cols = [60, 120, 240, 360, 480, 600, 900, 2000].map(at);
+    expect(new Set(cols).size).toBe(1);
+    expect(cols[0]).toBeGreaterThan(0);
+  });
+
+  it('có nhãn cụ thể (tên công cụ) hoặc đang suy nghĩ → hiện NGAY, không gõ', () => {
+    expect(plain({ elapsedMs: 0, label: 'Đọc README.md' })).toContain('Đọc README.md…');
+    expect(plain({ elapsedMs: 0, thinking: true })).toContain('Đang suy nghĩ…');
+  });
+
+  it('không hoạt cảnh (NO_COLOR) → từ gốc đầy đủ, không gõ, không con trỏ', () => {
+    const s = plain({ elapsedMs: 0, animate: false });
+    expect(s).toContain('Đang xử lý…');
+    expect(s).not.toContain('▍');
+  });
+
+  it('con trỏ: đặc khi gõ, nháy khi giữ; ASCII dùng «_»', () => {
+    expect(plain({ elapsedMs: 120 })).toContain('▍');
+    const hold = [1200, 1210].map((ms) => plain({ elapsedMs: ms })); // trong 530 ms đầu của nhịp nháy → bật
+    expect(hold[0]).toContain('▍');
+    expect(plain({ elapsedMs: 1200 + 530 })).not.toContain('▍'); // nửa nhịp sau → tắt (đang giữ)
+    const ascii = makeTheme(detectCaps({ env: E({ COLORTERM: 'truecolor', LOCAITH_ASCII: '1' }) }));
+    const a = stripAnsi(renderSpinner({ theme: ascii, width: 100, lang: 'vi', frame: 1, elapsedMs: 120, tokens: 0, seed: 3 }));
+    expect(a).toContain('_');
+    expect(a).not.toContain('▍');
+  });
+
+  it('tiếng Anh dùng danh sách từ tiếng Anh; không bao giờ vượt độ rộng ở mọi thời điểm', () => {
+    expect(plain({ lang: 'en', elapsedMs: 700 })).toContain('Working…');
+    for (const width of [20, 40, 80]) for (let ms = 0; ms < 40_000; ms += 137) expect(stringWidth(renderSpinner({ theme: th, width, lang: 'vi', frame: ms % 7, elapsedMs: ms, tokens: 1200, seed: 5 }))).toBeLessThanOrEqual(width - 1);
   });
 });

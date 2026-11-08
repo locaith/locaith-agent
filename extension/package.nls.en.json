@@ -27,7 +27,7 @@
   "cfg.fontSize": "Chat font size (px).",
   "cfg.lineHeight": "Line height. Vietnamese stacks diacritics, so keep it at 1.6 or above.",
   "cfg.codeFont": "Font for code blocks.",
-  "cfg.workingCharacters": "When a wait runs long, the Lo logo turns into a small character (robot dog, robot, drone, rocket) on the working line. Turn off to keep just the logo. Off automatically when the OS asks for reduced motion.",
+  "cfg.workingCharacters": "Effects on the working line: the status word is typed out letter by letter (rotating), and when a wait runs long the Lo logo turns into a small character (robot dog, robot, drone, rocket). Turn off to keep just the logo and a plain label. Off automatically when the OS asks for reduced motion.",
   "cfg.showThinking": "Show the \"Thinking\" block when the provider returns reasoning content.",
   "cfg.liteMode": "Lite mode: turns off effects (shimmer, glow), does not auto-preview images/videos in replies, and stores only a small preview of images. Good for slower machines or to use fewer resources.",
   "cfg.autoCleanImagesDays": "Automatically delete IMAGES from conversations older than this many days in the background at startup (text is always kept; open conversations are never touched). 0 = off (default). Manual cleanup: the \"Clean up storage\" command.",

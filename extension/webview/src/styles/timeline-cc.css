@@ -518,6 +518,72 @@
   font-weight: 600;
   color: var(--fg);
 }
+/* Khung hẹp: chữ «~token · giây» xuống dòng dưới nhãn thay vì tràn ngang. */
+.cc-working {
+  flex-wrap: wrap;
+  row-gap: 0;
+}
+
+/* ── (0.7.3) Từ trạng thái GÕ TỪNG CHỮ RA (components/TypedVerb.tsx; lịch ở src/shared/typewriter.ts) ──
+   Bản ẩn (.tw-ghost) giữ chỗ bề ngang bằng chính từ đầy đủ → «~token · giây» bên phải không nhảy khi từng chữ hiện ra;
+   chữ đang gõ (.tw-live) phủ lên trên, vệt sáng lướt qua (dùng lại .cc-shimmer: đã có sẵn nhánh giảm chuyển động / chế độ nhẹ / tương phản cao);
+   con trỏ (.tw-caret) đặc khi đang gõ/xoá, nháy khi giữ/nghỉ. */
+.cc-working-label.tw {
+  position: relative;
+  display: inline-block;
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  white-space: nowrap;
+}
+.tw-ghost {
+  visibility: hidden;
+}
+.tw-live {
+  position: absolute;
+  left: 0;
+  top: 0;
+  white-space: nowrap;
+  /* giữ chữ sáng như nhãn tĩnh cũ (--fg), chỉ có một dải màu nhấn lướt qua */
+  background-image: linear-gradient(90deg, var(--fg) 0%, var(--fg) 36%, var(--accent-text) 50%, var(--fg) 64%, var(--fg) 100%);
+}
+.tw-caret {
+  display: inline-block;
+  width: 2px;
+  height: 1.05em;
+  margin-left: 2px;
+  vertical-align: -0.18em;
+  border-radius: 1px;
+  background: var(--accent-text);
+}
+.tw[data-phase='hold'] .tw-caret,
+.tw[data-phase='gap'] .tw-caret {
+  animation: tw-blink 1.06s steps(1, end) infinite;
+}
+@keyframes tw-blink {
+  0%,
+  52% {
+    opacity: 1;
+  }
+  53%,
+  100% {
+    opacity: 0;
+  }
+}
+body.vscode-high-contrast .tw-caret,
+body.vscode-high-contrast-light .tw-caret {
+  background: var(--fg);
+}
+@media (forced-colors: active) {
+  .tw-caret {
+    background: CanvasText;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .tw-caret {
+    animation: none;
+  }
+}
 
 /* ── chip đồng hồ dưới ô nhập ── */
 .cc-clock {

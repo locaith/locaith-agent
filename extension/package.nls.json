@@ -27,7 +27,7 @@
   "cfg.fontSize": "Cỡ chữ của khung chat (px).",
   "cfg.lineHeight": "Giãn dòng. Tiếng Việt nhiều dấu chồng nên nên để từ 1.6 trở lên.",
   "cfg.codeFont": "Font chữ cho khối mã nguồn.",
-  "cfg.workingCharacters": "Khi chờ lâu, logo Lo biến hình thành nhân vật nhỏ (chó robot, robot người, drone, tên lửa) ở dòng \"đang xử lý\". Tắt để chỉ còn logo. Tự tắt khi hệ điều hành bật giảm chuyển động.",
+  "cfg.workingCharacters": "Hiệu ứng ở dòng \"đang xử lý\": từ trạng thái được gõ từng chữ ra (xoay vòng), và khi chờ lâu logo Lo biến hình thành nhân vật nhỏ (chó robot, robot người, drone, tên lửa). Tắt để chỉ còn logo và nhãn tĩnh. Tự tắt khi hệ điều hành bật giảm chuyển động.",
   "cfg.showThinking": "Hiện khối \"Suy nghĩ\" khi nhà cung cấp trả về nội dung suy luận.",
   "cfg.liteMode": "Chế độ nhẹ: tắt hiệu ứng (ánh chạy, quầng sáng), không tự xem trước ảnh/video trong câu trả lời, và chỉ lưu bản xem trước nhỏ của ảnh. Hợp với máy yếu hoặc khi muốn đỡ chiếm tài nguyên.",
   "cfg.autoCleanImagesDays": "Tự xoá ẢNH của cuộc trò chuyện cũ hơn số ngày này ở nền khi khởi động (luôn giữ chữ; cuộc đang mở không bị đụng tới). 0 = tắt (mặc định). Dọn thủ công: lệnh «Dọn dẹp bộ nhớ».",

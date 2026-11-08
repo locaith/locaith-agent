@@ -115,6 +115,89 @@ async function assertCcWorking(p) {
 }
 
 /**
+ * (0.7.3) Từ trạng thái GÕ TỪNG CHỮ RA ở dòng đang chạy. Kiểm DOM thật:
+ *  - bản ẩn (.tw-ghost) giữ chỗ bằng từ đầy đủ; chữ đang gõ (.tw-live) luôn là TIỀN TỐ của từ đó và aria-hidden; nhãn gốc nằm trong .sr-only và KHÔNG đổi;
+ *  - trong lúc gõ một từ, vị trí chữ «~token · giây» bên phải và bề ngang nhãn KHÔNG nhảy; không tràn ngang; có con trỏ.
+ * Chờ tới khi từ đầu qua đi và từ thứ hai vừa bắt đầu gõ rồi lấy mẫu liên tiếp.
+ */
+function assertTyped({ en = false } = {}) {
+  const base = en ? 'Working' : 'Đang xử lý';
+  return async (p) => {
+    const read = () =>
+      p.evaluate(() => {
+        const w = document.querySelector('.cc-working');
+        const l = w && w.querySelector('.cc-working-label.tw');
+        const live = l && l.querySelector('.tw-live');
+        const stat = w && w.querySelector('.work-stat');
+        const tl = document.querySelector('.timeline');
+        return {
+          has: !!l,
+          ghost: l && l.querySelector('.tw-ghost') ? l.querySelector('.tw-ghost').textContent : '',
+          live: live ? (live.textContent || '') : '',
+          phase: l ? l.getAttribute('data-phase') : '',
+          caret: !!(live && live.querySelector('.tw-caret')),
+          liveHidden: !!(live && live.getAttribute('aria-hidden') === 'true'),
+          sr: l && l.querySelector('.sr-only') ? l.querySelector('.sr-only').textContent : '',
+          statLeft: stat ? Math.round(stat.getBoundingClientRect().left * 10) / 10 : null,
+          labelW: l ? Math.round(l.getBoundingClientRect().width * 10) / 10 : 0,
+          overflowX: tl ? tl.scrollWidth - tl.clientWidth : -1,
+        };
+      });
+    const first = await read();
+    if (!first.has) throw new Error('thiếu .cc-working-label.tw (từ gõ từng chữ) ở dòng chờ');
+    if (first.sr !== base) throw new Error('nhãn đọc màn hình phải là nhãn gốc «' + base + '», thấy «' + first.sr + '»');
+    if (!first.liveHidden) throw new Error('chữ đang gõ phải aria-hidden (khỏi bị đọc từng chữ)');
+    // chờ từ thứ hai bắt đầu gõ (ghost đổi khỏi nhãn gốc, mới có 0–2 chữ)
+    let t0 = Date.now();
+    for (;;) {
+      const r = await read();
+      if (r.ghost && r.ghost !== base && r.live.length <= 2) break;
+      if (Date.now() - t0 > 9000) throw new Error('không thấy từ thứ hai bắt đầu gõ sau 9 giây: ' + JSON.stringify(r));
+      await wait(30);
+    }
+    const samples = [];
+    for (let i = 0; i < 8; i++) {
+      samples.push(await read());
+      await wait(55);
+    }
+    const g = samples[0].ghost;
+    for (const r of samples) {
+      if (r.ghost !== g) break; // sang từ khác: dừng kiểm phần còn lại
+      if (!g.normalize('NFC').startsWith(r.live.normalize('NFC'))) throw new Error('chữ đang gõ «' + r.live + '» không phải tiền tố của «' + g + '»');
+      if (!r.caret) throw new Error('thiếu con trỏ');
+      if (r.sr !== base) throw new Error('nhãn đọc màn hình bị đổi: ' + r.sr);
+      if (r.overflowX > 1) throw new Error('tràn ngang ' + r.overflowX + 'px');
+    }
+    const same = samples.filter((r) => r.ghost === g);
+    if (same.length < 4) throw new Error('cần ≥ 4 mẫu trong cùng một từ, có ' + same.length);
+    const lefts = same.map((r) => r.statLeft);
+    const widths = same.map((r) => r.labelW);
+    if (lefts.some((x) => x === null)) throw new Error('chữ «~token · giây» chưa hiện (' + JSON.stringify(lefts) + ')');
+    if (Math.max(...lefts) - Math.min(...lefts) > 0.6) throw new Error('chữ bên phải NHẢY khi gõ: ' + JSON.stringify(lefts));
+    if (Math.max(...widths) - Math.min(...widths) > 0.6) throw new Error('bề ngang nhãn đổi khi gõ: ' + JSON.stringify(widths));
+    if (same[same.length - 1].live.length <= same[0].live.length) throw new Error('chữ không dài thêm trong lúc gõ: ' + same.map((r) => r.live).join(' | '));
+  };
+}
+
+/** (0.7.3) Chế độ nhẹ / giảm chuyển động: nhãn TĨNH y như cũ — không .tw, không con trỏ, không đổi chữ theo thời gian. */
+function assertTypedStatic({ en = false } = {}) {
+  const base = en ? 'Working' : 'Đang xử lý';
+  return async (p) => {
+    const a = await p.evaluate(() => {
+      const l = document.querySelector('.cc-working .cc-working-label');
+      return { text: l ? l.textContent : null, tw: !!document.querySelector('.cc-working .tw'), caret: !!document.querySelector('.cc-working .tw-caret') };
+    });
+    await wait(1400);
+    const b = await p.evaluate(() => {
+      const l = document.querySelector('.cc-working .cc-working-label');
+      return l ? l.textContent : null;
+    });
+    if (a.tw || a.caret) throw new Error('chế độ tĩnh không được có .tw / con trỏ: ' + JSON.stringify(a));
+    if (a.text !== base || b !== base) throw new Error('nhãn tĩnh phải là «' + base + '»: ' + JSON.stringify([a.text, b]));
+  };
+}
+
+/**
  * (0.7.2) Nhân vật chờ ở dòng đang chạy. Kiểm DOM: ô nhân vật đúng 20×20 px, chiều cao dòng chờ KHÔNG phụ thuộc ô (bằng đúng dòng chữ),
  * không tràn ngang. `freezeFrame` (0–5) đóng băng hoạt hoạ ở khung đó (tham số truy vấn `actor=` khoá cảnh; xem LoActor.tsx).
  */
@@ -460,6 +543,15 @@ const SHOTS = [
   { name: 'actor-rocket-wipeout-light-420', q: { scenario: 'cc-working', theme: 'light', actor: 'rocket:out' }, w: 420, h: 360, act: actorSheet('wipe') },
   { name: 'actor-logo-dark-420', q: { scenario: 'cc-working', theme: 'dark' }, w: 420, h: 420, act: assertActor() },
   { name: 'cc-working-dark-420', q: { scenario: 'cc-working', theme: 'dark' }, w: 420, h: 820, act: assertCcWorking },
+  // ── (0.7.3) từ trạng thái gõ từng chữ ──
+  { name: 'typed-dark-420', q: { scenario: 'cc-working', theme: 'dark' }, w: 420, h: 420, act: assertTyped() },
+  { name: 'typed-dark-260', q: { scenario: 'cc-working', theme: 'dark' }, w: 260, h: 420, act: assertTyped() },
+  { name: 'typed-light-300', q: { scenario: 'cc-working', theme: 'light' }, w: 300, h: 420, act: assertTyped() },
+  { name: 'typed-hc-800', q: { scenario: 'cc-working', theme: 'hc' }, w: 800, h: 420, act: assertTyped() },
+  { name: 'typed-en-dark-420', q: { scenario: 'cc-working', theme: 'dark', lang: 'en' }, w: 420, h: 420, act: assertTyped({ en: true }) },
+  { name: 'typed-lite-dark-420', q: { scenario: 'cc-working', theme: 'dark', lite: '1' }, w: 420, h: 420, act: assertTypedStatic() },
+  { name: 'typed-reduced-dark-420', q: { scenario: 'cc-working', theme: 'dark' }, reduced: true, w: 420, h: 420, act: assertTypedStatic() },
+  { name: 'typed-reduced-en-light-300', q: { scenario: 'cc-working', theme: 'light', lang: 'en' }, reduced: true, w: 300, h: 420, act: assertTypedStatic({ en: true }) },
   { name: 'cc-2-expanded-bash-dark-420', q: { scenario: 'cc-timeline', theme: 'dark', expand: '1' }, w: 420, h: 900, full: true, act: expandCcGroup(0) },
   { name: 'cc-3-expanded-write-dark-420', q: { scenario: 'cc-timeline', theme: 'dark', expand: '1' }, w: 420, h: 900, full: true, act: expandCcGroup(2) },
   { name: 'cc-3-expanded-write-light-300', q: { scenario: 'cc-timeline', theme: 'light', expand: '1' }, w: 300, h: 900, full: true, act: expandCcGroup(2) },
@@ -685,6 +777,7 @@ async function runShots(browser) {
     if (filter && !s.name.includes(filter)) continue;
     const { page, problems } = await newPage(browser, s.w ?? 420, s.h ?? 800);
     try {
+      if (s.reduced) await page.emulateMediaFeatures([{ name: 'prefers-reduced-motion', value: 'reduce' }]);
       await openPage(page, s.page ?? 'harness.html', s.q);
       if (s.act) await s.act(page);
       // «Phẳng» TOÀN CỤC (anh chê «nhiều viền dọc quá» 07/11/2026): không phần tử nào trong dòng thời gian có viền trái MỘT BÊN (thanh dọc).

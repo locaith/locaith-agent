@@ -11,6 +11,7 @@ import { activityStats, buildSegments, groupActivityRuns, latestRunningTool, nee
 import { actionName, agentRowsOf, backgroundOf, formatSeconds } from '../../timelineCc';
 import { LoSpinner } from '../Brand';
 import { LoActor } from '../LoActor';
+import { TypedVerb } from '../TypedVerb';
 import { seedFrom } from '../../brand/actorPlan';
 import { cx, copyText, memo } from '../../util';
 import { post } from '../../vscode';
@@ -79,13 +80,16 @@ function WorkingIndicator({ empty, blocks, turnId }: { empty: boolean; blocks: r
     for (const b of blocks) if (b.type === 'text' || b.type === 'thinking') n += estimateTokens(b.text);
     return n;
   }, [blocks]);
+  // (0.7.3) Từ trạng thái GÕ TỪNG CHỮ RA và xoay vòng; cùng công tắc/chế độ nhẹ với nhân vật chờ. «Đang chuẩn bị» chỉ gõ một lần rồi giữ.
+  const lively = settings.workingCharacters !== false && settings.liteMode !== true;
+  const verbs = useMemo(() => (empty ? [t('turn.preparing')] : [t('act.working'), ...t('act.verbs').split('|').filter(Boolean)]), [empty, lang, t]);
   const shown = useCountUp(tokens, true);
   const secs = useElapsed(true);
   const stat = [tokens > 0 ? t('act.thinkTokens', { n: shown.toLocaleString(lang === 'vi' ? 'vi-VN' : 'en-US') }) : '', secs !== null && secs >= 1 ? formatSeconds(secs * 1000, lang) : ''].filter(Boolean).join(' · ');
   return (
     <div class="working cc-working" role="status">
       {settings.workingCharacters !== false && settings.liteMode !== true ? <LoActor seed={seed} /> : <LoSpinner size={15} />}
-      <span class="cc-working-label">{empty ? t('turn.preparing') : t('act.working')}</span>
+      <TypedVerb label={empty ? t('turn.preparing') : t('act.working')} verbs={verbs} seed={seed} animate={lively} once={empty} />
       {stat && <span class="work-stat">{stat}</span>}
     </div>
   );

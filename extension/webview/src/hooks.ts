@@ -50,3 +50,17 @@ export function useElapsed(live: boolean): number | null {
   }, [live]);
   return secs;
 }
+
+/** `prefers-reduced-motion: reduce` của hệ điều hành — cập nhật ngay khi người dùng đổi trong lúc đang mở. */
+export function useReducedMotion(): boolean {
+  const q = typeof matchMedia === 'function' ? matchMedia('(prefers-reduced-motion: reduce)') : null;
+  const [reducedMotion, setReduced] = useState(q ? q.matches : false);
+  useEffect(() => {
+    if (!q) return;
+    const on = () => setReduced(q.matches);
+    on();
+    q.addEventListener?.('change', on);
+    return () => q.removeEventListener?.('change', on);
+  }, []);
+  return reducedMotion;
+}

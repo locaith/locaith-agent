@@ -9,6 +9,7 @@ import { t as tr } from '../i18n';
 import type { Editor } from './editor';
 import { fmtDuration, fmtTokens } from './format';
 import { SPINNER_VERBS } from './strings';
+import { typeFrame } from '../../shared/typewriter';
 import type { Menu } from './suggest';
 import type { Theme } from './theme';
 import { padEnd, stringWidth, truncateAnsi, truncatePlain } from './width';
@@ -192,6 +193,8 @@ export interface SpinnerOptions {
   animate?: boolean;
   /** Không hiện «(12s · …)». */
   bare?: boolean;
+  /** Hạt giống thứ tự từ xoay vòng (từ gõ ra từng chữ); cố định trong một lượt. */
+  seed?: number;
 }
 
 export function spinnerVerb(lang: 'vi' | 'en', elapsedMs: number, seed: number): string {
@@ -199,14 +202,31 @@ export function spinnerVerb(lang: 'vi' | 'en', elapsedMs: number, seed: number):
   return list[(seed + Math.floor(elapsedMs / 4000)) % list.length];
 }
 
+/**
+ * Từ trạng thái xoay vòng GÕ TỪNG CHỮ RA (lịch ở src/shared/typewriter.ts, dùng chung với extension): chỉ khi không có nhãn cụ thể (tên công cụ,
+ * «đang suy nghĩ») và có hoạt cảnh — thông tin cụ thể phải hiện NGAY, không bắt người dùng chờ gõ. Phần chưa gõ được đệm bằng dấu cách theo từ
+ * đầy đủ nên chữ «(12s · token…)» bên phải không nhảy; con trỏ đặc khi gõ/xoá, nháy khi giữ/nghỉ.
+ */
+export function renderTypedVerb(th: Theme, lang: 'vi' | 'en', elapsedMs: number, seed: number, frameNo: number): string {
+  const verbs = SPINNER_VERBS[lang].map((v) => v + th.g.ellipsis);
+  const f = typeFrame(verbs, elapsedMs, seed);
+  const phase = ((frameNo * 0.035) % 1.4) - 0.2;
+  const caretOn = f.phase === 'type' || f.phase === 'erase' || Math.floor(elapsedMs / 530) % 2 === 0;
+  const caret = caretOn ? th.brand(th.caps.unicode ? '▍' : '_') : ' ';
+  const typed = f.text ? th.shimmer(f.text, phase) : '';
+  const pad = Math.max(0, stringWidth(f.verb) - stringWidth(f.text));
+  return typed + caret + ' '.repeat(pad);
+}
+
 export function renderSpinner(o: SpinnerOptions): string {
   const th = o.theme;
   const frames = th.g.spinner;
   const glyph = frames[o.frame % frames.length];
+  const typed = o.label === undefined && !o.thinking && o.animate !== false && !o.bare;
   const verb = o.label ?? (o.thinking ? tr('tui.thinking.now') : tr('tui.working'));
   const text = verb + th.g.ellipsis;
   const phase = ((o.frame * 0.035) % 1.4) - 0.2;
-  const shimmer = o.animate === false ? th.gradient(text) : th.shimmer(text, phase);
+  const shimmer = typed ? renderTypedVerb(th, o.lang, o.elapsedMs, o.seed ?? 0, o.frame) : o.animate === false ? th.gradient(text) : th.shimmer(text, phase);
   if (o.bare) return truncateAnsi(`${th.brand(glyph)} ${shimmer}`, o.width - 1);
   const meta: string[] = [fmtDuration(o.elapsedMs, o.lang, true)];
   if (o.tokens > 0) meta.push(`${th.g.down} ${fmtTokens(o.tokens, o.lang)} token`);

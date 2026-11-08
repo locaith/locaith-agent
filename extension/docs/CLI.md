@@ -44,7 +44,7 @@ Mọi dòng đã xong được **in thẳng vào scrollback** của terminal (cu
 |---|---|
 | `● Read(src/app.ts)` rồi `⎿ Đọc 120 dòng` | công cụ đã chạy và kết quả của nó |
 | `● Update(src/app.ts)` + khối đỏ/xanh | sửa tệp, kèm diff có số dòng |
-| `✻ Đang xử lý… (12s · ↓ 1,2k token · esc để dừng)` | trợ lý đang làm việc; chờ lâu hơn 8 giây thì chú chó robot chạy bên cạnh |
+| `✻ Đang xử lý▍ (12s · ↓ 1,2k token · esc để dừng)` | trợ lý đang làm việc; từ trạng thái được **gõ từng chữ ra** rồi xoay sang từ khác («Đang suy nghĩ…», «Đang cân nhắc…»; tên công cụ thì hiện ngay); chờ lâu hơn 8 giây thì chú chó robot chạy bên cạnh. Đặt `NO_COLOR=1` để chữ tĩnh |
 | hộp «Sửa tệp / Chạy lệnh» | xin quyền: `1. Có` · `2. Có, và không hỏi lại…` · `3. Không, và nói Locaith làm khác đi` |
 | `⎿ đang chờ: …` trên ô nhập | tin bạn gõ khi trợ lý còn chạy — được xếp hàng và gửi ở ranh giới vòng công cụ kế tiếp |
 

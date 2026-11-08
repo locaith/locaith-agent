@@ -371,6 +371,7 @@ export class TuiApp {
     this.running = r;
     if (r) {
       this.runStart = Date.now();
+      this.spinnerSeed = Math.floor(Math.random() * 0x7fffffff); // mỗi lượt một thứ tự từ trạng thái (cố định trong lượt)
       this.conv.resetRunMeters();
       this.options = [];
       this.startTicker();
@@ -1109,6 +1110,7 @@ export class TuiApp {
           label: hint.label,
           thinking: hint.thinking,
           animate: this.caps.color !== 'none',
+          seed: this.spinnerSeed,
         }),
       );
     }

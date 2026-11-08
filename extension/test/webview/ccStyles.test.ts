@@ -163,7 +163,9 @@ describe('thành phần: cấu trúc DOM đơn giản, tên lớp rõ (trang Rem
     expect(sources.composer).toMatch(/<RunClock view=\{view\} \/>/);
     expect(sources.clock).toMatch(/runningSince\(view\)/);
     // (0.7.2) LoActor thay LoSpinner ở dòng chờ khi bật cài đặt; tắt thì vẫn đúng LoSpinner 15 px như cũ
-    expect(sources.turn).toMatch(/<LoSpinner size=\{15\} \/>\}?\s*<span class="cc-working-label">/);
+    // (0.7.3) nhãn là <TypedVerb> (gõ từng chữ ra; ở chế độ tĩnh vẫn đúng <span class="cc-working-label">) — xem test/webview/typedVerb.test.ts
+    expect(sources.turn).toMatch(/<LoSpinner size=\{15\} \/>\}?\s*<TypedVerb label=/);
+    expect(read('components/TypedVerb.tsx')).toContain('<span class="cc-working-label">{label}</span>');
     expect(css).toMatch(/\.cc-working-label\s*\{[^}]*font-weight:\s*600/);
   });
 
