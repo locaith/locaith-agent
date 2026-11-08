@@ -107,6 +107,8 @@ export class TuiApp {
   private busyImage = false;
   /** Đã in khung chào (đầy đủ hoặc gọn kèm hội thoại cũ) chưa. */
   private bannerPrinted = false;
+  /** Đánh thức `waitForAccount` khi lõi báo có thông tin tài khoản. */
+  private accountWaiter: (() => void) | null = null;
 
   constructor(
     private readonly rt: CliRuntime,
@@ -166,7 +168,9 @@ export class TuiApp {
       this.screen.onResize = () => this.screen.schedule();
       this.screen.setProvider(() => this.compose());
       this.unsub = this.rt.on((e) => this.onRuntimeEvent(e));
-      const begin = (): void => {
+      const begin = async (): Promise<void> => {
+        if (this.exiting) return;
+        if (!this.bannerPrinted && this.o.banner !== false) await this.waitForAccount(700);
         if (this.exiting) return;
         if (!this.bannerPrinted) {
           this.bannerPrinted = true;
@@ -188,10 +192,28 @@ export class TuiApp {
       };
       // Phiên mở sẵn lúc khởi động (`-c`, `-r`) phát `replay` cho người nghe đầu tiên ở microtask kế tiếp: chờ nó (nó tự in khung chào gọn
       // kèm hội thoại cũ) rồi mới in khung chào đầy đủ nếu chưa có gì được in.
-      queueMicrotask(() => queueMicrotask(begin));
+      queueMicrotask(() => queueMicrotask(() => void begin()));
     }).then(async (code) => {
       await this.shutdown();
       return code;
+    });
+  }
+
+  /**
+   * Lần chạy đầu bộ đệm tài khoản còn trống (lõi làm mới ở nền, vài chục ms tới vài trăm ms): chờ tối đa `ms` để khung chào có tên/gói
+   * thay vì chỉ một dấu ✔. Đã có sẵn (các lần sau) hoặc không đăng nhập Locaith thì không chờ.
+   */
+  private waitForAccount(ms: number): Promise<void> {
+    const a = this.status?.account;
+    if (!a || !a.loggedIn || a.email || a.plan) return Promise.resolve();
+    return new Promise<void>((resolve) => {
+      const done = (): void => {
+        clearTimeout(timer);
+        this.accountWaiter = null;
+        resolve();
+      };
+      const timer = setTimeout(done, ms);
+      this.accountWaiter = done;
     });
   }
 
@@ -284,6 +306,7 @@ export class TuiApp {
         this.status = e.status;
         this.todos = e.status.todos ?? this.todos;
         if (e.status.running !== wasRunning) this.setRunning(e.status.running);
+        if (this.accountWaiter && (e.status.account?.email || e.status.account?.plan || e.status.account?.loggedIn === false)) this.accountWaiter();
         this.printNewNotices();
         return;
       }

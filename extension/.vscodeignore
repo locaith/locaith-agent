@@ -27,3 +27,4 @@ vitest.e2e.config.mts
 esbuild.browser.mjs
 *.zip
 vitest.live.config.mts
+docs/cli-screens/**
