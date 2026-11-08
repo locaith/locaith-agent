@@ -14,6 +14,7 @@ import {
   baseState,
   ccTimelineState,
   cutContinueState, // (lane:output-timeouts)
+  optionsDirectionsState, // (0.7.2)
   errorState,
   locaithState,
   longConversation,
@@ -915,6 +916,9 @@ function initialView(): ViewState {
     // (lane:output-timeouts) trả lời bị cắt + nút «Chạy tiếp phần 2» · buộc dừng vì model treo + nút «Chạy tiếp»
     case 'cut-continue':
       v = cutContinueState();
+      break;
+    case 'options-directions':
+      v = optionsDirectionsState();
       break;
     case 'cut-forced':
       v = cutContinueState({ forced: true });

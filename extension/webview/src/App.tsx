@@ -10,7 +10,6 @@ import { Header, type Screen } from './components/Header';
 import { LoDefs, LoSpinner } from './components/Brand';
 import { HistoryView } from './components/HistoryView';
 import { MarketView } from './components/MarketView';
-import { OptionsBar } from './components/OptionsBar';
 import { SettingsView } from './components/SettingsView';
 import { ModelQueueStrip } from './components/ModelQueue';
 import { BgTasksStrip } from './components/BgTasksStrip'; // (lane:bg-tasks)
@@ -252,7 +251,6 @@ export function App() {
           {view.memory && <MemoryStrip memory={view.memory} />}
           {view.platform === 'browser' && view.rating && <RatingStrip sends={view.rating.sends} picked={view.rating.picked} sent={view.rating.sent} />}
           {view.bgTasks && view.bgTasks.length > 0 && <BgTasksStrip tasks={view.bgTasks} />} {/* (lane:bg-tasks) */}
-          <OptionsBar options={view.options} running={view.running} />
           <Composer view={view} />
         </footer>
 

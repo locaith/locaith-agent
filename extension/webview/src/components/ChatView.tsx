@@ -5,6 +5,7 @@ import { useApp } from '../ctx';
 import { timelineMarks } from '../timelineCc';
 import { Icon } from './Icons';
 import { LocaithConsentCard } from './LocaithConsent';
+import { OptionsBar } from './OptionsBar';
 import { Welcome } from './Welcome';
 import { AssistantTurn, StandaloneNotice } from './timeline/AssistantTurn';
 import { DayDivider, Stamp } from './timeline/TimeMarks';
@@ -116,6 +117,8 @@ export function ChatView({ view, hasAnyKey }: { view: ViewState; hasAnyKey: bool
             })
           )}
           {rw?.recent && <RewindCard view={view} rewind={rw} />}
+          {/* (0.7.2) Bảng lựa chọn nằm NGAY SAU lượt trả lời cuối, cuộn cùng nội dung (trước đây ở chân khung, trên ô nhập). */}
+          {view.transcript.length > 0 && <OptionsBar options={view.options} running={view.running} />}
           {/* Thông báo dữ liệu của mô hình Locaith: thẻ ở cuối cuộc trò chuyện, không phải hộp thoại. */}
           {view.locaith?.card && <LocaithConsentCard info={view.locaith} account={view.account} />}
         </div>

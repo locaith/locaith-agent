@@ -232,6 +232,13 @@ const SHOTS = [
   { name: '14-perm-plan-dark-420', q: { scenario: 'perm-plan', theme: 'dark' }, w: 420, h: 900 },
   { name: '15-error-dark-420', q: { scenario: 'error', theme: 'dark' }, w: 420, h: 640 },
   // (lane:output-timeouts)
+  // (0.7.2) bảng lựa chọn cuối hội thoại: nằm TRONG dòng hội thoại (không ở chân khung), có chip «Tất cả», phẳng
+  { name: 'options-all-dark-420', q: { scenario: 'options-directions', theme: 'dark' }, w: 420, h: 900, act: assertOptions({ all: true }) },
+  { name: 'options-all-click-dark-420', q: { scenario: 'options-directions', theme: 'dark' }, w: 420, h: 900, act: assertOptions({ all: true, click: true }) },
+  { name: 'options-all-light-420', q: { scenario: 'options-directions', theme: 'light' }, w: 420, h: 900, act: assertOptions({ all: true }) },
+  { name: 'options-all-dark-300', q: { scenario: 'options-directions', theme: 'dark' }, w: 300, h: 900, act: assertOptions({ all: true }) },
+  { name: 'options-all-en-light-320', q: { scenario: 'options-directions', theme: 'light', lang: 'en' }, w: 320, h: 900, act: assertOptions({ all: true, en: true }) },
+  { name: 'options-continue-inline-dark-420', q: { scenario: 'cut-continue', theme: 'dark' }, w: 420, h: 900, act: assertOptions({ all: false }) },
   { name: 'cut-continue-dark-420', q: { scenario: 'cut-continue', theme: 'dark' }, w: 420, h: 900 },
   { name: 'cut-continue-light-320', q: { scenario: 'cut-continue', theme: 'light' }, w: 320, h: 900 },
   { name: 'cut-forced-dark-420', q: { scenario: 'cut-forced', theme: 'dark' }, w: 420, h: 900 },
@@ -475,6 +482,52 @@ async function openPage(page, file, q) {
   await page.waitForFunction('window.__ND_READY__ === true', { timeout: 40000 });
   await page.evaluate(() => document.fonts.ready);
   await wait(250);
+}
+
+/**
+ * (0.7.2) Bảng lựa chọn cuối hội thoại: nằm TRONG `.timeline-inner` (sau lượt trả lời cuối, cuộn cùng nội dung), KHÔNG còn ở chân khung;
+ * chip «Tất cả» chỉ có với kiểu «hướng đi»; bấm «Tất cả» gửi MỘT tin liệt kê đủ các hướng; «×» ẩn được; không tràn ngang.
+ */
+function assertOptions({ all, en = false, click = false }) {
+  return async (p) => {
+    const r = await p.evaluate(() => {
+      const bar = document.querySelector('.timeline-inner .options');
+      const inFooter = !!document.querySelector('.app-foot .options');
+      const tl = document.querySelector('.timeline');
+      const chip = document.querySelector('.timeline-inner .option-all');
+      const lastTurn = [...document.querySelectorAll('.timeline-inner > *')].filter((e) => !e.classList.contains('options'));
+      const before = bar && lastTurn.length ? lastTurn[lastTurn.length - 1].compareDocumentPosition(bar) & Node.DOCUMENT_POSITION_FOLLOWING : 0;
+      const cs = bar ? getComputedStyle(bar) : null;
+      return {
+        inTimeline: !!bar,
+        inFooter,
+        hasAll: !!chip,
+        allText: chip ? chip.textContent.trim() : '',
+        chips: document.querySelectorAll('.timeline-inner .option-chip').length,
+        after: !!before,
+        boxed: cs ? parseFloat(cs.borderTopWidth) > 0 || cs.backgroundColor !== 'rgba(0, 0, 0, 0)' : false,
+        overflowX: tl ? tl.scrollWidth - tl.clientWidth : -1,
+      };
+    });
+    if (!r.inTimeline) throw new Error('bảng lựa chọn phải nằm trong dòng hội thoại (.timeline-inner)');
+    if (r.inFooter) throw new Error('bảng lựa chọn không được lặp ở chân khung (.app-foot)');
+    if (!r.after) throw new Error('bảng lựa chọn phải đứng SAU lượt trả lời cuối');
+    if (r.boxed) throw new Error('bảng lựa chọn trong hội thoại phải phẳng (không khung/nền)');
+    if (r.overflowX > 1) throw new Error(`tràn ngang ${r.overflowX}px`);
+    if (all) {
+      if (!r.hasAll) throw new Error('thiếu chip «Tất cả»');
+      if (r.allText !== (en ? 'All' : 'Tất cả')) throw new Error(`nhãn chip sai: ${r.allText}`);
+      if (r.chips !== 4) throw new Error(`cần 3 hướng + chip Tất cả, thấy ${r.chips}`);
+      if (!click) return;
+      await p.evaluate(() => { window.__ND_LOG__ = []; });
+      await p.click('.timeline-inner .option-all');
+      await wait(150);
+      const sent = await p.evaluate(() => (window.__ND_LOG__ ?? []).filter((m) => m.type === 'send').map((m) => m.text));
+      if (sent.length !== 1) throw new Error(`bấm «Tất cả» phải gửi đúng 1 tin, gửi ${sent.length}`);
+      if (!/1\) .*2\) .*3\) /.test(sent[0])) throw new Error(`tin «Tất cả» thiếu hướng: ${sent[0]}`);
+      if (!sent[0].startsWith(en ? 'Do all of the following' : 'Làm tất cả các hướng sau')) throw new Error(`mở đầu sai: ${sent[0].slice(0, 60)}`);
+    } else if (r.hasAll) throw new Error('kiểu «Chạy tiếp» không được có chip «Tất cả»');
+  };
 }
 
 async function runShots(browser) {

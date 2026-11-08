@@ -216,6 +216,8 @@ const vi = {
   // ── lựa chọn hướng đi (nút, thay cho đoạn "bước tiếp theo" trong chat) ──
   'options.title': 'Bạn muốn mình hiểu theo cách nào?',
   'options.hide': 'Ẩn các lựa chọn',
+  'options.all': 'Tất cả',
+  'options.allHint': 'Làm tất cả các hướng trên, theo thứ tự hợp lý, rồi báo kết quả từng hướng',
 
   // ── mời đánh giá (bản trình duyệt) ──
   'rating.title': 'Bạn thấy Locaith thế nào?',
@@ -1251,6 +1253,8 @@ const en: Record<I18nKey, string> = {
   'rating.close': 'Close',
   'options.title': 'Which reading did you mean?',
   'options.hide': 'Hide these options',
+  'options.all': 'All',
+  'options.allHint': 'Do every direction above in a sensible order, then report the result of each',
 
   'act.taskAdded': 'Added task: {title}',
   'act.skillLoaded': 'Loaded skill {skill}',
