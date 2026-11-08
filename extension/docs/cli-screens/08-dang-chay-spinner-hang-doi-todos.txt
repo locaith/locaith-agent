@@ -17,9 +17,9 @@
 
 ● Đã thêm tác vụ: Đọc cấu hình TypeScript, Sửa parseArgs, Thêm test cho --no-color, Chạy lại toàn   
   bộ test, Cập nhật tài liệu
-✳ Read(src/step0.ts)
+✻ Read(src/step0.ts)
 
-✶ Đang chạy Read… (1s · esc để dừng)
+✳ Đang chạy Read… (1s · esc để dừng)
   ⎿ ◐ Đọc cấu hình TypeScript
     ☐ Sửa parseArgs
     ☐ Thêm test cho --no-color

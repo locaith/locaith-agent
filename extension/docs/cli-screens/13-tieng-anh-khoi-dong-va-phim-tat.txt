@@ -18,9 +18,9 @@
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
  Shortcuts
  Enter send                                      Ctrl+J / Alt+Enter / \ then Enter  newline
- Esc interrupt · (idle) clear input · Esc×2 rewi…Ctrl+C clear / interrupt · again to exit
+ Esc stop · idle: clear · Esc×2 /rewind          Ctrl+C clear / interrupt · again to exit
  Ctrl+D exit on empty input                      ↑/↓ history · Ctrl+R reverse search
- Ctrl+A/E start/end · Ctrl+K/U/W delete · Alt+B/…Shift+Tab cycle permission mode
+ Ctrl+A/E/K/U/W · Alt+B/F emacs keys             Shift+Tab cycle permission mode
  / commands · @ files · ! run shell              Ctrl+O expand results · Ctrl+T todo panel
  Ctrl+L redraw · Ctrl+V paste image
   ? for shortcuts                                            locaith-v5-flash · context 4% · ⎇ main 

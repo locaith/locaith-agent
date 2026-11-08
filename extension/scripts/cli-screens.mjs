@@ -195,6 +195,19 @@ const SCENES = [
     },
   },
   {
+    name: '08b-cho-lau-nhan-vat-cho',
+    cols: 100,
+    rows: 30,
+    args: ['--speed', '6'],
+    async run(s) {
+      await wait(s, 'Nhập việc cần làm');
+      s.write('viết một câu trả lời dài giúp mình' + ENTER);
+      await wait(s, 'esc để dừng');
+      await sleep(10000);
+      await s.settle(200);
+    },
+  },
+  {
     name: '09-menu-lenh-gach-cheo',
     cols: 100,
     rows: 24,

@@ -16,7 +16,7 @@
 > chạy test giúp mình
 
 ● Chạy bộ test để xem hiện trạng.
-✽ Bash(npm test -- --reporter=dot)
+✢ Bash(npm test -- --reporter=dot)
 
 ╭─ Chạy lệnh ──────────────────────────────────────────────────────────────────────────────────────╮
 │ Cho phép chạy lệnh?                                                                              │
@@ -24,7 +24,7 @@
 │ $ npm test -- --reporter=dot                                                                     │
 │                                                                                                  │
 │ ❯ 1. Có                                                                                          │
-│   2. Có, và không hỏi lại cho `run_command(npm test:*)` trong phiên này                          │
+│   2. Có, và không hỏi lại cho run_command(npm test:*) trong phiên này                            │
 │   3. Không, và nói Locaith làm khác đi                                                           │
 ╰─ ↑↓ chọn · Enter xác nhận · y/a/n · Esc từ chối ─────────────────────────────────────────────────╯
                                                             locaith-v5-flash · ngữ cảnh 4% · ⎇ main 

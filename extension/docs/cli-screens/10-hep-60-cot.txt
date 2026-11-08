@@ -10,8 +10,10 @@
 │  ▀████████████▀                                          │
 │                                                          │
 ╰──────────────────────────────────────────────────────────╯
-  /help · @ nhắc tệp · ! chạy shell · Shift+Tab đổi chế độ… 
-  Mẹo: /resume mở lại một phiên cũ · /compact nén ngữ cảnh  
+  /help · @ nhắc tệp · ! chạy shell · Shift+Tab đổi chế     
+  độ · Esc dừng · Ctrl+O mở rộng kết quả
+  Mẹo: /resume mở lại một phiên cũ · /compact nén ngữ       
+  cảnh
 
 > Chào bạn, hãy xem giúp mình dự án này
 
