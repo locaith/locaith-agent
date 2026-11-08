@@ -165,6 +165,7 @@ export function renderFooter(o: FooterOptions): string {
     if (o.expanded) parts.push(th.muted(tr('tui.hint.expanded')));
     left = parts.join(sep);
   }
+  if (left) left = '  ' + left;
   // bớt phần phải cho vừa
   let r = right.slice();
   const fit = (): boolean => stringWidth(left) + 2 + stringWidth(r.join(sep)) <= W;
