@@ -174,8 +174,8 @@ describe('CSS & cài đặt', () => {
     expect(actorCss).toMatch(/\.lo-actor \.lo-spin\s*\{\s*filter:\s*none/);
   });
 
-  it('dòng chờ dùng LoActor khi bật cài đặt, giữ LoSpinner khi tắt', () => {
-    expect(turn).toMatch(/settings\.workingCharacters !== false \? <LoActor[^>]*\/> : <LoSpinner size=\{15\} \/>/);
+  it('dòng chờ dùng LoActor khi bật cài đặt (và không ở chế độ nhẹ), giữ LoSpinner khi tắt', () => {
+    expect(turn).toMatch(/settings\.workingCharacters !== false && settings\.liteMode !== true \? <LoActor[^>]*\/> : <LoSpinner size=\{15\} \/>/);
   });
 
   it('cài đặt locaithAgent.ui.workingCharacters: package.json (mặc định true) + nls vi/en + i18n vi/en + giao thức + hai nơi đọc cấu hình', () => {
