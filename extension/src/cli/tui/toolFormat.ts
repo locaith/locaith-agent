@@ -200,7 +200,7 @@ export function renderToolResult(b: ToolBlock, o: ToolRenderOptions): string[] {
     return out;
   }
   const output = (b.output ?? '').replace(/\r\n?/g, '\n').replace(/\s+$/, '');
-  if (b.state === 'error') {
+  if (b.state === 'error' && v.kind !== 'bash') {
     const lines = output.split('\n').filter((l) => l.trim());
     const head = lines[0] ?? b.summary ?? tr('tui.tool.failed');
     put(`${tr('tui.tool.failed')}: ${head}`, th.err);
@@ -239,8 +239,9 @@ export function renderToolResult(b: ToolBlock, o: ToolRenderOptions): string[] {
     }
     case 'bash': {
       const lines = output ? output.split('\n') : [];
+      if (b.state === 'error') put(tr('tui.tool.failed') + (b.summary ? ` ${th.g.sep} ${b.summary}` : ''), th.err);
       if (!lines.length) {
-        put(b.summary || tr('tui.tool.empty'), th.muted);
+        if (b.state !== 'error') put(b.summary || tr('tui.tool.empty'), th.muted);
         return out;
       }
       const cap = o.expanded ? lines.length : 8;

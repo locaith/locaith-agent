@@ -107,7 +107,8 @@ describe('toolFormat', () => {
     expect(rows[rows.length - 1]).toBe('    dòng 20');
     const err = renderToolBlock(tool({ name: 'run_command', args: { command: 'npm test' }, state: 'error', output: 'FAIL x\nstack' }), { theme: color, width: 80 });
     expect(err[0]).toContain('\x1b[38;2;248;113;113m');
-    expect(stripAnsi(err[1])).toBe('  ⎿ Lỗi: FAIL x');
+    expect(stripAnsi(err[1])).toBe('  ⎿ Lỗi');
+    expect(stripAnsi(err[2])).toBe('    FAIL x');
   });
   it('Update + diff', () => {
     const rows = renderToolBlock(tool({ name: 'edit_file', args: { path: 'src/a.ts' }, diff }), { theme: th, width: 80 }).map(stripAnsi);

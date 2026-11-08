@@ -46,6 +46,8 @@ export class Screen {
   private timer: ReturnType<typeof setTimeout> | null = null;
   private lastFrame = 0;
   private closed = false;
+  private suspended = false;
+  private provider: (() => string[]) | null = null;
   private resizeHandler: (() => void) | null = null;
   private readonly sync: boolean;
   private readonly minFrameMs: number;
@@ -90,6 +92,12 @@ export class Screen {
     this.schedule();
   }
 
+  /** Nguồn dòng sống tính LÚC VẼ (mỗi khung một lần, gộp nhiều thay đổi). */
+  setProvider(fn: () => string[]): void {
+    this.provider = fn;
+    this.schedule();
+  }
+
   get liveLines(): readonly string[] {
     return this.live;
   }
@@ -110,7 +118,7 @@ export class Screen {
       clearTimeout(this.timer);
       this.timer = null;
     }
-    if (this.closed) return;
+    if (this.closed || this.suspended) return;
     this.draw();
   }
 
@@ -137,7 +145,15 @@ export class Screen {
     const rows = this.rows;
     const commit = this.pending;
     this.pending = [];
-    let live = this.live.length ? this.live : [''];
+    let src = this.live;
+    if (this.provider) {
+      try {
+        src = this.provider();
+      } catch {
+        src = this.live;
+      }
+    }
+    let live = src.length ? src : [''];
     // vùng sống không được cao hơn màn hình: bỏ bớt phần trên (nội dung dở), giữ phần dưới (ô nhập + dải trạng thái)
     const cap = Math.max(1, rows - 1);
     if (live.length > cap) live = live.slice(live.length - cap);
@@ -210,6 +226,27 @@ export class Screen {
     this.prevRows = 0;
     this.prevLive = [];
     this.forceFull = true;
+    this.schedule();
+  }
+
+  /** Tạm ngưng vẽ và xoá vùng sống (để nhường terminal cho trình soạn thảo ngoài). */
+  suspend(): void {
+    if (this.closed || this.suspended) return;
+    this.flush();
+    this.suspended = true;
+    let out = this.sync ? SYNC_ON : '';
+    if (this.prevRows > 1) out += `${CSI}${this.prevRows - 1}A`;
+    out += `\r${ED0}${this.sync ? SYNC_OFF : ''}`;
+    this.write(out);
+    this.prevRows = 0;
+    this.prevLive = [];
+  }
+
+  resume(): void {
+    if (this.closed || !this.suspended) return;
+    this.suspended = false;
+    this.forceFull = true;
+    this.write(HIDE_CURSOR);
     this.schedule();
   }
 
