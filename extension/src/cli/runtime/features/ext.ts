@@ -8,6 +8,7 @@ import type { AgentServices } from '../../../core/agents/runner';
 import type { ToolRegistry } from '../../../core/engine/toolRegistry';
 import type { SessionState } from '../../../core/engine/types';
 import type { PermissionRequest, TItem } from '../../../shared/protocol';
+import { registerStrings, t } from '../../i18n';
 import type { AskAnswer, AskRequest, FeatureContext, SlashRunContext } from '../contract';
 
 export interface BeforeSubmitResult {
@@ -46,3 +47,24 @@ export type AskInit = AskRequest extends infer T ? (T extends { id: string } ? O
 
 export const askUser = (ctx: Pick<FeatureContext, 'ask'>, req: AskInit): Promise<AskAnswer> => ctx.ask(req as never);
 export const askSlash = (ctx: Pick<SlashRunContext, 'ask'>, req: AskInit): Promise<AskAnswer> => ctx.ask(req as never);
+
+/**
+ * Bảng chuỗi vi/en của một mô-đun: `const tr = makeTr('rewind', { title: ['Tiêu đề', 'Title'] })` rồi `tr(lang, 'title', { n: 1 })`.
+ * Đăng ký vào i18n dưới `features.<ns>.<key>` (cùng chỗ với registerStrings('features', …)).
+ */
+export function makeTr(ns: string, table: Record<string, readonly [string, string]>): (lang: 'vi' | 'en', key: string, vars?: Record<string, string | number>) => string {
+  const vi: Record<string, string> = {};
+  const en: Record<string, string> = {};
+  for (const [k, [v, e]] of Object.entries(table)) {
+    vi[`${ns}.${k}`] = v;
+    en[`${ns}.${k}`] = e;
+  }
+  registerStrings('features', { vi, en });
+  return (lang, key, vars) => t(`features.${ns}.${key}`, vars, lang);
+}
+
+/** Cắt chữ một dòng cho danh sách. */
+export function oneLine(s: string, n = 80): string {
+  const x = s.replace(/\s+/g, ' ').trim();
+  return x.length > n ? `${x.slice(0, n - 1)}…` : x;
+}
