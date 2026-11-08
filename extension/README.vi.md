@@ -44,7 +44,7 @@ Bản **0.5.0** đã đăng lên Marketplace lúc đầu **chưa có** tính nă
 - **Chợ plugin** — danh sách plugin chính thức của Anthropic; bấm Cài để tải về (mặc định tắt cho tới khi bạn bật). Dùng kỹ năng, agent, lệnh, MCP của plugin; hooks và LSP không chạy.
 - **Swarm** — mức suy luận thứ sáu (`/thinking swarm`): suy luận tối đa + `workflow_run` luôn sẵn sàng + chỉ dẫn chia việc cho nhiều agent con rồi kiểm chứng chéo. Mặc định 300 agent / 16 cùng lúc / 5 triệu token; mỗi lần chạy vẫn cần bạn duyệt; rất tốn token.
 - **Cầu nối Chrome** — điều khiển trang trên Chrome thật qua extension Locaith AI cho Chrome 0.4.2: mã ghép đôi, chỉ nghe trên 127.0.0.1, mỗi trang web được hỏi riêng trong Chrome, công cụ `chrome` (ẩn cho tới khi nạp kỹ năng `chrome-bridge`; agent con không dùng được).
-- **Giấy phép** — extension nay theo **Giấy phép Freeware của Locaith** (miễn phí cho cá nhân và kinh doanh; được chia sẻ gói nguyên vẹn; không sửa đổi, dịch ngược, bán lại) thay cho "UNLICENSED"; kèm `LICENSE.txt` và `THIRD_PARTY_NOTICES.md` (sinh từ các thư viện và phông chữ thực sự nằm trong gói).
+- **Giấy phép** — (lịch sử, từ 0.5.1) extension theo **Giấy phép Freeware của Locaith** thay cho "UNLICENSED"; kèm `LICENSE.txt` và `THIRD_PARTY_NOTICES.md` (sinh từ các thư viện và phông chữ thực sự nằm trong gói). Từ sau 0.7.4: mã nguồn công khai theo FSL-1.1-ALv2 — xem mục «Giấy phép» ở cuối tài liệu.
 
 ## Mới trong 0.5.0
 
@@ -326,4 +326,4 @@ Source code và build scripts không được đóng gói trong bản VSIX này.
 
 ## Giấy phép
 
-Locaith AI Agent **miễn phí sử dụng** (cá nhân lẫn kinh doanh) theo **Giấy phép Freeware của Locaith** — xem `LICENSE.txt`: được cài đặt, dùng và chia sẻ gói cài đặt nguyên vẹn; không được sửa đổi, dịch ngược, bán lại hay đóng gói lại khi chưa có đồng ý bằng văn bản của Locaith. Thành phần bên thứ ba giữ giấy phép riêng: thư viện mã nguồn mở và phông chữ ở `THIRD_PARTY_NOTICES.md`, kỹ năng trong Chợ ở `market/NOTICE.md`. Bản tiếng Anh của `LICENSE.txt` là bản có hiệu lực.
+Locaith AI Agent **miễn phí sử dụng** (cá nhân lẫn kinh doanh). Mã nguồn công khai trên GitHub (`github.com/locaith/locaith-agent`), và mọi phiên bản sau 0.7.4 theo **Functional Source License 1.1** (`FSL-1.1-ALv2`, xem `LICENSE.txt`): được dùng, sao chép, sửa đổi và chia sẻ cho mọi mục đích TRỪ «Competing Use» — đem phần mềm cho người khác dùng trong một sản phẩm hay dịch vụ thương mại thay thế nó; hai năm sau khi mỗi phiên bản được phát hành, bản đó còn dùng được theo Apache License 2.0. Các phiên bản tới hết 0.7.4 giữ **Giấy phép Freeware của Locaith**. Thành phần bên thứ ba giữ giấy phép riêng: thư viện mã nguồn mở và phông chữ ở `THIRD_PARTY_NOTICES.md`, kỹ năng trong Chợ ở `market/NOTICE.md`. Bản tiếng Anh của `LICENSE.txt` là bản có hiệu lực.

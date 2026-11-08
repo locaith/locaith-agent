@@ -1,5 +1,9 @@
 # Changelog
 
+## License change - 2026-11-08 (repository; packages from the next release)
+
+- **The source code and every new version are under the Functional Source License (FSL-1.1-ALv2).** You may use, copy, modify and share it for any purpose except a Competing Use (offering it to others in a commercial product or service that substitutes for it); each version also becomes available under the Apache License 2.0 two years after it is published. Packages published up to Locaith AI Agent 0.7.4 and locaith-cli 0.4.3 keep the Locaith Freeware License (`LICENSE-FREEWARE.txt`). The repository gained `SECURITY.md` and `CONTRIBUTING.md`, and a test that needs the generated Market folder now skips itself on a clean checkout.
+
 ## locaith-cli 0.4.3 - 2026-11-08 (PyPI)
 
 - **A reply no longer vanishes when the model is slow to start.** If the first word took longer than about 0.7 s — Claude after a long prompt, a busy gateway, a retry after "server busy", a queue — the terminal showed the "thinking" line and then nothing: neither the answer nor the error, even though the reply was saved in the session. The temporary status line was being stepped over, and everything printed after it was skipped. Replies and error messages now always appear (checked in a real terminal against a local server that answers after 1.8 s, with and without an error).

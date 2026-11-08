@@ -66,7 +66,10 @@ const PLUGIN_MONOGRAM: [string, string][] = [
   ['oracle-samples', 'oracle-samples/oracle-samples'],
 ];
 
-const SKILL_SOURCES = fs.readdirSync(path.join(__dirname, '../../market/licenses'));
+// `market/` do scripts/build-market.mjs sinh ra và KHÔNG nằm trong kho công khai: thiếu thì chỉ bỏ qua ca duyệt các nguồn kỹ năng đóng gói sẵn.
+const MARKET_LICENSES = path.join(__dirname, '../../market/licenses');
+const HAS_MARKET = fs.existsSync(MARKET_LICENSES);
+const SKILL_SOURCES = HAS_MARKET ? fs.readdirSync(MARKET_LICENSES) : [];
 
 describe('kho logo thương hiệu', () => {
   it('mọi mục trong kho kết nối MCP đều có logo, trừ danh sách monogram có chủ đích', () => {
@@ -85,7 +88,7 @@ describe('kho logo thương hiệu', () => {
     for (const [name, origin] of PLUGIN_MONOGRAM) expect(brandFor({ id: name, name, origin }), name).toBeUndefined();
   });
 
-  it('nguồn kỹ năng: hãng có logo, cộng đồng và hãng đã gỡ logo dùng monogram', () => {
+  it.skipIf(!HAS_MARKET)('nguồn kỹ năng: hãng có logo, cộng đồng và hãng đã gỡ logo dùng monogram', () => {
     const noLogo = new Set(['obra-superpowers', 'wshobson-agents', 'twilio-skills']); // twilio-skills: logo Twilio đã gỡ
     for (const src of SKILL_SOURCES) {
       if (noLogo.has(src)) expect(brandFor({ origin: src }), src).toBeUndefined();
