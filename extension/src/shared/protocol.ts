@@ -413,6 +413,10 @@ export interface UiSettings {
   codeFont: UiCodeFont;
   /** Hiện khối "Suy nghĩ" thô khi hãng trả về. */
   showThinking: boolean;
+  /** (0.7.2) Artifact HTML mở ở đâu khi bấm nút chính / tự mở: trình duyệt (mặc định) hoặc tab bên cạnh VS Code. */
+  htmlOpenIn: 'browser' | 'vscode';
+  /** (0.7.2) Chế độ nhẹ: tắt hiệu ứng (shimmer, quầng sáng), không tự xem trước media, chỉ lưu bản xem trước nhỏ của ảnh. */
+  liteMode: boolean;
 }
 
 export interface SessionSummary {
@@ -1188,6 +1192,8 @@ export const DEFAULT_UI_SETTINGS: UiSettings = {
   lineHeight: 1.65,
   codeFont: 'jetbrains-mono',
   showThinking: true,
+  htmlOpenIn: 'browser',
+  liteMode: false,
 };
 
 export const THINKING_LEVELS: ThinkingLevel[] = ['off', 'low', 'medium', 'high', 'max', 'swarm'];

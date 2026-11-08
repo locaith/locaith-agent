@@ -758,6 +758,20 @@
           "scope": "machine",
           "markdownDescription": "%cfg.artifactsAutoOpen%"
         },
+        "locaithAgent.artifacts.htmlOpenIn": {
+          "type": "string",
+          "enum": [
+            "browser",
+            "vscode"
+          ],
+          "enumDescriptions": [
+            "%cfg.artifactsHtmlOpenIn.browser%",
+            "%cfg.artifactsHtmlOpenIn.vscode%"
+          ],
+          "default": "browser",
+          "scope": "machine",
+          "markdownDescription": "%cfg.artifactsHtmlOpenIn%"
+        },
         "locaithAgent.baseUrls": {
           "type": "object",
           "additionalProperties": {

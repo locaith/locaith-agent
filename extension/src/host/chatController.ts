@@ -14,6 +14,7 @@ import { hooksSubAgentExtension } from './extensions/hooks'; // (lane:hooks)
 import type { HookService } from '../core/hooks/service'; // (lane:hooks)
 import { handleBgTaskMessage, registerTasksSlash, type BgTasksBridge } from './tasksSlash'; // (lane:bg-tasks)
 import { getTaskManager } from '../core/tasks/backgroundTasks'; // (lane:bg-tasks)
+import { autoOpenTarget } from '../shared/artifactOpen'; // (lane:v072-fixes)
 import { openExternalOnce } from '../core/host/openOnce'; // (lane:customer-bugs)
 import { findToolImage } from '../shared/toolImages'; // (lane:customer-bugs)
 import { loadProjectInstructions } from '../core/engine/instructions';
@@ -934,17 +935,6 @@ export class ChatController implements vscode.Disposable {
     }
   }
 
-  /**
-   * HTML do model viết có chạy script. Nội dung model đọc từ web/tệp lạ có thể ép nó dựng một artifact độc hại, nên mặc định
-   * chỉ tự mở loại tĩnh (SVG, Markdown); HTML phải do người dùng bấm "Mở". Nhà cung cấp demo (kịch bản của chính extension) được miễn.
-   */
-  private shouldAutoOpenArtifact(type: string): boolean {
-    const policy = this.d.config.artifactsAutoOpen();
-    if (policy === 'never') return false;
-    if (policy === 'always' || type !== 'html') return true;
-    return this.session.provider === 'demo';
-  }
-
   /** Sự kiện từ engine: chuyển tiếp lên giao diện và xử lý các tác dụng phụ ở lớp host. */
   private onEngineEvent(ev: UiEvent): void {
     this.emit(ev);
@@ -952,15 +942,15 @@ export class ChatController implements vscode.Disposable {
       case 'artifact': {
         const rec = this.session.artifacts[ev.artifactId];
         if (!rec || ev.state !== 'ready') break;
-        // Chính sách "browser": mở bằng Chrome/Edge (khách báo tab bên cạnh của VS Code khó dùng cho HTML).
-        const inBrowser = this.d.config.artifactsAutoOpen() === 'browser';
+        // (0.7.2) Nơi tự mở: `artifacts.autoOpen` quyết định CÓ mở không; HTML mở bằng trình duyệt hay VS Code theo `artifacts.htmlOpenIn` (mặc định trình duyệt).
+        const target = autoOpenTarget(this.d.config.artifactsAutoOpen(), rec.type, this.d.config.htmlOpenIn(), this.session.provider === 'demo');
         if (this.seenArtifacts.has(rec.id)) {
           this.d.artifacts.refresh(rec);
-          if (inBrowser) void this.d.artifacts.openInBrowser?.(rec); // bản mới của artifact: mở lại để thấy cập nhật
+          if (target === 'browser') void this.d.artifacts.openInBrowser?.(rec); // bản mới của artifact: mở lại để thấy cập nhật
         } else {
           this.seenArtifacts.add(rec.id);
-          if (inBrowser) void this.d.artifacts.openInBrowser?.(rec);
-          else if (this.shouldAutoOpenArtifact(rec.type)) this.d.artifacts.open(rec, { preserveFocus: true }); // tự mở khung xem trước bên cạnh
+          if (target === 'browser') void this.d.artifacts.openInBrowser?.(rec);
+          else if (target === 'vscode') this.d.artifacts.open(rec, { preserveFocus: true }); // tự mở khung xem trước bên cạnh
         }
         break;
       }

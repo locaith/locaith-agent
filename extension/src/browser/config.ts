@@ -90,6 +90,8 @@ export function sanitizeConfig(raw: unknown): Stored {
       lineHeight: clamp(ui.lineHeight, 1.3, 2.2, dU.lineHeight),
       codeFont: oneOf(ui.codeFont, CODE_FONTS, dU.codeFont),
       showThinking: bool(ui.showThinking, dU.showThinking),
+      htmlOpenIn: oneOf(ui.htmlOpenIn, ['browser', 'vscode'] as const, dU.htmlOpenIn),
+      liteMode: bool(ui.liteMode, dU.liteMode),
     },
     browser: {
       defaultMode: oneOf(br.defaultMode, PERMISSION_MODES, dB.defaultMode),
