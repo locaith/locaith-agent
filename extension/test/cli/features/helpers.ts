@@ -101,7 +101,7 @@ export class FakeFeatureContext implements FeatureContextExt {
     this.interactive = o.interactive ?? true;
     this.trusted = o.trusted ?? true;
     this.sess = newSession({ id: 's_test1', provider: 'fake', model: 'fake-model' });
-    this.host = new NodeToolHost({ roots: [this.cwd], extraReadRoots: this.readRoots, onLog: (level, message) => this.logs.push({ level, message }) });
+    this.host = new NodeToolHost({ roots: [this.cwd], extraReadRoots: this.readRoots, shellPreference: process.platform === 'win32' ? 'cmd' : 'sh', onLog: (level, message) => this.logs.push({ level, message }) });
     (this.host as { homeDir: string }).homeDir = this.home;
     const file = (scope: Scope): string => (scope === 'user' ? path.join(this.home, '.locaith', 'settings.json') : path.join(this.cwd, '.locaith', scope === 'project' ? 'settings.json' : 'settings.local.json'));
     for (const [scope, val] of [['user', o.user], ['project', o.project], ['local', o.local]] as const) {
