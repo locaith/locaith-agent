@@ -162,7 +162,8 @@ describe('thành phần: cấu trúc DOM đơn giản, tên lớp rõ (trang Rem
     expect(sources.user).toMatch(/<MessageActionSlot>[\s\S]*<MessageMenu[\s\S]*<\/MessageActionSlot>/);
     expect(sources.composer).toMatch(/<RunClock view=\{view\} \/>/);
     expect(sources.clock).toMatch(/runningSince\(view\)/);
-    expect(sources.turn).toMatch(/<LoSpinner size=\{15\} \/>\s*<span class="cc-working-label">/);
+    // (0.7.2) LoActor thay LoSpinner ở dòng chờ khi bật cài đặt; tắt thì vẫn đúng LoSpinner 15 px như cũ
+    expect(sources.turn).toMatch(/<LoSpinner size=\{15\} \/>\}?\s*<span class="cc-working-label">/);
     expect(css).toMatch(/\.cc-working-label\s*\{[^}]*font-weight:\s*600/);
   });
 

@@ -338,6 +338,11 @@
           "default": true,
           "markdownDescription": "%cfg.showThinking%"
         },
+        "locaithAgent.ui.workingCharacters": {
+          "type": "boolean",
+          "default": true,
+          "markdownDescription": "%cfg.workingCharacters%"
+        },
         "locaithAgent.agent.permissionMode": {
           "type": "string",
           "enum": [

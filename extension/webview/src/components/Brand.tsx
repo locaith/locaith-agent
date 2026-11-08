@@ -22,6 +22,15 @@ export function LoDefs() {
           <stop offset="0.5" stop-color="#ffffff" stop-opacity="0.92" />
           <stop offset="1" stop-color="#ffffff" stop-opacity="0" />
         </linearGradient>
+        {/* (0.7.2) nhân vật chờ — gradient nét (hộp vẽ 64×64) và chùm sáng drone */}
+        <linearGradient id="lo-cg" gradientUnits="userSpaceOnUse" x1="0" y1="5" x2="0" y2="60">
+          <stop offset="0" stop-color="#22bcec" />
+          <stop offset="1" stop-color="#625aec" />
+        </linearGradient>
+        <linearGradient id="lo-beam" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" stop-color="#22bcec" stop-opacity="0.55" />
+          <stop offset="1" stop-color="#22bcec" stop-opacity="0" />
+        </linearGradient>
         <clipPath id="lo-clip">
           <path d={LO_PATH} clip-rule="evenodd" />
         </clipPath>

@@ -60,6 +60,7 @@ const UI_KEYS: Record<keyof UiSettings, string> = {
   lineHeight: 'ui.lineHeight',
   codeFont: 'ui.codeFont',
   showThinking: 'ui.showThinking',
+  workingCharacters: 'ui.workingCharacters',
 };
 
 /** Đọc cấu hình `locaithAgent.*` thành các kiểu có kiểu rõ ràng. */
@@ -94,6 +95,7 @@ export class ConfigService {
       lineHeight: clamp(c.get<number>('ui.lineHeight', d.lineHeight), 1.3, 2.2),
       codeFont: c.get('ui.codeFont', d.codeFont),
       showThinking: c.get('ui.showThinking', d.showThinking),
+      workingCharacters: c.get('ui.workingCharacters', d.workingCharacters),
     };
   }
 

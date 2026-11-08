@@ -26,6 +26,7 @@
   "cfg.fontSize": "Cỡ chữ của khung chat (px).",
   "cfg.lineHeight": "Giãn dòng. Tiếng Việt nhiều dấu chồng nên nên để từ 1.6 trở lên.",
   "cfg.codeFont": "Font chữ cho khối mã nguồn.",
+  "cfg.workingCharacters": "Khi chờ lâu, logo Lo biến hình thành nhân vật nhỏ (chó robot, robot người, drone, tên lửa) ở dòng \"đang xử lý\". Tắt để chỉ còn logo. Tự tắt khi hệ điều hành bật giảm chuyển động.",
   "cfg.showThinking": "Hiện khối \"Suy nghĩ\" khi nhà cung cấp trả về nội dung suy luận.",
   "cfg.permissionMode": "Chế độ quyền mặc định cho cuộc trò chuyện mới.",
   "cfg.hooks": "Hook của bạn: lệnh shell gắn vào vòng đời trợ lý (SessionStart, UserPromptSubmit, PreToolUse, PostToolUse, Stop, PreCompact, SessionEnd, Notification), cùng định dạng với Claude Code: `{ \"PreToolUse\": [{ \"matcher\": \"run_command|edit_file\", \"hooks\": [{ \"type\": \"command\", \"command\": \"...\", \"timeout\": 60 }] }] }`. Hook cấp người dùng chạy luôn; hook của dự án nằm ở `.locaith/settings.json` và chỉ chạy khi workspace tin cậy và bạn đã xác nhận. Gõ `/hooks` trong khung chat để xem.",
