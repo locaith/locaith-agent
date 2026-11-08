@@ -2,7 +2,7 @@
   "name": "locaith-agent",
   "displayName": "Locaith AI Agent",
   "description": "%ext.description%",
-  "version": "0.7.5",
+  "version": "0.7.6",
   "publisher": "LocaithAI",
   "license": "SEE LICENSE IN LICENSE.txt",
   "engines": {
@@ -954,9 +954,11 @@
     "watch:browser": "node esbuild.browser.mjs --watch",
     "test:browser-e2e": "vitest run --config vitest.e2e.config.mts",
     "verify:browser": "node scripts/verify-browser-package.mjs dist-browser",
-    "package:browser": "npm run typecheck && node esbuild.browser.mjs --production && node scripts/pack-browser.mjs",
+    "package:browser": "npm run typecheck && npm run notices:browser:check && node esbuild.browser.mjs --production && node scripts/pack-browser.mjs",
     "build:market": "node scripts/build-market.mjs",
     "notices": "node scripts/gen-notices.mjs",
+    "notices:browser": "node esbuild.browser.mjs --out=dist-browser-notices && node scripts/gen-notices.mjs --browser",
+    "notices:browser:check": "node esbuild.browser.mjs --out=dist-browser-notices && node scripts/gen-notices.mjs --browser --check",
     "build:cli": "esbuild src/cli/index.ts --bundle --platform=node --format=cjs --target=node20 --loader:.md=text --outfile=dist-cli/locaith.cjs",
     "cli": "node dist-cli/locaith.cjs"
   },
