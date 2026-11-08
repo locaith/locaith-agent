@@ -163,7 +163,7 @@ describe('locaith whoami', () => {
       expect(text).toContain('Gói: free');
       expect(text).toContain('không giới hạn');
       expect(text).not.toContain('cổng chưa');
-      expect(text).toContain('Đồng ý thông báo dữ liệu: rồi');
+      expect(text).toContain('Đồng ý thông báo dữ liệu: đã đồng ý');
     } finally {
       restore();
     }
