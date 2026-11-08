@@ -1,0 +1,53 @@
+╭──────────────────────────────────────────────────────────────────────────────────────────────────╮
+│                                                                                                  │
+│      ▄████▄                                                                                      │
+│     ███▀▀███                                                                                     │
+│    ███▀  ███                                                                                     │
+│    ███  ▄██                  Locaith CLI v0.4.0                                                  │
+│   ███▀  ███     ▄▄██▄▄▄      Trợ lý lập trình trong terminal                                     │
+│   ███  ███    ██████████▄                                                                        │
+│  ███▀  ███   ███▀     ▀██▄   Tài khoản: tu***@gmail.com · Plus                                   │
+│ ▄███  ███▄ ▄▄███       ███   Model: locaith-v5-flash                                             │
+│ ███   ██████████▄     ▄██▀   Thư mục: C:/Dev/demo-app (⎇ main)                                   │
+│ ███▄     ▀▀▀▀▀▀█████████▀                                                                        │
+│  ████▄▄▄▄▄▄▄▄▄▄▄███████▀                                                                         │
+│   ▀▀███████████████▀▀                                                                            │
+│                                                                                                  │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
+  /help · @ nhắc tệp · ! chạy shell · Shift+Tab đổi chế độ · Esc dừng · Ctrl+O mở rộng kết quả      
+  Mẹo: /resume mở lại một phiên cũ · /compact nén ngữ cảnh
+
+> nén ngữ cảnh đi
+
+● Ngữ cảnh đã khá đầy, mình nén lại trước khi làm tiếp.
+
+✻ Đã nén cuộc trò chuyện · tự động · giải phóng 968k token · lược 31 kết quả công cụ cũ
+✔ Kiểm tra độc lập: đạt (8s)
+
+● Tiếp tục công việc.
+
+> có lỗi
+
+● Thử tải trang tài liệu.
+
+● Fetch(https://example.invalid/docs)
+  ⎿ Lỗi: getaddrinfo ENOTFOUND example.invalid
+        at GetAddrInfoReqWrap.onlookup
+
+✘ Không kết nối được tới cổng locaith.ai (ECONNRESET). Đang thử lại sau 4 giây…
+  Gõ /doctor để chẩn đoán, hoặc thử lại.
+
+> agent song song
+
+● Giao việc khảo sát cho một agent con.
+
+● Agent(khảo sát vòng import)
+  ⎿ Xong (12 lệnh · 32k token · 5 giây)
+    Tìm thấy 3 vòng import
+
+● Agent con báo có 3 vòng import.
+
+╭──────────────────────────────────────────────────────────────────────────────────────────────────╮
+│ >  Nhập việc cần làm… / lệnh · @ tệp · ! shell                                                   │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
+  ? phím tắt                                                locaith-v5-flash · ngữ cảnh 5% · ⎇ main 

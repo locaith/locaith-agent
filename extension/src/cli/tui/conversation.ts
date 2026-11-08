@@ -233,16 +233,16 @@ export class Conversation {
           break;
         case 'tasks':
           this.flushGroup();
-          this.emit('tool', [`${this.th.ok(this.th.g.bullet)} ${this.th.muted(tr('tui.tool.tasks.added', { list: b.added.join(', ') }))}`]);
+          this.emit('tool', this.bulletLines(this.th.muted(tr('tui.tool.tasks.added', { list: b.added.join(', ') }))));
           break;
         case 'skill':
           this.flushGroup();
-          this.emit('tool', [`${this.th.ok(this.th.g.bullet)} ${this.th.muted(tr('tui.tool.skill.loaded', { name: b.skill }))}`]);
+          this.emit('tool', this.bulletLines(this.th.muted(tr('tui.tool.skill.loaded', { name: b.skill }))));
           break;
         case 'artifact':
           if (b.state === 'ready' || final) {
             this.flushGroup();
-            this.emit('tool', [`${this.th.ok(this.th.g.bullet)} ${tr('tui.tool.artifact', { title: b.title })}`]);
+            this.emit('tool', this.bulletLines(tr('tui.tool.artifact', { title: b.title })));
           } else stop = true;
           break;
         case 'notice':
@@ -260,6 +260,11 @@ export class Conversation {
     }
     this.cur.cursor = i;
     if (final) this.flushGroup();
+  }
+
+  /** Dòng có ● đầu, ngắt dòng theo chiều rộng. */
+  private bulletLines(text: string): string[] {
+    return wrapAnsi(text, this.o.width() - 2, { first: this.th.ok(this.th.g.bullet) + ' ', rest: '  ' });
   }
 
   private commitTool(b: ToolBlock): void {

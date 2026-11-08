@@ -211,9 +211,9 @@ const SCENES = [
     rows: 60,
     args: ['--speed', '0.08'],
     async run(s) {
-      await wait(s, 'Nhập việc cần làm');
+      await wait(s, 'Nhập việc cần');
       s.write('Chào bạn, hãy xem giúp mình dự án này' + ENTER);
-      await wait(s, 'Bạn muốn mình làm luôn không?');
+      await wait(s, 'không?');
       await idle(s);
     },
   },

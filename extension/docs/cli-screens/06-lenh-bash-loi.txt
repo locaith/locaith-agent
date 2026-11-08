@@ -1,0 +1,37 @@
+╭──────────────────────────────────────────────────────────────────────────────────────────────────╮
+│                                                                                                  │
+│    ▄███▄                                                                                         │
+│   ▄█▀ ██             Locaith CLI v0.4.0                                                          │
+│   ██  ██             Trợ lý lập trình trong terminal                                             │
+│  ██▀ ██   ▄█████▄                                                                                │
+│  ██ ▄██  ██    ▀██   Tài khoản: tu***@gmail.com · Plus                                           │
+│ ██▀ ███████    ▄██   Model: locaith-v5-flash                                                     │
+│ ██▄       ▀█████▀    Thư mục: C:/Dev/demo-app (⎇ main)                                           │
+│  ▀████████████▀                                                                                  │
+│                                                                                                  │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
+  /help · @ nhắc tệp · ! chạy shell · Shift+Tab đổi chế độ · Esc dừng · Ctrl+O mở rộng kết quả      
+  Mẹo: /resume mở lại một phiên cũ · /compact nén ngữ cảnh
+
+> chạy test giúp mình
+
+● Chạy bộ test để xem hiện trạng.
+
+● Bash(npm test -- --reporter=dot)
+  ⎿ Lỗi
+     ✓ case 1
+     ✓ case 2
+     ✓ case 3
+     ✓ case 4
+    … +17 dòng (ctrl+o để mở rộng)
+     ✓ case 22
+
+     Test Files  1 failed | 3 passed (4)
+          Tests  1 failed | 19 passed (20)
+
+● Có 1 test lỗi trong app.test.ts. Mình xem lại parseArgs.
+
+╭──────────────────────────────────────────────────────────────────────────────────────────────────╮
+│ >  Nhập việc cần làm… / lệnh · @ tệp · ! shell                                                   │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
+  ? phím tắt                                                locaith-v5-flash · ngữ cảnh 5% · ⎇ main 
