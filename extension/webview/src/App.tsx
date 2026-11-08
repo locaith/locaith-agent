@@ -105,6 +105,13 @@ export function App() {
         case 'toast':
           addToast(m.level, m.text);
           break;
+        case 'cleanup_stats':
+          bus.cleanupStats.emit({ stats: m.stats, busy: m.busy, error: m.error });
+          break;
+        case 'focus_section':
+          setScreen('settings');
+          bus.focusSection.emit(m.section);
+          break;
         case 'test_result':
           bus.testResult.emit({ provider: m.provider, ok: m.ok, message: m.message });
           break;

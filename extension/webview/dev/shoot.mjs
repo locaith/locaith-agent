@@ -233,6 +233,12 @@ const SHOTS = [
   { name: '15-error-dark-420', q: { scenario: 'error', theme: 'dark' }, w: 420, h: 640 },
   // (lane:output-timeouts)
   // (0.7.2) bảng lựa chọn cuối hội thoại: nằm TRONG dòng hội thoại (không ở chân khung), có chip «Tất cả», phẳng
+  // (0.7.2) Dọn bộ nhớ trong Cài đặt + chế độ nhẹ
+  { name: 'cleanup-click-dark-420', q: { scenario: 'settings', theme: 'dark' }, w: 420, h: 900, act: assertCleanup({ click: true }) },
+  { name: 'cleanup-dark-420', q: { scenario: 'settings', theme: 'dark' }, w: 420, h: 900, act: assertCleanup() },
+  { name: 'cleanup-light-320', q: { scenario: 'settings', theme: 'light' }, w: 320, h: 900, act: assertCleanup() },
+  { name: 'cleanup-en-hc-420', q: { scenario: 'settings', theme: 'hc', lang: 'en' }, w: 420, h: 900, act: assertCleanup() },
+  { name: 'lite-media-dark-420', q: { scenario: 'media', theme: 'dark', lite: '1' }, w: 420, h: 900, act: assertLiteMedia },
   { name: 'options-all-dark-420', q: { scenario: 'options-directions', theme: 'dark' }, w: 420, h: 900, act: assertOptions({ all: true }) },
   { name: 'options-all-click-dark-420', q: { scenario: 'options-directions', theme: 'dark' }, w: 420, h: 900, act: assertOptions({ all: true, click: true }) },
   { name: 'options-all-light-420', q: { scenario: 'options-directions', theme: 'light' }, w: 420, h: 900, act: assertOptions({ all: true }) },
@@ -528,6 +534,49 @@ function assertOptions({ all, en = false, click = false }) {
       if (!sent[0].startsWith(en ? 'Do all of the following' : 'Làm tất cả các hướng sau')) throw new Error(`mở đầu sai: ${sent[0].slice(0, 60)}`);
     } else if (r.hasAll) throw new Error('kiểu «Chạy tiếp» không được có chip «Tất cả»');
   };
+}
+
+/** (0.7.2) Thẻ «Dọn dẹp bộ nhớ»: đủ 4 việc, có số liệu (MB), không tràn ngang; bấm nút gửi đúng `cleanup_run`. */
+function assertCleanup({ click = false } = {}) {
+  return async (p) => {
+    await p.waitForSelector('#cleanup .cleanup-figure', { timeout: 4000 });
+    await wait(400);
+    await p.evaluate(() => document.querySelector('#cleanup')?.scrollIntoView({ block: 'start' }));
+    await wait(200);
+    const r = await p.evaluate(() => {
+      const card = document.querySelector('#cleanup');
+      const sc = document.querySelector('.pane-scroll') || document.scrollingElement;
+      return {
+        rows: card ? card.querySelectorAll('.cleanup-row').length : 0,
+        figs: card ? [...card.querySelectorAll('.cleanup-figure')].map((e) => e.textContent.trim()) : [],
+        total: card?.querySelector('.cleanup-total strong')?.textContent.trim() ?? '',
+        overflowX: sc ? sc.scrollWidth - sc.clientWidth : -1,
+      };
+    });
+    if (r.rows !== 4) throw new Error(`cần 4 việc dọn, thấy ${r.rows}`);
+    if (r.figs.some((f) => !/(MB|KB)/.test(f))) throw new Error(`thiếu số liệu: ${JSON.stringify(r.figs)}`);
+    if (!/MB/.test(r.total)) throw new Error(`tổng sai: ${r.total}`);
+    if (r.overflowX > 1) throw new Error(`tràn ngang ${r.overflowX}px`);
+    if (!click) return;
+    await p.evaluate(() => { window.__ND_LOG__ = []; });
+    await p.click('#cleanup .cleanup-row .btn');
+    await wait(150);
+    const sent = await p.evaluate(() => (window.__ND_LOG__ ?? []).filter((m) => m.type === 'cleanup_run'));
+    if (sent.length !== 1 || sent[0].action !== 'images' || sent[0].days !== 30) throw new Error(`bấm «Xoá ảnh» phải gửi cleanup_run images 30, gửi ${JSON.stringify(sent)}`);
+  };
+}
+
+/** (0.7.2) Chế độ nhẹ: không tự nạp xem trước media; có nút «Xem trước»; <html> có lớp lite. */
+async function assertLiteMedia(p) {
+  await wait(500);
+  const r = await p.evaluate(() => ({
+    lite: document.documentElement.classList.contains('lite'),
+    tiles: document.querySelectorAll('.media-tile, .media-card').length,
+    buttons: document.querySelectorAll('.media-lite').length,
+  }));
+  if (!r.lite) throw new Error('thiếu lớp lite trên <html>');
+  if (r.tiles !== 0) throw new Error(`chế độ nhẹ vẫn tự xem trước ${r.tiles} tệp`);
+  if (r.buttons < 1) throw new Error('thiếu nút «Xem trước» trong chế độ nhẹ');
 }
 
 async function runShots(browser) {

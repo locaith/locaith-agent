@@ -419,6 +419,22 @@ export interface UiSettings {
   liteMode: boolean;
 }
 
+/** (0.7.2) Các việc dọn bộ nhớ trong Cài đặt. */
+export type CleanupAction = 'images' | 'sessions' | 'trash' | 'checkpoints';
+
+export interface CleanupStatsView {
+  /** Mọi cuộc trò chuyện đang có trong kho (mọi thư mục làm việc). */
+  sessions: { count: number; bytes: number };
+  /** Thùng rác của thư mục làm việc này. */
+  trash: { count: number; bytes: number };
+  /** Điểm quay lại (checkpoints): số phiên có dữ liệu + dung lượng. */
+  checkpoints: { sessions: number; bytes: number };
+  /** Ảnh trong lịch sử: số ảnh + dung lượng ước lượng giải phóng được khi xoá. */
+  images: { count: number; bytes: number };
+  /** Tự dọn ảnh cũ ở nền: số ngày (0 = tắt). */
+  autoCleanImagesDays: number;
+}
+
 export interface SessionSummary {
   id: string;
   title: string;
@@ -991,6 +1007,11 @@ export type HostMessage =
   // ── (lane:sessions-ux) ──
   /** Trả lời `search_sessions`: gửi dần theo lô (`done` = đã quét xong). `query` = đúng truy vấn đã hỏi (bỏ kết quả của truy vấn cũ). */
   | { type: 'session_search'; reqId: number; query: string; hits: SessionSearchHit[]; done: boolean }
+  // ── (0.7.2) Dọn bộ nhớ ──
+  /** Dung lượng đang dùng (trả lời `cleanup_stats` / sau mỗi lần dọn). `busy` = đang quét hoặc đang dọn. */
+  | { type: 'cleanup_stats'; stats?: CleanupStatsView; busy?: boolean; error?: string }
+  /** Cuộn tới một thẻ trong màn Cài đặt (lệnh `locaithAgent.cleanup` mở thẻ «Dọn dẹp bộ nhớ»). */
+  | { type: 'focus_section'; section: 'cleanup' }
   // ── (lane:customer-bugs) ──
   // ── (lane:gateway-client) ──
   // ── (lane:mcp-parity) ──
@@ -1145,6 +1166,9 @@ export type WebviewMessage =
   | { type: 'bg_task'; id: string; action: import('./bgTasks').BgTaskAction }
   // ── (lane:ide-context) ──
   | { type: 'set_editor_context'; on: boolean }
+  // ── (0.7.2) Dọn bộ nhớ: xin số liệu · chạy một việc dọn (host tự hỏi xác nhận có ghi dung lượng; webview không tự xoá được gì) ──
+  | { type: 'cleanup_stats' }
+  | { type: 'cleanup_run'; action: CleanupAction; days?: number }
   // ── (lane:sessions-ux) ──
   /** Rẽ nhánh cuộc đang mở thành cuộc mới, sau lượt của tin người dùng `itemId` (thiếu = từ cuối). */
   | { type: 'fork_session'; itemId?: string }

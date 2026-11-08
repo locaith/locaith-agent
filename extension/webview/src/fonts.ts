@@ -30,4 +30,6 @@ export function applyUiSettings(s: UiSettings, root: HTMLElement = document.docu
   style.setProperty('--nd-font-scale', String(FONT_SCALE[s.fontFamily] ?? 1));
   style.setProperty('--nd-line-height', String(s.lineHeight));
   root.lang = s.language;
+  // (0.7.2) Chế độ nhẹ: lớp `lite` trên <html> — base.css tắt hiệu ứng (shimmer, quầng sáng, chuyển động).
+  root.classList.toggle('lite', s.liteMode === true);
 }

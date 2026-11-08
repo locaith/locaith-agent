@@ -2871,3 +2871,80 @@ button.chip-main:hover {
   box-shadow: inset 2px 0 0 var(--danger);
   border-radius: 6px;
 }
+
+/* ── (0.7.2) Dọn dẹp bộ nhớ (Cài đặt) — PHẲNG: không vạch dọc, không khung lồng khung ── */
+.cleanup-card .cleanup-error {
+  color: var(--danger, #e5484d);
+  font-size: var(--nd-fs-sm);
+}
+.cleanup-total {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: var(--nd-fs-sm);
+  color: var(--fg-muted);
+}
+.cleanup-total strong {
+  color: var(--fg);
+}
+.cleanup-spacer {
+  flex: 1;
+}
+.cleanup-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 12px;
+  padding: 8px 0;
+}
+.cleanup-info {
+  flex: 1 1 200px;
+  min-width: 0;
+}
+.cleanup-label {
+  font-weight: 600;
+  font-size: var(--nd-fs-sm);
+  overflow-wrap: anywhere;
+}
+.cleanup-figure {
+  color: var(--accent-text);
+  font-size: var(--nd-fs-xs);
+}
+.cleanup-hint {
+  color: var(--fg-faint);
+  font-size: var(--nd-fs-xs);
+}
+.cleanup-act {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.cleanup-days {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: var(--nd-fs-xs);
+  color: var(--fg-muted);
+}
+.cleanup-days input {
+  width: 56px;
+  padding: 3px 6px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface-1);
+  color: var(--fg);
+  font: inherit;
+}
+.cleanup-auto {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  font-size: var(--nd-fs-xs);
+  color: var(--fg-muted);
+}
+.media-lite {
+  font-size: var(--nd-fs-xs);
+}

@@ -339,12 +339,48 @@ export function reduceView(state: ViewState, ev: UiEvent): ViewState {
   }
 }
 
-/** Gọn lại transcript trước khi ghi ra đĩa: cắt kết quả tool quá dài. */
-export function trimTranscriptForStorage(items: readonly TItem[], outputLimit = 4000): TItem[] {
+/**
+ * (0.7.2) Trần ảnh khi LƯU transcript (đơn vị: ký tự base64). Mỗi ảnh vốn nằm HAI lần trên đĩa: lịch sử gửi model (`session.messages`)
+ * và transcript hiển thị — nên transcript chỉ giữ bản xem trước nhỏ:
+ *  - ảnh đính kèm của người dùng: chỉ `thumb` (≤ ~60 KB); mọi `data` đầy đủ lọt vào đây đều bị bỏ;
+ *  - ảnh do công cụ trả về (ảnh chụp màn hình…): ảnh nào vượt `toolImageMaxChars` thì bỏ khỏi bản lưu (thẻ «Trước | Sau» tra lại ảnh theo
+ *    đường dẫn trong đối số khi mở phiên; ảnh gốc của model vẫn nằm trong lịch sử gửi model cho tới khi bị lược/xoá).
+ */
+export interface StorageImageLimits {
+  toolImageMaxChars: number;
+  attachThumbMaxChars: number;
+}
+export const DEFAULT_STORAGE_IMAGE_LIMITS: StorageImageLimits = { toolImageMaxChars: 400_000, attachThumbMaxChars: 80_000 };
+/** Chế độ nhẹ: không lưu ảnh công cụ trong transcript, xem trước ảnh đính kèm nhỏ hơn. */
+export const LITE_STORAGE_IMAGE_LIMITS: StorageImageLimits = { toolImageMaxChars: 0, attachThumbMaxChars: 40_000 };
+
+/** Gọn lại transcript trước khi ghi ra đĩa: cắt kết quả tool quá dài, và giữ ảnh trong trần (xem StorageImageLimits). */
+export function trimTranscriptForStorage(items: readonly TItem[], outputLimit = 4000, imageLimits: StorageImageLimits = DEFAULT_STORAGE_IMAGE_LIMITS): TItem[] {
   return items.map((it) => {
+    if (it.kind === 'user') {
+      let touched = false;
+      const attachments = it.attachments.map((a) => {
+        if (a.kind !== 'image') return a;
+        const dropData = typeof a.data === 'string';
+        const dropThumb = typeof a.thumb === 'string' && a.thumb.length > imageLimits.attachThumbMaxChars;
+        if (!dropData && !dropThumb) return a;
+        touched = true;
+        const { data: _d, thumb: _t, ...rest } = a;
+        return dropThumb || a.thumb === undefined ? rest : { ...rest, thumb: a.thumb };
+      });
+      return touched ? { ...it, attachments } : it;
+    }
     if (it.kind !== 'assistant') return it;
     let changed = false;
     const blocks = it.blocks.map((b) => {
+      if (b.type === 'tool' && b.images && b.images.length > 0) {
+        const kept = b.images.filter((im) => typeof im?.data === 'string' && im.data.length <= imageLimits.toolImageMaxChars);
+        if (kept.length !== b.images.length) {
+          changed = true;
+          const { images: _i, ...rest } = b;
+          b = kept.length > 0 ? { ...rest, images: kept } : (rest as typeof b);
+        }
+      }
       if (b.type === 'tool' && b.output && b.output.length > outputLimit) {
         changed = true;
         return { ...b, output: capTail(b.output, outputLimit) };

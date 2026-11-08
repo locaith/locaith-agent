@@ -335,6 +335,17 @@ export class ConfigService {
     return normalizeHtmlOpenIn(this.get<string>('artifacts.htmlOpenIn', 'browser'));
   }
 
+  /** (0.7.2) Tự xoá ảnh của cuộc trò chuyện cũ hơn N ngày ở nền khi khởi động (0 = tắt, mặc định). Số nguyên 0–3650. */
+  autoCleanImagesDays(): number {
+    const n = Math.floor(Number(this.get<number>('history.autoCleanImagesDays', 0)));
+    return Number.isFinite(n) && n >= 1 ? Math.min(3650, n) : 0;
+  }
+
+  /** (0.7.2) Chế độ nhẹ: tắt hiệu ứng + không tự xem trước media + chỉ lưu bản xem trước nhỏ của ảnh. */
+  liteMode(): boolean {
+    return this.get<boolean>('ui.liteMode', false) === true;
+  }
+
   debug(): boolean {
     return this.get<boolean>('debug.logRequests', false);
   }

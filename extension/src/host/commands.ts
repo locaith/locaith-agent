@@ -110,6 +110,11 @@ export function registerCommands(d: CommandDeps): vscode.Disposable[] {
       await d.sidebar.showScreen('settings');
     }),
 
+    reg('locaithAgent.cleanup', async () => {
+      await vscode.commands.executeCommand('locaithAgent.chatView.focus');
+      await d.sidebar.showCleanup();
+    }),
+
     reg('locaithAgent.stop', () => d.allControllers().forEach((c) => c.stop())),
 
     reg('locaithAgent.addSelectionToChat', async () => {

@@ -11,6 +11,7 @@ import { AccountCard } from './AccountGate';
 import { LocaithCard } from './LocaithConsent';
 import { RemoteCard } from './RemoteView';
 import { AddProviderForm, BrowserSettingsSections } from './BrowserSettings';
+import { CleanupCard } from './CleanupCard'; // (0.7.2)
 import { Icon } from './Icons';
 import { OrchestrationSection } from './OrchestrationSection';
 import { PermissionsPanel } from './PermissionsPanel'; // (lane:perm-rules)
@@ -391,12 +392,20 @@ export function SettingsView({ view, onSetting }: { view: ViewState; onSetting: 
           <Switch checked={s.showThinking} label={t('set.showThinking')} onChange={(v) => onSetting('showThinking', v)} />
         </div>
 
+        <div class="field field-inline">
+          <span class="field-label">{t('set.liteMode')}</span>
+          <Switch checked={s.liteMode} label={t('set.liteMode')} onChange={(v) => onSetting('liteMode', v)} />
+        </div>
+        <div class="field-hint">{t('set.liteMode.hint')}</div>
+
         <div class="preview">
           <div class="preview-title">{t('set.preview')}</div>
           <p class="preview-text">{t('set.previewText')}</p>
           <pre class="preview-code">{'const tênKháchHàng = "Đặng Thị Hồng Nhung"; // chú thích'}</pre>
         </div>
       </section>
+
+      {!isBrowser && <CleanupCard />}
 
       {isBrowser ? (
         <BrowserSettingsSections view={view} />

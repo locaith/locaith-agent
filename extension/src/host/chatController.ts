@@ -6,6 +6,7 @@ import { registerVerifySlash } from './extensions/verifier'; // (lane:blind-veri
 import { SlashRegistry, type SlashContext } from './slashRegistry';
 import { commandsOutputStyle, registerCommandsSlash, type CommandsLaneAccess } from './commandsSlash'; // (lane:commands-agents)
 import { attachPermissionsFeature, type PermissionsFeature } from './permissionsFeature'; // (lane:perm-rules)
+import { handleCleanupMessage, type CleanupPort } from './cleanup'; // (lane:v072-fixes)
 import { handleSessionsUxMessage, registerSessionsSlash, type SessionsUxPort } from './sessionsUx'; // (lane:sessions-ux)
 import { buildMeter, findPricing } from '../shared/sessionMeter'; // (lane:sessions-ux)
 import { hookServiceFor } from './hooks/hostHooks'; // (lane:hooks)
@@ -128,6 +129,8 @@ export interface ControllerDeps {
    * Mô hình Locaith (AI Local): bản ghi đồng ý thông báo dữ liệu theo tài khoản. Vắng (kiểm thử đơn vị, bản không có nhà cung cấp Locaith) = không có thẻ đồng ý và không chặn gì.
    */
   locaith?: LocaithGate;
+  /** (0.7.2) Mọi cuộc trò chuyện đang mở trong MỌI khung chat (sidebar + tab) — dọn bộ nhớ không đụng tới chúng. Vắng = chỉ cuộc của controller này. */
+  openSessionIds?: () => string[];
   /** Gọi khi một controller thay đổi trạng thái "đang chạy" (cập nhật thanh trạng thái). */
   onRunStateChanged(): void;
 }
@@ -1331,6 +1334,9 @@ export class ChatController implements vscode.Disposable {
       case 'pin_session':
       case 'delete_sessions':
         return handleSessionsUxMessage(this.sessionsUxPort(), m);
+      case 'cleanup_stats': // (0.7.2) Dọn bộ nhớ
+      case 'cleanup_run':
+        return handleCleanupMessage(this.cleanupPort(), m);
       case 'bg_task': // (lane:bg-tasks) Dừng / Sao chép / Xem đầy đủ một tác vụ nền
         return handleBgTaskMessage(this, m);
     }
@@ -1920,6 +1926,35 @@ export class ChatController implements vscode.Disposable {
   }
 
   /** Mở thẳng một màn hình (lịch sử, cài đặt) — dùng cho lệnh và nút trên thanh tiêu đề. */
+  /** (0.7.2) Các cuộc đang mở trong controller này: cuộc hiện tại và cuộc đang xem (nếu khác). */
+  openSessionIds(): string[] {
+    return [this.session.id, ...(this.viewing ? [this.viewing] : [])];
+  }
+
+  private cleanupPort(): CleanupPort {
+    // eslint-disable-next-line @typescript-eslint/no-this-alias
+    const self = this;
+    const gs = (this.d.context as { globalStorageUri?: { fsPath: string } }).globalStorageUri;
+    return {
+      get lang() {
+        return self.lang;
+      },
+      store: this.d.store,
+      storageDir: gs?.fsPath,
+      openSessionIds: () => this.d.openSessionIds?.() ?? this.openSessionIds(),
+      post: (msg) => this.post(msg),
+      toast: (level, text) => this.toast(level, text),
+      refreshListings: async () => this.patch(await this.listings()),
+      autoCleanImagesDays: () => this.d.config.autoCleanImagesDays(),
+    };
+  }
+
+  /** Lệnh `locaithAgent.cleanup`: mở Cài đặt và cuộn tới thẻ «Dọn dẹp bộ nhớ». */
+  async showCleanup(): Promise<void> {
+    await this.showScreen('settings');
+    this.post({ type: 'focus_section', section: 'cleanup' });
+  }
+
   async showScreen(screen: 'chat' | 'settings' | 'history' | 'market'): Promise<void> {
     await this.sendInit(screen);
     if (screen === 'market') await this.sendMarket();

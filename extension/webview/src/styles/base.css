@@ -302,3 +302,28 @@ body {
   gap: 10px;
   color: var(--fg-muted);
 }
+
+/* ── (0.7.2) Chế độ nhẹ (`ui.liteMode` → lớp `lite` trên <html>): tắt hiệu ứng, đỡ chiếm CPU/GPU ──
+   Mọi hoạt cảnh/chuyển động dừng (shimmer, quầng sáng, thở, vệt sáng); vòng xoay «đang chạy» vẫn quay (chậm) để còn báo trạng thái. */
+:root.lite .app *,
+:root.lite .app *::before,
+:root.lite .app *::after {
+  animation-duration: 0.001ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0.001ms !important;
+  scroll-behavior: auto !important;
+}
+:root.lite .app .spinner {
+  animation: nd-spin 2.4s linear infinite !important;
+}
+:root.lite .app .cc-shimmer {
+  animation: none !important;
+  background: none !important;
+  color: var(--fg) !important;
+  -webkit-text-fill-color: currentColor !important;
+}
+:root.lite .app * {
+  filter: none !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}

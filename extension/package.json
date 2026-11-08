@@ -170,6 +170,12 @@
         "icon": "$(gear)"
       },
       {
+        "command": "locaithAgent.cleanup",
+        "title": "%cmd.cleanup%",
+        "category": "Locaith AI",
+        "icon": "$(trash)"
+      },
+      {
         "command": "locaithAgent.showLogs",
         "title": "%cmd.logs%",
         "category": "Locaith AI"
@@ -337,6 +343,26 @@
           "type": "boolean",
           "default": true,
           "markdownDescription": "%cfg.showThinking%"
+        },
+        "locaithAgent.ui.liteMode": {
+          "type": "boolean",
+          "default": false,
+          "markdownDescription": "%cfg.liteMode%"
+        },
+        "locaithAgent.history.autoCleanImagesDays": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 3650,
+          "default": 0,
+          "scope": "machine",
+          "markdownDescription": "%cfg.autoCleanImagesDays%"
+        },
+        "locaithAgent.agent.maxImagesInContext": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 100,
+          "default": 8,
+          "markdownDescription": "%cfg.maxImagesInContext%"
         },
         "locaithAgent.agent.permissionMode": {
           "type": "string",

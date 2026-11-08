@@ -139,12 +139,15 @@ function FileCard({ item, note }: { item: MediaItem; note?: string }) {
 }
 
 export function MediaPreviews({ refs }: { refs: readonly { path: MediaRef['path'] }[] }) {
-  const { t } = useApp();
+  const { t, settings } = useApp();
+  // (0.7.2) Chế độ nhẹ: không tự dò/nạp ảnh-video-âm thanh; chỉ nạp khi người dùng bấm «Xem trước».
+  const [manual, setManual] = useState(false);
+  const auto = !settings.liteMode || manual;
   const sig = refs.map((r) => r.path).join('\n');
   const [items, setItems] = useState<MediaItem[]>(() => dedupe(refs.map((r) => cache.get(r.path)).filter((x): x is MediaItem => !!x)));
 
   useEffect(() => {
-    if (!sig) return;
+    if (!sig || !auto) return;
     const key = `media-${++seq}`;
     const off = bus.mediaResolved.on((r) => {
       if (r.key !== key) return;
@@ -154,8 +157,17 @@ export function MediaPreviews({ refs }: { refs: readonly { path: MediaRef['path'
     });
     post({ type: 'resolve_media', key, paths: sig.split('\n') });
     return off;
-  }, [sig]);
+  }, [sig, auto]);
 
+  if (!auto && !items.length) {
+    return (
+      <div class="media" role="group" aria-label={t('media.region')}>
+        <button type="button" class="link-btn media-lite" onClick={() => setManual(true)}>
+          {t('media.lite.show')}
+        </button>
+      </div>
+    );
+  }
   if (!items.length) return null;
   const images = items.filter((i) => i.kind === 'image' && i.src);
   const players = items.filter((i) => (i.kind === 'video' || i.kind === 'audio') && i.src);

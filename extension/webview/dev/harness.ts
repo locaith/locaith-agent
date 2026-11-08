@@ -298,6 +298,26 @@ class MockHost {
       case 'plugin_market_refresh':
         this.post({ type: 'market_state', state: { ...sampleMarket(), partial: true } });
         break;
+      // (0.7.2) Dọn bộ nhớ: số liệu mẫu theo đúng ca thật (phiên 113 MB, một cuộc 69 MB toàn ảnh)
+      case 'cleanup_stats':
+        window.setTimeout(
+          () =>
+            this.post({
+              type: 'cleanup_stats',
+              stats: {
+                sessions: { count: 41, bytes: 113 * 1048576 },
+                trash: { count: 3, bytes: 4_200_000 },
+                checkpoints: { sessions: 12, bytes: 18_700_000 },
+                images: { count: 63, bytes: 96 * 1048576 },
+                autoCleanImagesDays: 0,
+              },
+            }),
+          120,
+        );
+        break;
+      case 'cleanup_run':
+        this.toast(`Dọn (${m.action}${m.days ? `, ${m.days} ngày` : ''}) — host thật sẽ hỏi xác nhận có ghi dung lượng`);
+        break;
       case 'queue_remove':
         this.patch({ queued: (this.view.queued ?? []).filter((q) => q.id !== m.id) });
         break;
@@ -1113,6 +1133,8 @@ function initialView(): ViewState {
   if (langParam === 'en') v = { ...v, settings: { ...v.settings, language: 'en' } };
   if (fontParam) v = { ...v, settings: { ...v.settings, fontFamily: fontParam as ViewState['settings']['fontFamily'] } };
   if (params.get('bypass') === '1') v = { ...v, allowBypass: true };
+  // (0.7.2) lite=1: chế độ nhẹ (tắt hiệu ứng, không tự xem trước media)
+  if (params.get('lite') === '1') v = { ...v, settings: { ...v.settings, liteMode: true } };
   // (lane:cc-timeline-ui) platform=browser: cùng giao diện chạy như bản Chrome/Edge (không nút mở tệp, placeholder tab).
   if (params.get('platform') === 'browser') v = { ...v, platform: 'browser', canQueue: false, remote: undefined, account: undefined };
   v = {
