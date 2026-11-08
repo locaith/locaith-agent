@@ -63,6 +63,16 @@ describe('công cụ chrome — kiểm tra đầu vào và xin phép', () => {
     expect(send!.detail).toContain('Chào bạn');
     expect(describeAction({ action: 'close', tab_id: 3 })).toContain('ĐÓNG');
   });
+
+  // (0.7.6) Thẻ xin quyền «Nhập văn bản» từng cắt cứng văn bản ở 300 ký tự không báo: người duyệt không thấy phần còn lại sẽ được gõ vào trang.
+  it('văn bản sắp gõ vào trang hiện tới 1.000 ký tự; dài hơn thì GHI RÕ số ký tự chưa hiện', () => {
+    const long = `${'a'.repeat(700)}ĐUÔI-QUAN-TRỌNG`;
+    const d = describeAction({ action: 'type', ref: 'e2', text: long });
+    expect(d).toContain('ĐUÔI-QUAN-TRỌNG'); // trước đây (cắt ở 300) phần này bị giấu
+    expect(d).not.toContain('ký tự nữa');
+    const huge = describeAction({ action: 'type', ref: 'e2', text: 'x'.repeat(1500) });
+    expect(huge).toContain('… (+500 ký tự nữa)');
+  });
 });
 
 describe('công cụ chrome — gọi cầu nối và định dạng kết quả', () => {

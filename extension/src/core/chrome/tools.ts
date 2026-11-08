@@ -90,8 +90,14 @@ export function describeAction(i: ChromeInput): string {
       return `ĐÓNG tab${t}`;
     case 'click':
       return `Bấm ${target}${t}`;
-    case 'type':
-      return `Nhập ${JSON.stringify(String(i.text ?? '').slice(0, 300))} vào ${target}${t}${i.submit ? ' rồi nhấn Enter (GỬI)' : ''}`;
+    case 'type': {
+      // (0.7.6) Đây là thẻ XIN QUYỀN: người duyệt phải thấy thứ sẽ được gõ vào trang. Trước đây cắt cứng ở 300 ký tự không báo; giờ hiện tới 1.000 ký tự và, nếu còn nữa,
+      // ghi rõ số ký tự chưa hiện (không bao giờ cắt âm thầm).
+      const typed = String(i.text ?? '');
+      const MAX_SHOWN = 1000;
+      const shown = JSON.stringify(typed.slice(0, MAX_SHOWN)) + (typed.length > MAX_SHOWN ? ` … (+${typed.length - MAX_SHOWN} ký tự nữa)` : '');
+      return `Nhập ${shown} vào ${target}${t}${i.submit ? ' rồi nhấn Enter (GỬI)' : ''}`;
+    }
     case 'key':
       return `Nhấn phím ${i.key}${t}`;
     default:

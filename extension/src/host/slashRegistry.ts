@@ -90,7 +90,7 @@ export class SlashRegistry {
   list(lang: Lang): SlashCommandInfo[] {
     return [...this.defs.values()]
       .sort((a, b) => PRIORITY[a.source] - PRIORITY[b.source] || a.name.localeCompare(b.name))
-      .map((d) => ({ name: d.name, description: describe(d, lang) }));
+      .map((d) => ({ name: d.name, description: describe(d, lang), ...(d.needsIdle === false ? { needsIdle: false as const } : {}) }));
   }
 
   /** Nghe thay đổi (để làm mới menu). Trả về hàm huỷ. */

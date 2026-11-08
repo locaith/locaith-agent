@@ -201,6 +201,44 @@ describe('TuiApp + MockRuntime + xterm headless', () => {
     expect(b.screenText()).toContain('> tin tiếp theo');
   }, 30000);
 
+  // (0.7.6) Gõ `/model` giữa lúc trợ lý đang trả lời: trước đây dòng `> /model` bị in chen vào giữa đoạn đang stream, lệnh KHÔNG chạy (runtime chỉ báo thoáng 4 giây)
+  // và chữ đã gõ bị nuốt. Giờ: chữ ở nguyên trong ô nhập, không in dòng lệnh vào hội thoại, không gọi runtime, và có thông báo nói rõ phải làm gì.
+  it('lệnh chỉ chạy khi rảnh, gõ lúc đang bận → giữ chữ trong ô nhập, KHÔNG in chen vào hội thoại, KHÔNG gọi runtime, báo rõ', async () => {
+    b = await boot({ mock: { speed: 1 } });
+    await b.type('viết một câu trả lời dài giúp mình');
+    await b.type(KEY.enter);
+    await b.until(() => b!.rt.status().running);
+    const submitsBefore = b.rt.calls.filter((c) => c.fn === 'submit').length;
+    await b.type('/model');
+    await b.type(KEY.enter, 150);
+    expect(b.app.editor.text).toBe('/model'); // chữ không bị nuốt
+    expect(b.rt.calls.filter((c) => c.fn === 'submit').length).toBe(submitsBefore); // runtime không nhận lệnh
+    // không có dòng lệnh (kiểu dòng người dùng, bắt đầu ngay ở lề trái) chen vào hội thoại — `> /model` duy nhất còn lại là chữ trong ô nhập (có viền │)
+    expect(b.screenText().split('\n').some((l) => l.startsWith('> /model'))).toBe(false);
+    expect(b.screenText()).toMatch(/chỉ chạy khi trợ lý rảnh — bấm Esc để dừng, hoặc đợi xong/);
+    await b.type(KEY.esc);
+    await b.until(() => !b!.rt.status().running);
+    // Thông báo «chỉ chạy khi rảnh» sống tới 8 giây nhưng hết nghĩa ngay khi lượt dừng: phải biến mất, không để người dùng đọc nhầm lúc trợ lý đã rảnh.
+    await b.until(() => !/chỉ chạy khi trợ lý rảnh/.test(b!.screenText()));
+    expect(b.app.editor.text).toBe('/model'); // chữ vẫn còn trong ô nhập để bấm Enter chạy luôn
+  }, 30000);
+
+  it('lệnh chạy được cả lúc bận (needsIdle=false) vẫn chạy ngay khi gõ giữa lúc trợ lý đang làm việc', async () => {
+    b = await boot({ mock: { speed: 1 } });
+    await b.type('viết một câu trả lời dài giúp mình');
+    await b.type(KEY.enter);
+    await b.until(() => b!.rt.status().running);
+    // mô phỏng `/context`: chạy được lúc bận
+    const orig = b.rt.slashCommands.bind(b.rt);
+    b.rt.slashCommands = () => orig().map((c) => (c.name === 'help' ? { ...c, needsIdle: false as const } : c));
+    await b.type('/help');
+    await b.type(KEY.enter, 200);
+    await b.until(() => b!.rt.calls.some((c) => c.fn === 'submit' && c.args[0] === '/help'));
+    expect(b.app.editor.text).toBe('');
+    await b.type(KEY.esc);
+    await b.until(() => !b!.rt.status().running);
+  }, 30000);
+
   it('Shift+Tab đổi chế độ quyền và hiện ở dải trạng thái', async () => {
     b = await boot();
     await b.type(KEY.shiftTab);

@@ -206,6 +206,13 @@
   overflow: hidden;
   text-overflow: ellipsis;
 }
+/* Server chưa duyệt: người dùng đang quyết định cho chạy lệnh này → hiện ĐỦ, xuống dòng, không cắt bằng «…». */
+.mk-cmd-full {
+  white-space: pre-wrap;
+  overflow: visible;
+  text-overflow: clip;
+  overflow-wrap: anywhere;
+}
 .mk-warn {
   color: var(--warn);
   font-size: var(--nd-fs-xs);

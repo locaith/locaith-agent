@@ -13,6 +13,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { splitArgs } from '../../../core/commands/custom';
 import { McpClient, sanitizeServerConfig, type McpClientHooks, type McpServerConfig } from '../../../core/mcp/client';
+import { describeServerForApproval } from '../../../core/mcp/display';
 import { McpManager, type McpServerEntry, type McpServerStatus, type McpToolPolicy } from '../../../core/mcp/manager';
 import { ToolRegistry } from '../../../core/engine/toolRegistry';
 import type { FeatureContext, FeatureModule, FeatureSlashDef } from '../contract';
@@ -169,7 +170,11 @@ export async function collectAll(ctx: FeatureContext): Promise<McpServerEntry[]>
 
 export const isDisabled = (home: string, name: string): boolean => readState(home).disabled.includes(name);
 
-const summaryOf = (cfg: McpServerConfig): string => cfg.url ?? [cfg.command, ...(cfg.args ?? [])].join(' ').slice(0, 300);
+/** Dòng lệnh ĐẦY ĐỦ (không cắt âm thầm, đối số có khoảng trắng được bọc nháy, ký tự ẩn bị phơi) + dòng phụ cwd/env/header — xem core/mcp/display.ts. */
+const viewOf = (cfg: McpServerConfig): { summary: string; detail?: string; truncated?: boolean } => {
+  const v = describeServerForApproval(cfg);
+  return { summary: v.command, ...(v.extra.length ? { detail: v.extra.join('\n') } : {}), ...(v.truncated ? { truncated: true } : {}) };
+};
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Dịch vụ
@@ -239,13 +244,13 @@ export class McpService {
     for (const s of this.mgr.status()) {
       if (s.approved || s.scope === 'user' || s.scope === 'connector') continue;
       if (s.scope === 'workspace' && !this.ctx.isTrusted()) continue;
-      const key = `${s.scope}:${s.name}:${s.summary}`;
+      const key = `${s.scope}:${s.name}:${s.summary}${s.detail ? `|${s.detail}` : ''}`; // cwd/env đổi → hỏi lại (trước đây chỉ dòng lệnh)
       if (declined.has(key)) continue;
       const lang = this.ctx.lang;
       const ans = await askUser(this.ctx, {
         kind: 'confirm',
         title: tr(lang, 'askTitle', { name: s.name }),
-        detail: tr(lang, 'askDetail', { origin: s.origin ?? '', summary: s.summary }),
+        detail: tr(lang, 'askDetail', { origin: s.origin ?? '', summary: s.detail ? `${s.summary}\n${s.detail}` : s.summary }),
         yes: tr(lang, 'allow'),
         no: tr(lang, 'deny'),
         defaultYes: false,
@@ -262,7 +267,7 @@ export class McpService {
     const off = new Set(readState(this.ctx.home).disabled);
     const extra: McpServerStatus[] = this.all
       .filter((e) => off.has(e.name) && !live.some((l) => l.name === e.name))
-      .map((e) => ({ name: e.name, scope: e.scope, origin: e.origin, transport: e.cfg.url ? ('http' as const) : ('stdio' as const), status: 'stopped' as const, approved: true, summary: summaryOf(e.cfg), tools: [], groupPolicy: { read: 'ask' as const, write: 'ask' as const } }));
+      .map((e) => ({ name: e.name, scope: e.scope, origin: e.origin, transport: e.cfg.url ? ('http' as const) : ('stdio' as const), status: 'stopped' as const, approved: true, ...viewOf(e.cfg), tools: [], groupPolicy: { read: 'ask' as const, write: 'ask' as const } }));
     return [...live, ...extra];
   }
 
@@ -439,7 +444,7 @@ export const mcpFeature: FeatureModule = {
           const s = find(words[0]);
           if (!s) return c.output(tr(lang, 'unknown', { name: words[0] }), 'error');
           const tools = s.tools.length ? s.tools.map((t) => `- \`${t.name}\` [${t.group}/${t.policy}] — ${oneLine(t.description, 100)}`).join('\n') : tr(lang, 'noTools');
-          return c.output(`**${s.name}** · ${svc.stateWord(s, lang)} · ${s.transport} · ${tr(lang, `scope${s.scope[0].toUpperCase()}${s.scope.slice(1)}`)}\n\`${s.summary}\`${s.error ? `\n⚠ ${s.error}` : ''}\n\n${tools}`);
+          return c.output(`**${s.name}** · ${svc.stateWord(s, lang)} · ${s.transport} · ${tr(lang, `scope${s.scope[0].toUpperCase()}${s.scope.slice(1)}`)}\n\`\`\`\n${[s.summary, s.detail].filter(Boolean).join('\n')}\n\`\`\`${s.error ? `\n⚠ ${s.error}` : ''}\n\n${tools}`);
         }
         if (!list.length) return c.output(tr(lang, 'none'));
         const rows = list.map((s) => `- ${s.status === 'running' && s.approved ? '✓' : '⚠'} **${s.name}** — ${svc.stateWord(s, lang)}${s.tools.length ? ` · ${tr(lang, 'tools', { n: s.tools.length })}` : ''} · ${tr(lang, `scope${s.scope[0].toUpperCase()}${s.scope.slice(1)}`)}${s.error ? ` · ${oneLine(s.error, 120)}` : ''}`);

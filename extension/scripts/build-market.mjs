@@ -1,5 +1,5 @@
 // Dựng Chợ kỹ năng đóng gói sẵn từ kho AI-Skills.
-//   node scripts/build-market.mjs [--src "F:/Locaith-AI-Local-finetune/AI-Skills"]
+//   node scripts/build-market.mjs --src <thư mục AI-Skills>        (hoặc đặt biến môi trường LOCAITH_SKILLS_SRC; không có đường dẫn mặc định)
 // Kết quả: market/index.json, market/skills.zip (mỗi kỹ năng một thư mục <id>/…), market/licenses/<repo>/LICENSE, market/NOTICE.md.
 //
 // Bộ lọc (để phân phối công khai trên Marketplace):
@@ -16,7 +16,13 @@ import { fileURLToPath } from 'node:url';
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const args = process.argv.slice(2);
 const argSrc = args.indexOf('--src') >= 0 ? args[args.indexOf('--src') + 1] : undefined;
-const SRC = path.resolve(argSrc ?? process.env.LOCAITH_SKILLS_SRC ?? 'F:/Locaith-AI-Local-finetune/AI-Skills');
+// Nguồn kỹ năng là một bộ sưu tập riêng nằm ngoài kho này: không có đường dẫn mặc định (bản cũ cứng ổ F: của máy một người) — phải nói rõ.
+const srcInput = argSrc ?? process.env.LOCAITH_SKILLS_SRC;
+if (!srcInput) {
+  console.error('Thiếu thư mục nguồn kỹ năng.\nDùng: node scripts/build-market.mjs --src <thư mục AI-Skills>\nhoặc đặt biến môi trường LOCAITH_SKILLS_SRC.');
+  process.exit(2);
+}
+const SRC = path.resolve(srcInput);
 const OUT = path.join(root, 'market');
 
 const PERMISSIVE = /(^|[^a-z])(mit|apache|bsd|isc|mpl|unlicense|cc0|0bsd|zlib)([^a-z]|$)/i;

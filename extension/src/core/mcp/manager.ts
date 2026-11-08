@@ -11,6 +11,7 @@ import { createHash } from 'node:crypto';
 import type { ToolRegistry } from '../engine/toolRegistry';
 import type { ToolDef } from '../engine/types';
 import { describeServer } from './catalog';
+import { describeServerForApproval } from './display';
 import { McpClient, type McpAuth, type McpClientHooks, type McpServerConfig, type McpStatus, type McpToolInfo } from './client';
 
 export type McpScope = 'user' | 'workspace' | 'plugin' | 'connector';
@@ -39,7 +40,12 @@ export interface McpServerStatus {
   status: McpStatus;
   error?: string;
   approved: boolean;
+  /** Dòng lệnh / địa chỉ ĐẦY ĐỦ (xem display.ts) — chỗ người dùng quyết định cho chạy nên không được cắt âm thầm. */
   summary: string;
+  /** Dòng phụ cũng thuộc về thứ sẽ chạy: cwd, biến môi trường (giá trị bí mật bị che), tên header. */
+  detail?: string;
+  /** summary/detail đã bị cắt vì quá dài (có dấu hiệu nhìn thấy được ở cuối). */
+  truncated?: boolean;
   tools: { name: string; description: string; group: McpToolGroup; policy: McpToolPolicy }[];
   /** Mức mặc định cho cả nhóm (đọc / ghi) — công cụ nào chưa đặt riêng thì theo mức này. */
   groupPolicy: Record<McpToolGroup, McpToolPolicy>;
@@ -345,7 +351,10 @@ export class McpManager {
         status: c?.status ?? 'stopped',
         error: c?.error,
         approved,
-        summary: e.cfg.url ?? [e.cfg.command, ...(e.cfg.args ?? [])].join(' ').slice(0, 200),
+        ...(() => {
+          const v = describeServerForApproval(e.cfg);
+          return { summary: v.command, ...(v.extra.length ? { detail: v.extra.join('\n') } : {}), ...(v.truncated ? { truncated: true } : {}) };
+        })(),
         ...(() => {
           const d = describeServer(e.cfg);
           return { label: e.label ?? d.label, note: d.note, catalogId: d.catalogId };

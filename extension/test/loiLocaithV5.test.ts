@@ -7,7 +7,7 @@ import { makeWorkspace } from './helpers/harness';
 
 /**
  * Các bản sửa rút ra từ phân tích lỗi của Locaith-v5-flash/SI (nhật ký cổng 04–05/11/2026 + kho phiên của extension).
- * Báo cáo: F:\Locaith-AI-Local-finetune\Loi-Locaith-v5-flash\02-phan-tich. Bản sửa do DeepSeek V4.1 Flash đề xuất, người duyệt chỉnh (03-de-xuat-sua\applied.json).
+ * Báo cáo phân tích lỗi: tài liệu nội bộ của Locaith (không nằm trong kho này). Bản sửa do DeepSeek V4.1 Flash đề xuất, người duyệt chỉnh.
  */
 const ctxFor = (host: unknown): ToolContext => ({
   signal: new AbortController().signal,

@@ -4,7 +4,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import type { FeatureModule } from '../../../src/cli/runtime';
 import type { ToolDef } from '../../../src/core/engine/types';
 import { textTurn, toolTurn } from '../../helpers/fakeProvider';
-import { cleanupDirs, harness, tmpDir } from './harness';
+import { cleanupDirs, harness, tmpDir, waitFor } from './harness';
 
 afterEach(() => cleanupDirs());
 
@@ -88,6 +88,26 @@ describe('FeatureModule cắm vào lõi', () => {
     await h2.rt.idle();
     expect(asked).toBeNull();
     await h2.cleanup();
+  });
+
+  it('ask phát lúc KHỞI ĐỘNG (trước khi giao diện nghe) được giữ lại và giao cho người nghe đầu tiên — không rơi mất (thẻ duyệt MCP/hook của dự án)', async () => {
+    let answer: unknown = 'chưa';
+    const mod: FeatureModule = {
+      name: 'ask-at-boot',
+      attach(ctx) {
+        void ctx.ask({ kind: 'confirm', title: 'Duyệt server của dự án?', detail: 'node server.js', yes: 'Có', no: 'Không' }).then((a) => {
+          answer = a;
+        });
+      },
+    };
+    const h = await harness({ features: [mod], script: [] }); // harness gắn người nghe SAU khi runtime đã dựng xong (đúng như giao diện thật)
+    await waitFor(() => h.events.some((e) => e.t === 'ask'), 3000, 'câu hỏi lúc khởi động');
+    const ev = h.events.find((e) => e.t === 'ask') as { ask: { id: string; title: string; detail?: string } };
+    expect(ev.ask.title).toBe('Duyệt server của dự án?');
+    expect(ev.ask.detail).toBe('node server.js');
+    h.rt.answer(ev.ask.id, true);
+    await waitFor(() => answer === true, 3000, 'câu trả lời tới được nơi hỏi');
+    await h.cleanup();
   });
 
   it('RunExtension: beforeModel thêm ghi chú vào lịch sử; thứ tự đăng ký, last:true đứng cuối', async () => {

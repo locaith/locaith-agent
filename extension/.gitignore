@@ -7,4 +7,5 @@ webview/dev/shots/
 .env.*
 dist-browser/
 dist-browser-test/
+dist-browser-notices/
 *.zip

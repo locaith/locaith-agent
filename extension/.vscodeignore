@@ -22,6 +22,8 @@ Kiến Trúc Hệ Thống Agent Tự Chủ*.md
 *.vsix
 dist-browser/**
 dist-browser-test/**
+dist-browser-notices/**
+THIRD_PARTY_NOTICES.browser.md
 tsconfig.browser.json
 vitest.e2e.config.mts
 esbuild.browser.mjs

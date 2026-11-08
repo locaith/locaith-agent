@@ -79,6 +79,27 @@ export function verifyBrowserPackage(dir, opts = {}) {
   check(!!panel, 'có panel.js');
   check(!/__ndTest|ScriptedProvider/.test(panel), 'panel.js không chứa móc kiểm thử (__ndTest / ScriptedProvider)');
 
+  // ── giấy phép của tiện ích + thông báo bản quyền bên thứ ba PHẢI nằm trong gói (bản 0.7.0–0.7.5 đã lên cửa hàng thiếu cả hai, dù README hứa «trong gói có sẵn»)
+  const eol = (s) => s.replace(/\r\n/g, '\n').trim();
+  check(files.includes('LICENSE.txt'), 'gói có LICENSE.txt', 'thiếu — người dùng và cửa hàng không thấy giấy phép của tiện ích; dựng lại bằng esbuild.browser.mjs');
+  const rootLicense = path.join(root, 'LICENSE.txt');
+  if (files.includes('LICENSE.txt') && existsSync(rootLicense)) check(eol(text('LICENSE.txt')) === eol(readFileSync(rootLicense, 'utf8')), 'LICENSE.txt trong gói trùng LICENSE.txt của mã nguồn', 'khác bản trong kho — dựng lại gói');
+  check(files.includes('THIRD_PARTY_NOTICES.md'), 'gói có THIRD_PARTY_NOTICES.md', 'thiếu — MIT/Apache/OFL đều đòi giữ thông báo bản quyền khi phân phối; chạy `npm run notices:browser` rồi dựng lại');
+  if (files.includes('THIRD_PARTY_NOTICES.md')) {
+    const notices = text('THIRD_PARTY_NOTICES.md');
+    check(notices.includes('| Package | Version | License | Source |') && notices.includes('## License texts') && notices.length > 20000, 'THIRD_PARTY_NOTICES.md có bảng gói và văn bản giấy phép đầy đủ', `${notices.length} ký tự`);
+    // Phông chữ nằm trong gói (assets/ + fonts/) phải được ghi nhận; thư viện lõi của bản trình duyệt cũng vậy. Tính đúng-đủ tuyệt đối do test/browser/notices.test.ts (so với source map) giữ.
+    const families = new Set();
+    for (const f of files) {
+      const m = /^(?:assets|fonts)\/(.*?)-(?:latin|vietnamese|cyrillic|greek)/.exec(f);
+      if (m) families.add(m[1]);
+    }
+    for (const fam of [...families].sort()) check(notices.includes(`| @fontsource/${fam} |`), `THIRD_PARTY_NOTICES.md ghi nhận phông ${fam}`, 'phông có trong gói nhưng không có trong thông báo');
+    for (const lib of ['preact', 'marked', 'dompurify', 'highlight.js', '@anthropic-ai/sdk', 'fflate', 'unpdf', 'node-html-parser']) {
+      check(notices.includes(`| ${lib} |`), `THIRD_PARTY_NOTICES.md ghi nhận ${lib}`, 'thư viện nhúng trong panel.js nhưng không có trong thông báo');
+    }
+  }
+
   // ── biểu tượng phải là logo «Lo» (bản 0.6.27 mang chữ «N» của dự án cũ)
   const brandFile = path.join(root, 'scripts', 'browser-brand-icons.json');
   const brand = JSON.parse(readFileSync(brandFile, 'utf8')).icons;

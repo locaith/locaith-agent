@@ -3,6 +3,7 @@
  * Mỗi hộp là một máy trạng thái nhỏ: `render(width, maxRows)` → dòng; `key(k)` → chưa xong / xong kèm giá trị. Không có I/O.
  */
 
+import { describeCommand } from '../../shared/commandView';
 import type { PermissionRequest } from '../../shared/protocol';
 import type { AskRequest, PickItem } from '../runtime/contract';
 import { t as tr } from '../i18n';
@@ -33,6 +34,15 @@ export interface PermDecision {
 }
 
 type PermChoice = 'allow' | 'allow_session' | 'deny_feedback';
+
+/** Vừa `room` dòng: nếu dư thì hiện ĐẦU và CUỐI (đuôi lệnh là chỗ hay bị giấu) kèm dòng ghi số dòng ở giữa bị ẩn — không bao giờ cắt cụt âm thầm. */
+export function headTail(rows: string[], room: number, th: Theme): string[] {
+  if (rows.length <= room) return rows;
+  const tail = room >= 6 ? 2 : 1;
+  const head = Math.max(1, room - tail - 1);
+  const skipped = rows.length - head - tail;
+  return [...rows.slice(0, head), th.warn(tr('tui.perm.middleHidden', { n: skipped })), ...rows.slice(rows.length - tail)];
+}
 
 export class PermissionDialog implements Dialog<PermDecision> {
   private sel = 0;
@@ -68,14 +78,19 @@ export class PermissionDialog implements Dialog<PermDecision> {
     const r = this.req;
     const inner = width - 4;
     const out: string[] = [];
-    out.push(th.bold(r.title || tr('tui.perm.title.tool', { tool: r.tool })));
-    if (r.detail) for (const l of wrapAnsi(th.muted(r.detail), inner).slice(0, 4)) out.push(l);
+    // (0.7.6) Tiêu đề, chi tiết và lệnh có thể chứa chữ do bên thứ ba/model viết: ký tự vô hình hoặc đổi chiều chữ (U+202E…) bị PHƠI RA (⟦U+XXXX⟧) thay vì đánh lừa
+    // người duyệt; lệnh/chi tiết dài được NGẮT DÒNG CỨNG (giữ nguyên khoảng trắng) thay vì cắt cụt ở độ rộng terminal — trước đây đuôi lệnh dài bị giấu sau «…».
+    const titleView = describeCommand(r.title || tr('tui.perm.title.tool', { tool: r.tool }));
+    const detailView = r.detail ? describeCommand(r.detail) : null;
+    const cmdView = r.command ? describeCommand(r.command.replace(/\r\n?/g, '\n')) : null;
+    out.push(...wrapAnsi(th.bold(titleView.text), inner));
+    if (detailView) out.push(...headTail(wrapAnsi(th.muted(detailView.text), inner), 10, th));
+    const hidden = titleView.hidden + (detailView?.hidden ?? 0) + (cmdView?.hidden ?? 0);
+    // Cảnh báo NGẮT DÒNG (không cắt «…» ở mép khung): ở terminal hẹp, câu «đọc hết cả phần đầu lẫn phần cuối» là câu quan trọng nhất của thẻ.
+    if (hidden > 0) out.push(...wrapAnsi(th.warn(tr('tui.perm.hidden', { n: hidden })), inner));
+    if (cmdView?.long) out.push(...wrapAnsi(th.warn(tr('tui.perm.long', { chars: cmdView.chars.toLocaleString('vi-VN'), lines: cmdView.lines })), inner));
     let body: string[] = [];
-    if (r.command) {
-      const lines = r.command.replace(/\r\n?/g, '\n').split('\n');
-      body = lines.slice(0, 6).map((l, i) => (i === 0 ? th.muted('$ ') : '  ') + th.code(truncatePlain(l, inner - 2)));
-      if (lines.length > 6) body.push(th.muted(tr('tui.tool.more.plain', { n: lines.length - 6 })));
-    }
+    if (cmdView) body = wrapAnsi(th.code(cmdView.text), inner, { first: th.muted('$ '), rest: '  ', pre: true });
     if (r.diff) body = renderDiff(r.diff, { width: inner, theme: th, maxLines: 10, moreLabel: (n) => tr('tui.tool.more.plain', { n }) });
     if (r.planMarkdown) {
       const md = renderMarkdown(r.planMarkdown, { width: inner, theme: th });
@@ -85,7 +100,7 @@ export class PermissionDialog implements Dialog<PermDecision> {
     if (body.length) {
       out.push('');
       const room = Math.max(3, budget - out.length - 1);
-      if (body.length > room) body = [...body.slice(0, room - 1), th.muted(tr('tui.tool.more.plain', { n: body.length - room + 1 }))];
+      if (body.length > room) body = cmdView && !r.diff && !r.planMarkdown ? headTail(body, room, th) : [...body.slice(0, room - 1), th.muted(tr('tui.tool.more.plain', { n: body.length - room + 1 }))];
       out.push(...body);
     }
     if (r.rule) out.push(th.faint(tr('tui.perm.rule', { rule: r.rule })));
@@ -332,12 +347,15 @@ export class ConfirmDialog implements Dialog<boolean | null> {
     const th = this.th;
     const inner = width - 4;
     const rows: string[] = [];
+    // Tiêu đề dài hơn viền trên (ví dụ «Dự án muốn chạy server MCP «x». Chỉ cho phép nếu bạn tin dự án này.») bị cắt «…» làm mất đúng câu cảnh báo: đưa vào thân hộp, ngắt dòng.
+    const titleFits = stringWidth(this.req.title) <= width - 6;
+    if (!titleFits) rows.push(...wrapAnsi(th.bold(this.req.title), inner), '');
     if (this.req.detail) rows.push(...wrapAnsi(th.muted(this.req.detail), inner), '');
     const yesL = ` ${this.req.yes ?? tr('tui.confirm.yes')} `;
     const noL = ` ${this.req.no ?? tr('tui.confirm.no')} `;
     const btn = (label: string, on: boolean, danger: boolean): string => (on ? (danger ? th.err : th.brand)(th.inverse(label)) : th.muted(label));
     rows.push(btn(yesL, this.yes, false) + '   ' + btn(noL, !this.yes, !!this.req.danger));
-    return box(rows, width, th, { title: this.req.title, hint: tr('tui.confirm.keys'), border: this.req.danger ? th.err : th.brand2 });
+    return box(rows, width, th, { ...(titleFits ? { title: this.req.title } : {}), hint: tr('tui.confirm.keys'), border: this.req.danger ? th.err : th.brand2 });
   }
 
   key(k: Key): Outcome<boolean | null> {

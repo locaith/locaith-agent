@@ -32,6 +32,7 @@
     "test/browser",
     "dist-browser",
     "dist-browser-test",
+    "dist-browser-notices",
     "test/browser-e2e"
   ]
 }

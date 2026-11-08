@@ -85,6 +85,8 @@ export class TuiApp {
   private ticker: ReturnType<typeof setInterval> | null = null;
   private dialogs: DialogEntry[] = [];
   private toast: Toast | null = null;
+  /** Thông báo đang hiện là «lệnh chỉ chạy khi rảnh» — gỡ khi lượt kết thúc. */
+  private busyToast = false;
   private expanded = false;
   private showTodos = false;
   private helpOpen = false;
@@ -377,6 +379,11 @@ export class TuiApp {
       this.startTicker();
     } else {
       this.stopTicker();
+      // «Lệnh chỉ chạy khi trợ lý rảnh» hết nghĩa ngay khi lượt xong hoặc bị dừng: gỡ, kẻo người dùng đọc nhầm khi trợ lý đã rảnh (thông báo sống tới 8 giây).
+      if (this.busyToast) {
+        this.toast = null;
+        this.busyToast = false;
+      }
     }
   }
 
@@ -396,6 +403,7 @@ export class TuiApp {
   }
 
   private setToast(level: Toast['level'], text: string, ms = 4000): void {
+    this.busyToast = false;
     this.toast = { level, text, until: Date.now() + ms };
     const t = setTimeout(() => {
       if (this.toast && Date.now() >= this.toast.until) this.toast = null;
@@ -877,9 +885,29 @@ export class TuiApp {
     void this.submitCurrent();
   }
 
+  /**
+   * Lệnh `/…` chỉ chạy khi trợ lý rảnh mà đang bận → tên lệnh (để báo), ngược lại null. Trước đây giao diện vẫn in dòng `> /model` vào giữa đoạn đang stream rồi runtime
+   * từ chối bằng một thông báo thoáng 4 giây: lệnh không chạy, chữ đã gõ bị nuốt, và dòng lệnh chen ngang câu trả lời.
+   */
+  private idleOnlyCommand(text: string): string | null {
+    if (!this.running || !text.startsWith('/') || SLASH_LOCAL_THEME.test(text)) return null;
+    const name = (/^\/(\S+)/.exec(text)?.[1] ?? '').toLowerCase();
+    if (!name) return null;
+    const info = this.rt.slashCommands().find((c) => c.name.toLowerCase() === name);
+    return info && info.needsIdle !== false ? name : null;
+  }
+
   private async submitCurrent(): Promise<void> {
     const text = this.currentText().trim();
     if (!text || text === '!') return;
+    const busyCmd = this.idleOnlyCommand(text);
+    if (busyCmd) {
+      // Giữ nguyên chữ trong ô nhập, không in dòng lệnh vào hội thoại, không ghi vào lịch sử; nói rõ phải làm gì.
+      this.setToast('warn', tr('tui.slash.busy', { name: busyCmd }), 8000);
+      this.busyToast = true; // sau setToast (setToast xoá cờ): gỡ thông báo này khi lượt kết thúc
+      this.screen.schedule();
+      return;
+    }
     const atts = this.attachments;
     this.history.add(text);
     this.history.resetNav();

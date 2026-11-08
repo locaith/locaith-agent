@@ -359,7 +359,9 @@ export class Runtime implements CliRuntime {
   emit(e: RuntimeEvent): void {
     if (this.listeners.size === 0) {
       // Chưa ai nghe (đang khởi tạo): giữ lại thông báo/đầu ra (và hội thoại của phiên mở sẵn) để giao cho người nghe đầu tiên.
-      if ((e.t === 'toast' || e.t === 'output') && this.early.length < 100) this.early.push(e);
+      // Cả CÂU HỎI (`ask`) nữa: server MCP / hook của dự án xin duyệt ngay lúc khởi động; nếu sự kiện rơi mất thì lời hứa của `ask` không bao giờ được giải quyết,
+      // thẻ duyệt KHÔNG BAO GIỜ hiện (server chỉ nằm im ở «chờ duyệt», người dùng không biết có gì đang chờ mình) — lỗi có từ trước 0.7.6.
+      if ((e.t === 'toast' || e.t === 'output' || e.t === 'ask') && this.early.length < 100) this.early.push(e);
       else if (e.t === 'replay') this.earlyReplay = e;
       return;
     }

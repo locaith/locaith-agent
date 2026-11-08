@@ -121,6 +121,28 @@ describe('MCP', () => {
     expect(st.declined).toHaveLength(1);
   });
 
+  // (0.7.6) Hộp duyệt từng cắt dòng lệnh ở 200 ký tự không báo (đuôi bị giấu) và không hiện cwd/env dù chúng nằm trong dấu vân tay được duyệt.
+  it('hộp duyệt server dự án cho thấy ĐỦ lệnh (đuôi không bị cắt), đối số có dấu cách được bọc nháy, và cwd + env (giá trị bí mật bị che)', async () => {
+    ctx = new FakeFeatureContext();
+    const longArgs = Array.from({ length: 40 }, (_, i) => `--tuy-chon-${i}=gia-tri-kha-dai`);
+    writeFile(
+      path.join(ctx.cwd, '.mcp.json'),
+      JSON.stringify({ mcpServers: { doc: { command: process.execPath, args: [SERVER, ...longArgs, 'đối số có dấu cách', '--phan-duoi-nguy-hiem'], cwd: '..', env: { NODE_OPTIONS: '--require x.js', API_TOKEN: 'bi-mat-that' } } } }),
+    );
+    ctx.askFn = () => false;
+    await ctx.attach(mcpFeature);
+    await mcpServiceOf(ctx)!.ready();
+    const ask = ctx.asks[0] as { detail?: string };
+    expect(ask.detail).toBeDefined();
+    expect(ask.detail!.length).toBeGreaterThan(900);
+    expect(ask.detail).toContain('--phan-duoi-nguy-hiem');
+    expect(ask.detail).toContain('"đối số có dấu cách"');
+    expect(ask.detail).toContain('cwd: ..');
+    expect(ask.detail).toContain('NODE_OPTIONS="--require x.js"');
+    expect(ask.detail).toContain('API_TOKEN=•••');
+    expect(ask.detail).not.toContain('bi-mat-that');
+  });
+
   it('lược đồ Claude: ${VAR} mở rộng; --mcp-config là tệp hoặc JSON trực tiếp', async () => {
     expect(expandEnv('${A_B}/x/${C:-mac_dinh}', { A_B: 'v' } as never)).toBe('v/x/mac_dinh');
     expect(expandEnv('${KHONG_CO}', {} as never)).toBe('${KHONG_CO}');

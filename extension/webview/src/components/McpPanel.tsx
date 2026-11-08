@@ -101,9 +101,12 @@ function ServerRow({ s }: { s: MarketMcpItem }) {
           <span class="mk-ver">{t(`mk.mcp.status.${s.status}` as I18nKey)}</span>
         </div>
         {s.note && <div class="mk-warn">{s.note}</div>}
-        <div class="mk-meta mk-cmd" title={s.summary}>
+        {/* Chỗ người dùng quyết định cho chạy: server CHƯA duyệt hiện lệnh ĐẦY ĐỦ, xuống dòng (không còn một dòng bị cắt «…» che đuôi lệnh);
+            đã duyệt thì gọn một dòng, lệnh đủ nằm ở tooltip. cwd / biến môi trường / tên header cũng thuộc thứ sẽ chạy nên hiện ngay dưới lệnh. */}
+        <div class={cx('mk-meta', 'mk-cmd', !s.approved && 'mk-cmd-full')} title={s.detail ? `${s.summary}\n${s.detail}` : s.summary}>
           {s.summary}
         </div>
+        {s.detail && <div class={cx('mk-meta', 'mk-cmd', !s.approved && 'mk-cmd-full')}>{s.detail}</div>}
         {!s.approved && <div class="mk-warn">{t('mk.mcp.notApproved')}</div>}
         {s.error && <div class="mk-err">{s.error}</div>}
         {s.tools.length > 0 && (

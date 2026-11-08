@@ -4,7 +4,12 @@ Locaith AI Agent reads files, runs commands and can control a browser on your co
 
 ## Reporting a vulnerability
 
-Please **do not open a public issue** for a security problem. Email **locaithsolution@locaith.com** with the subject `SECURITY: <short title>` and include:
+Please **do not open a public issue** for a security problem. Use either of these two private channels:
+
+- **GitHub:** open the repository's **Security** tab and choose **Report a vulnerability** (private vulnerability reporting). Only you and the maintainers can see the report.
+- **Email:** **locaithsolution@locaith.com** with the subject `SECURITY: <short title>`.
+
+Either way, include:
 
 - what you found and the impact you expect;
 - the version (the extension, `locaith --version`, or the Chrome / Edge package) and your operating system;

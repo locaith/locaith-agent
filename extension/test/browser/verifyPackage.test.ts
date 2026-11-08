@@ -179,6 +179,26 @@ describe('bộ kiểm BẮT được từng lỗi của sự cố 0.6.27', () =>
     rejects(testBuild, /không phải bản TEST/);
   });
 
+  it('thiếu giấy phép / thông báo bên thứ ba (bản 0.7.0–0.7.5 đã lên cửa hàng thiếu cả hai)', () => {
+    rejects(mutated((d) => fs.rmSync(path.join(d, 'LICENSE.txt'))), /gói có LICENSE\.txt/);
+    rejects(mutated((d) => edit(d, 'LICENSE.txt', (s) => s.replace('Copyright 2026 Locaith', 'Copyright 2026 Ai Đó Khác'))), /LICENSE\.txt trong gói trùng LICENSE\.txt của mã nguồn/);
+    rejects(mutated((d) => fs.rmSync(path.join(d, 'THIRD_PARTY_NOTICES.md'))), /gói có THIRD_PARTY_NOTICES\.md/);
+    // Tệp có mặt nhưng rỗng ruột (chỉ vài dòng) cũng không được tính là thông báo đầy đủ.
+    rejects(mutated((d) => fs.writeFileSync(path.join(d, 'THIRD_PARTY_NOTICES.md'), '# Third-party notices\n')), /THIRD_PARTY_NOTICES\.md có bảng gói và văn bản giấy phép đầy đủ/);
+    // Thiếu phông chữ hoặc thư viện lõi trong thông báo.
+    rejects(mutated((d) => edit(d, 'THIRD_PARTY_NOTICES.md', (s) => s.replace('| @fontsource/inter |', '| @fontsource/khac |'))), /THIRD_PARTY_NOTICES\.md ghi nhận phông inter/);
+    rejects(mutated((d) => edit(d, 'THIRD_PARTY_NOTICES.md', (s) => s.replace('| dompurify |', '| khac |'))), /THIRD_PARTY_NOTICES\.md ghi nhận dompurify/);
+  });
+
+  it('gói thật mang LICENSE.txt giống kho và thông báo nêu cả phông lẫn thư viện', () => {
+    const { passed } = verifyBrowserPackage(good, { root: ROOT });
+    expect(passed).toContain('gói có LICENSE.txt');
+    expect(passed).toContain('LICENSE.txt trong gói trùng LICENSE.txt của mã nguồn');
+    expect(passed).toContain('THIRD_PARTY_NOTICES.md ghi nhận phông manrope');
+    expect(passed).toContain('THIRD_PARTY_NOTICES.md ghi nhận preact');
+    expect(fs.readFileSync(path.join(good, 'LICENSE.txt'), 'utf8')).toMatch(/Functional Source License/);
+  });
+
   it('gói không có manifest → lỗi rõ ràng', () => {
     expect(() => verifyBrowserPackage(tmp, { root: ROOT })).toThrow(/Không thấy manifest\.json/);
   });

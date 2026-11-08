@@ -223,7 +223,7 @@ function mkSession(store = new MemStore(), clock = { t: 1_700_000_000_000 }) {
     store,
     webUrl: 'https://locaith.ai',
     redirectUri: () => REDIRECT,
-    deviceLabel: () => 'PC_WORK · VS Code',
+    deviceLabel: () => 'PC-DEMO · VS Code',
     meta: () => ({ client: 'vscode', platform: 'win32', ext: '0.5.2' }),
     openUrl: async (u) => void opened.push(u),
     now: () => clock.t,
@@ -258,7 +258,7 @@ describe('AccountSession', () => {
     const q = new URLSearchParams(url.split('?')[1]);
     expect(q.get('client')).toBe('vscode');
     expect(q.get('redirect')).toBe(REDIRECT);
-    expect(q.get('label')).toBe('PC_WORK · VS Code');
+    expect(q.get('label')).toBe('PC-DEMO · VS Code');
     expect(q.get('m_platform')).toBe('win32');
     expect(q.get('challenge')).toBe(challengeOf(store.pending!.verifier));
     expect(url).not.toContain(store.pending!.verifier); // verifier KHÔNG bao giờ ra khỏi máy

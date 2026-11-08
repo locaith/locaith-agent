@@ -466,6 +466,8 @@ export interface SkillSummary {
 export interface SlashCommandInfo {
   name: string;
   description: string;
+  /** `false` = chạy được cả lúc trợ lý đang bận (ví dụ `/tasks`, `/context`: chỉ đọc). Vắng = chỉ chạy khi trợ lý rảnh. Giao diện terminal dùng để KHÔNG nuốt lệnh gõ giữa lúc đang trả lời. */
+  needsIdle?: false;
 }
 
 // ── Điều phối nhiều AI ──────────────────────────────────────────────────────────
@@ -531,6 +533,10 @@ export interface MarketMcpItem {
   /** Server từ workspace/plugin chỉ chạy sau khi người dùng bật. */
   approved: boolean;
   summary: string;
+  /** Dòng phụ của thứ sẽ chạy: cwd, biến môi trường (giá trị bí mật bị che), tên header. */
+  detail?: string;
+  /** summary/detail đã bị cắt vì quá dài (có dấu hiệu nhìn thấy được ở cuối). */
+  truncated?: boolean;
   tools: { name: string; description: string; group?: 'read' | 'write'; policy?: 'allow' | 'ask' | 'deny' }[];
   /** Mức mặc định cho cả nhóm (khi công cụ chưa đặt riêng). */
   groupPolicy?: { read: 'allow' | 'ask' | 'deny'; write: 'allow' | 'ask' | 'deny' };

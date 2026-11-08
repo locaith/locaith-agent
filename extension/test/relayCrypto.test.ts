@@ -333,9 +333,9 @@ describe('liên kết ghép đôi', () => {
   const hostId = b64u(randomBytes(16));
   const psk = b64u(randomBytes(16));
   it('tạo rồi phân tích lại đúng, kể cả tên máy có dấu cách/ký tự đặc biệt', () => {
-    const link = pairingLink('https://locaith.ai/', { hostId, psk, name: 'PC_WORK · Máy chính & phụ' });
+    const link = pairingLink('https://locaith.ai/', { hostId, psk, name: 'PC-DEMO · Máy chính & phụ' });
     expect(link.startsWith('https://locaith.ai/#remote?')).toBe(true);
-    expect(parsePairingLink(link)).toEqual({ hostId, psk, name: 'PC_WORK · Máy chính & phụ' });
+    expect(parsePairingLink(link)).toEqual({ hostId, psk, name: 'PC-DEMO · Máy chính & phụ' });
     expect(parsePairingLink(`remote?r=${hostId}&k=${psk}`)).toEqual({ hostId, psk });
   });
   it('từ chối thiếu/sai độ dài/ký tự lạ', () => {

@@ -192,6 +192,16 @@ async function copyStatic() {
     await mkdir(dir, { recursive: true });
     await writeFile(path.join(dir, 'messages.json'), JSON.stringify(msgs, null, 2) + '\n');
   }
+  // Giấy phép của chính tiện ích + thông báo bản quyền của các thư viện/phông nhúng: gói PHẢI mang theo (FSL và từng giấy phép MIT/Apache/OFL đều đòi giữ thông báo).
+  // Bản 0.7.0–0.7.5 đã đi cửa hàng thiếu cả hai tệp. THIRD_PARTY_NOTICES.browser.md do `npm run notices:browser` sinh từ source map; test/browser/notices.test.ts giữ cho nó không lỗi thời.
+  for (const [from, to] of [['LICENSE.txt', 'LICENSE.txt'], ['THIRD_PARTY_NOTICES.browser.md', 'THIRD_PARTY_NOTICES.md']]) {
+    try {
+      await cp(at(from), path.join(outdir, to));
+    } catch (e) {
+      if (production) throw new Error(`Thiếu ${from} — gói phát hành Chrome/Edge phải kèm giấy phép và thông báo bên thứ ba. Chạy \`npm run notices:browser\` rồi dựng lại. (${e instanceof Error ? e.message : e})`);
+      console.warn(`[esbuild:browser] cảnh báo: chưa có ${from} (chỉ bắt buộc ở bản phát hành --production)`);
+    }
+  }
 }
 
 const only = args.find((a) => a.startsWith('--only='))?.slice('--only='.length);
