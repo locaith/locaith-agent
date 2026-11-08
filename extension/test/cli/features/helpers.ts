@@ -13,9 +13,9 @@ import { SkillRegistry } from '../../../src/core/skills/registry';
 import { newTrace, beginExtensions, type ActiveExtension, type RunExtension, type RunScope } from '../../../src/core/engine/seams';
 import { newSession, type SessionState, type ToolDef } from '../../../src/core/engine/types';
 import type { LLMProvider } from '../../../src/core/types';
-import type { PermissionRequest, UiEvent } from '../../../src/shared/protocol';
+import type { PermissionRequest, TItem, UiEvent } from '../../../src/shared/protocol';
 import type { AskAnswer, AskRequest, FeatureModule, FeatureSlashDef, RuntimeEvent, RuntimeStatus, SettingsApi, SlashRunContext } from '../../../src/cli/runtime/contract';
-import type { AskInit, FeatureContextExt } from '../../../src/cli/runtime/features/ext';
+import type { AskInit, FeatureContextExt, FileWriteBefore } from '../../../src/cli/runtime/features/ext';
 import { getPath, readJsonFile, setPathInFile, type Scope } from '../../../src/cli/runtime/features/settingsFile';
 
 export interface FakeOpts {
@@ -52,6 +52,24 @@ export function writeFile(file: string, text: string): void {
   fs.writeFileSync(file, text, 'utf8');
 }
 
+/** Host giống `CliToolHost` của lõi cli-rt: báo người nghe `onFileWrite` sau mỗi lần ghi thành công. */
+class FakeHost extends NodeToolHost {
+  constructor(private readonly owner: { writeFns: Array<(abs: string, before: FileWriteBefore, after: string) => void> }, opts: ConstructorParameters<typeof NodeToolHost>[0]) {
+    super(opts);
+  }
+  override async writeText(abs: string, content: string): Promise<void> {
+    if (this.owner.writeFns.length === 0) return super.writeText(abs, content);
+    let before: FileWriteBefore;
+    try {
+      before = await this.readText(abs);
+    } catch {
+      before = { skipped: 'binary' };
+    }
+    await super.writeText(abs, content);
+    for (const fn of [...this.owner.writeFns]) fn(abs, before, content);
+  }
+}
+
 export class FakeFeatureContext implements FeatureContextExt {
   readonly cwd: string;
   readonly home: string;
@@ -83,13 +101,15 @@ export class FakeFeatureContext implements FeatureContextExt {
   readonly sessionListeners: Array<(s: SessionState) => void> = [];
   readonly slashDefs = new Map<string, { def: FeatureSlashDef; source: string }>();
   readonly slashSources = new Map<string, FeatureSlashDef[]>();
-  readonly beforeSubmit: Array<(text: string, signal: AbortSignal) => Promise<{ blocked: boolean; reason?: string } | void>> = [];
-  readonly permissionPrompts: Array<(req: PermissionRequest) => void> = [];
-  readonly beforeCompact: Array<(trigger: 'auto' | 'manual' | 'overflow', signal: AbortSignal) => Promise<void>> = [];
-  readonly drafts: string[] = [];
+  readonly beforeSendFns: Array<(info: { text: string; signal: AbortSignal }) => { blocked?: boolean; reason?: string } | void | Promise<{ blocked?: boolean; reason?: string } | void>> = [];
+  readonly permissionRequestFns: Array<(req: PermissionRequest) => void> = [];
+  readonly beforeCompactFns: Array<(info: { session: SessionState; trigger: 'auto' | 'manual' | 'overflow'; signal: AbortSignal }) => void | Promise<void>> = [];
+  readonly writeFns: Array<(abs: string, before: FileWriteBefore, after: string) => void> = [];
+  transcriptItems: TItem[] = [];
+  /** Mỗi lần lõi được yêu cầu thay phiên (rewind/fork). */
+  readonly replaced: { next: SessionState; opts?: { reason?: string; transcript?: TItem[] } }[] = [];
   saved = 0;
   alwaysAllow: ((rule: string, scope: 'user' | 'local') => string | null) | undefined;
-  adopted: { session: SessionState; transcript: unknown[]; reason: string }[] = [];
 
   /** Trả lời `ask`: hàng đợi giá trị, hoặc hàm. Hết hàng đợi → null (huỷ). */
   askAnswers: AskAnswer[] = [];
@@ -102,7 +122,7 @@ export class FakeFeatureContext implements FeatureContextExt {
     this.interactive = o.interactive ?? true;
     this.trusted = o.trusted ?? true;
     this.sess = newSession({ id: 's_test1', provider: 'fake', model: 'fake-model' });
-    this.host = new NodeToolHost({ roots: [this.cwd], extraReadRoots: this.readRoots, shellPreference: process.platform === 'win32' ? 'cmd' : 'sh', onLog: (level, message) => this.logs.push({ level, message }) });
+    this.host = new FakeHost(this, { roots: [this.cwd], extraReadRoots: this.readRoots, shellPreference: process.platform === 'win32' ? 'cmd' : 'sh', onLog: (level, message) => this.logs.push({ level, message }) });
     (this.host as { homeDir: string }).homeDir = this.home;
     const file = (scope: Scope): string => (scope === 'user' ? path.join(this.home, '.locaith', 'settings.json') : path.join(this.cwd, '.locaith', scope === 'project' ? 'settings.json' : 'settings.local.json'));
     for (const [scope, val] of [['user', o.user], ['project', o.project], ['local', o.local]] as const) {
@@ -191,26 +211,33 @@ export class FakeFeatureContext implements FeatureContextExt {
     this.sessionListeners.push(fn);
   }
   // ── tuỳ chọn (ext.ts) ──
-  onBeforeSubmit(fn: (text: string, signal: AbortSignal) => Promise<{ blocked: boolean; reason?: string } | void>): void {
-    this.beforeSubmit.push(fn);
+  beforeSend(fn: (info: { text: string; signal: AbortSignal }) => { blocked?: boolean; reason?: string } | void | Promise<{ blocked?: boolean; reason?: string } | void>): void {
+    this.beforeSendFns.push(fn);
   }
-  onPermissionPrompt(fn: (req: PermissionRequest) => void): void {
-    this.permissionPrompts.push(fn);
+  onPermissionRequest(fn: (req: PermissionRequest) => void): void {
+    this.permissionRequestFns.push(fn);
   }
-  onBeforeCompact(fn: (trigger: 'auto' | 'manual' | 'overflow', signal: AbortSignal) => Promise<void>): void {
-    this.beforeCompact.push(fn);
+  onBeforeCompact(fn: (info: { session: SessionState; trigger: 'auto' | 'manual' | 'overflow'; signal: AbortSignal }) => void | Promise<void>): void {
+    this.beforeCompactFns.push(fn);
+  }
+  onFileWrite(fn: (abs: string, before: FileWriteBefore, after: string) => void): void {
+    this.writeFns.push(fn);
+  }
+  transcript(): readonly TItem[] {
+    return this.transcriptItems;
+  }
+  async replaceSession(next: SessionState, opts?: { reason?: 'resume' | 'fork' | 'rewind' | 'new' | 'clear'; transcript?: TItem[] }): Promise<void> {
+    this.replaced.push({ next, opts });
+    this.sess = next;
+    if (opts?.transcript) this.transcriptItems = opts.transcript;
+    this.events.push({ t: 'replay', items: opts?.transcript ?? [], reason: opts?.reason ?? 'resume' });
+    for (const fn of this.sessionListeners) fn(next);
   }
   registerAlwaysAllow(fn: (rule: string, scope: 'user' | 'local') => string | null): void {
     this.alwaysAllow = fn;
   }
   async saveSession(): Promise<void> {
     this.saved++;
-  }
-  setDraft(text: string): void {
-    this.drafts.push(text);
-  }
-  async adoptSession(session: SessionState, transcript: unknown[], reason: 'fork'): Promise<void> {
-    this.adopted.push({ session, transcript, reason });
   }
 
   // ── tiện ích cho test ──

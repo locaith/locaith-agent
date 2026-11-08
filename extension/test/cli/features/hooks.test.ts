@@ -149,7 +149,7 @@ describe('hooks', () => {
     expect((fin[0].value as { action: string }).action).toBe('accept');
   });
 
-  it('UserPromptSubmit chặn qua onBeforeSubmit của lõi; SessionStart chạy một lần mỗi phiên', async () => {
+  it('UserPromptSubmit chặn qua beforeSend của lõi; SessionStart chạy một lần mỗi phiên', async () => {
     const log = path.join(os.tmpdir(), `hook-ss-${Date.now()}.log`);
     mk({
       user: {
@@ -160,20 +160,20 @@ describe('hooks', () => {
       },
     });
     await ctx.attach(hooksFeature);
-    expect(ctx.beforeSubmit).toHaveLength(1);
-    const r = await ctx.beforeSubmit[0]('hello', new AbortController().signal);
+    expect(ctx.beforeSendFns).toHaveLength(1);
+    const r = await ctx.beforeSendFns[0]({ text: 'hello', signal: new AbortController().signal });
     expect(r).toMatchObject({ blocked: true });
     expect((r as { reason: string }).reason).toContain('tin bị cấm');
-    await ctx.beforeSubmit[0]('again', new AbortController().signal);
+    await ctx.beforeSendFns[0]({ text: 'again', signal: new AbortController().signal });
     const lines = fs.readFileSync(log, 'utf8').trim().split('\n');
     expect(lines).toHaveLength(1); // SessionStart một lần
     expect(JSON.parse(lines[0]).source).toBe('startup');
     fs.rmSync(log, { force: true });
   });
 
-  it('khi lõi chưa có onBeforeSubmit: chặn ở beforeModel và buộc dừng', async () => {
+  it('khi lõi chưa có beforeSend: chặn ở beforeModel và buộc dừng', async () => {
     mk({ user: { hooks: hooksOf('UserPromptSubmit', exits(2, 'cấm tin này')) } });
-    (ctx as unknown as { onBeforeSubmit: undefined }).onBeforeSubmit = undefined;
+    (ctx as unknown as { beforeSend: undefined }).beforeSend = undefined;
     await ctx.attach(hooksFeature);
     const active = ctx.begin(ctx.scope());
     const turn = { turn: 1, maxTurns: 10, turnsLeft: 9, wrapUp: false };
@@ -189,12 +189,12 @@ describe('hooks', () => {
     const log = path.join(os.tmpdir(), `hook-pc-${Date.now()}.log`);
     mk({ user: { hooks: { ...hooksOf('PreCompact', recordStdin(log, 0)), ...hooksOf('SessionEnd', recordStdin(log, 0)) } } });
     await ctx.attach(hooksFeature);
-    await ctx.beforeCompact[0]('manual', new AbortController().signal);
+    await ctx.beforeCompactFns[0]({ session: ctx.session(), trigger: 'manual', signal: new AbortController().signal });
     const text = await ctx.runSlash('hooks');
     expect(text).toContain('PreCompact');
     expect(text).toContain('SessionEnd');
     // phiên bắt đầu rồi đóng → SessionEnd
-    await ctx.beforeSubmit[0]('x', new AbortController().signal);
+    await ctx.beforeSendFns[0]({ text: 'x', signal: new AbortController().signal });
     await ctx.dispose();
     const ev = fs.readFileSync(log, 'utf8').trim().split('\n').map((l) => JSON.parse(l));
     expect(ev.some((e) => e.trigger === 'manual')).toBe(true);

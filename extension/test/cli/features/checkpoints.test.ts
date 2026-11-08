@@ -85,7 +85,9 @@ describe('checkpoints + /rewind', () => {
     expect(replay.reason).toBe('rewind');
     expect(replay.items.filter((i) => i.kind === 'user').map((i) => i.text)).toEqual(['lượt một']);
     expect(ctx.saved).toBe(1);
-    expect(ctx.drafts).toEqual(['lượt hai']);
+    expect(ctx.events.filter((e) => e.t === 'action')).toEqual([{ t: 'action', action: 'insert', payload: 'lượt hai' }]); // tin trả về ô nhập
+    expect(ctx.replaced.map((r) => r.opts?.reason)).toEqual(['rewind']); // lõi cập nhật transcript + phát replay
+    expect(ctx.replaced[0].next).toBe(ctx.session()); // cùng đối tượng phiên, sửa tại chỗ
     expect(out).toContain('lượt hai');
     expect(read(ctx, 'b.txt')).toBe('b2'); // chỉ hội thoại: tệp giữ nguyên
     // lượt mới sau khi cắt vẫn cắt tiếp được đúng chỗ (các lượt đã cắt không bị tính)
@@ -173,5 +175,25 @@ describe('checkpoints + /rewind', () => {
     await checkpointFeatureOf(ctx)!.flush();
     const files = (await turnsOf(ctx)).flatMap((t) => t.files.map((f) => f.rel));
     expect(files).toEqual(['a.txt']);
+  });
+});
+
+describe('checkpoints khi lõi thiếu điểm móc', () => {
+  it('không có onFileWrite → bọc host.writeText vẫn chụp được; không có replaceSession → tự phát replay', async () => {
+    ctx = new FakeFeatureContext();
+    (ctx as unknown as { onFileWrite: undefined }).onFileWrite = undefined;
+    (ctx as unknown as { replaceSession: undefined }).replaceSession = undefined;
+    writeFile(path.join(ctx.cwd, 'a.txt'), 'goc-a');
+    await ctx.attach(checkpointsFeature);
+    await turn(ctx, 'lượt một', { 'a.txt': 'a1' });
+    await turn(ctx, 'lượt hai', { 'a.txt': 'a2' });
+    const turns = await turnsOf(ctx);
+    expect(turns.map((t) => t.files.length)).toEqual([1, 1]);
+    ctx.askAnswers = [turns[1].promptId, 'both', true];
+    await ctx.runSlash('rewind');
+    expect(read(ctx, 'a.txt')).toBe('a1');
+    expect(ctx.session().messages).toHaveLength(2);
+    expect(ctx.events.some((e) => e.t === 'replay' && (e as { reason: string }).reason === 'rewind')).toBe(true);
+    expect(ctx.saved).toBe(1);
   });
 });

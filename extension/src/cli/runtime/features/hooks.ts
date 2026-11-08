@@ -133,7 +133,7 @@ export const hooksFeature: FeatureModule = {
     const svc = buildHookService(ctx);
     services.set(ctx, svc);
     const ext = asExt(ctx);
-    const wired = typeof ext.onBeforeSubmit === 'function';
+    const wired = typeof ext.beforeSend === 'function';
 
     // ── RunExtension: chính + agent con (một đối tượng, tự nhận biết agent con bằng phiên khác phiên chính) ──
     const main = hooksRunExtension(() => svc);
@@ -151,11 +151,11 @@ export const hooksFeature: FeatureModule = {
     ctx.addRunExtension(combined, { subAgents: true });
 
     // ── SessionStart / UserPromptSubmit (trước khi gửi), PreCompact, Notification ──
-    ext.onBeforeSubmit?.(async (text, signal) => {
+    ext.beforeSend?.(async ({ text, signal }) => {
       const r = await svc.beforeSend(text, signal);
       return r.blocked ? { blocked: true, reason: r.reason } : undefined;
     });
-    ext.onPermissionPrompt?.((req) => {
+    ext.onPermissionRequest?.((req) => {
       const ac = new AbortController();
       const timer = setTimeout(() => ac.abort(), 30_000);
       void svc
@@ -163,7 +163,7 @@ export const hooksFeature: FeatureModule = {
         .catch(() => undefined)
         .finally(() => clearTimeout(timer));
     });
-    ext.onBeforeCompact?.((trigger, signal) => svc.preCompact(trigger, signal).catch(() => undefined));
+    ext.onBeforeCompact?.(({ trigger, signal }) => svc.preCompact(trigger, signal).catch(() => undefined));
 
     // ── SessionEnd: đổi phiên (clear) hoặc đóng (close) ──
     let currentId = ctx.session().id;

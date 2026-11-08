@@ -1,7 +1,10 @@
 /**
- * Điểm móc TUỲ CHỌN mà các mô-đun tính năng muốn lõi (lane cli-rt) cung cấp thêm, ngoài `FeatureContext` của contract.ts.
- * Mô-đun nào cần chỉ dùng khi lõi có (kiểm bằng `?.`), nếu không thì rơi về cách thay thế tốt nhất có thể và ghi rõ ở báo cáo.
- * Khi lõi cài đặt, chỉ việc thêm các trường này vào đối tượng FeatureContext (không cần sửa mã trong features/).
+ * Điểm móc TUỲ CHỌN mà các mô-đun tính năng dùng thêm ngoài `FeatureContext` của contract.ts. Mô-đun nào cần chỉ dùng khi lõi có (kiểm bằng `?.`),
+ * thiếu thì rơi về cách thay thế tốt nhất có thể (ghi rõ ở báo cáo).
+ *
+ * Hai nhóm, cố ý KHÔNG dùng `extends` mà dùng giao (&) để khớp được với contract.ts của lane cli-rt dù hai bên khai báo trùng tên:
+ *   • `RtHooks`  — đã có trong contract.ts của lane cli-rt (beforeSend, onBeforeCompact, onFileWrite, onPermissionRequest, transcript, saveSession, replaceSession);
+ *   • `FeaturesWant` — lane cli-features ĐỀ XUẤT thêm (registerAlwaysAllow, agentServices, mainRegistry).
  */
 
 import type { AgentServices } from '../../../core/agents/runner';
@@ -9,40 +12,48 @@ import type { ToolRegistry } from '../../../core/engine/toolRegistry';
 import type { SessionState } from '../../../core/engine/types';
 import type { PermissionRequest, TItem } from '../../../shared/protocol';
 import { registerStrings, t } from '../../i18n';
-import type { AskAnswer, AskRequest, FeatureContext, SlashRunContext } from '../contract';
+import type { AskAnswer, AskRequest, FeatureContext, RuntimeEvent, SlashRunContext } from '../contract';
 
-export interface BeforeSubmitResult {
-  blocked: boolean;
+export interface BeforeSendResult {
+  blocked?: boolean;
   reason?: string;
 }
 
-export interface FeatureContextExt extends FeatureContext {
-  /**
-   * Gọi TRƯỚC khi một tin người dùng được đưa cho model (kể cả lệnh tuỳ chỉnh qua `runPrompt`): hook UserPromptSubmit/SessionStart.
-   * `blocked:true` → lõi KHÔNG chạy lượt, in `reason` thành lỗi và trả chữ về ô nhập. Nhiều người nghe: người đầu tiên chặn thắng.
-   */
-  onBeforeSubmit?(fn: (text: string, signal: AbortSignal) => Promise<BeforeSubmitResult | void>): void;
-  /** Một yêu cầu xin quyền vừa hiện ra cho người dùng (hook Notification). Không chờ, không chặn. */
-  onPermissionPrompt?(fn: (req: PermissionRequest) => void): void;
-  /** Ngay trước khi nén ngữ cảnh (hook PreCompact). Lõi chờ hàm trả về (có hạn giờ). */
-  onBeforeCompact?(fn: (trigger: 'auto' | 'manual' | 'overflow', signal: AbortSignal) => Promise<void>): void;
-  /** Ghi phiên đang chạy ra đĩa ngay (sau /rewind hội thoại). */
+export type FileWriteBefore = string | null | { skipped: 'binary' | 'unreadable' };
+
+export interface RtHooks {
+  /** Trước khi tin người dùng tới model (UserPromptSubmit/SessionStart). `blocked:true` → lõi không chạy lượt và trả chữ về ô nhập. */
+  beforeSend?(fn: (info: { text: string; signal: AbortSignal }) => BeforeSendResult | void | Promise<BeforeSendResult | void>): void;
+  /** Ngay trước khi nén ngữ cảnh thật sự bắt đầu (PreCompact). */
+  onBeforeCompact?(fn: (info: { session: SessionState; trigger: 'auto' | 'manual' | 'overflow'; signal: AbortSignal }) => void | Promise<void>): void;
+  /** Sau MỖI lần công cụ ghi tệp thành công (checkpoints). */
+  onFileWrite?(fn: (abs: string, before: FileWriteBefore, after: string) => void): void;
+  /** Khi một yêu cầu xin quyền được trình ra (Notification). */
+  onPermissionRequest?(fn: (req: PermissionRequest) => void): void;
+  transcript?(): readonly TItem[];
   saveSession?(): Promise<void>;
-  /** /fork: lưu phiên MỚI (đã dựng sẵn) rồi chuyển sang nó, phát replay reason 'fork'. */
-  adoptSession?(session: SessionState, transcript: TItem[], reason: 'fork'): Promise<void>;
-  /** Dịch vụ agent con + kho công cụ của luồng chính — để kiểm chứng độc lập (verifier) chạy agent kiểm tra. Thiếu → dựng tạm từ `RunScope`. */
+  /** Thay phiên đang chạy (cùng đối tượng đã sửa tại chỗ — rewind — hoặc phiên mới — fork), phát replay + status + onSessionChange. Chỉ khi rảnh. */
+  replaceSession?(next: SessionState, opts?: { reason?: 'resume' | 'fork' | 'rewind' | 'new' | 'clear'; transcript?: TItem[] }): Promise<void>;
+}
+
+export interface FeaturesWant {
+  /** Dịch vụ agent con của lõi — cho kiểm chứng độc lập chạy agent kiểm tra với đủ nhà cung cấp. Thiếu → dựng tạm từ `RunScope` (chỉ nhà cung cấp của phiên). */
   agentServices?(): Omit<AgentServices, 'registry'>;
+  /** Kho công cụ của luồng chính (nguồn cho bộ công cụ chỉ-đọc của agent kiểm tra). Thiếu → dựng kho nền từ host. */
   mainRegistry?(): ToolRegistry;
   /**
    * «Luôn cho phép…» trên thẻ xin quyền (`PermissionRequest.suggest`): lõi giữ hàm này và gọi khi người dùng chọn lưu luật; trả về luật đã lưu
    * (hoặc null nếu quá rộng/không hợp lệ). `scope`: 'user' (mọi dự án) hoặc 'local' (`.locaith/settings.local.json`).
    */
   registerAlwaysAllow?(fn: (rule: string, scope: 'user' | 'local') => string | null): void;
-  /** Đặt chữ vào ô nhập của người dùng (sau /rewind hội thoại: trả lại tin đã quay lại). */
-  setDraft?(text: string): void;
 }
 
+export type FeatureContextExt = FeatureContext & RtHooks & FeaturesWant;
+
 export const asExt = (ctx: FeatureContext): FeatureContextExt => ctx as FeatureContextExt;
+
+/** Đưa chữ vào ô nhập (action 'insert' của lõi cli-rt; bản contract cũ chưa có tên này nên ép kiểu). */
+export const insertIntoInput = (ctx: Pick<FeatureContext, 'emit'>, text: string): void => ctx.emit({ t: 'action', action: 'insert', payload: text } as unknown as RuntimeEvent);
 
 /**
  * `Omit<AskRequest, 'id'>` của contract KHÔNG phân phối qua union nên chỉ còn `kind`/`title` — không truyền được `items`, `detail`…

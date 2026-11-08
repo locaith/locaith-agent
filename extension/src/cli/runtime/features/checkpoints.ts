@@ -17,7 +17,7 @@ import { CheckpointStore, sessionKey, type Snapshot, type StoredTurn } from '../
 import type { ToolHost } from '../../../core/engine/types';
 import type { RunExtension } from '../../../core/engine/seams';
 import type { FeatureContext, FeatureModule, SlashRunContext } from '../contract';
-import { asExt, askSlash, isSubAgentScope, makeTr, oneLine } from './ext';
+import { asExt, askSlash, insertIntoInput, isSubAgentScope, makeTr, oneLine } from './ext';
 
 const tr = makeTr('rewind', {
   disabled: ['Chưa bật checkpoint (cài đặt `checkpoints.enabled`).', 'Checkpoints are off (setting `checkpoints.enabled`).'],
@@ -174,10 +174,17 @@ export class CheckpointFeature {
     }
   }
 
+  private lastSessionId = '';
+
+  /** Đổi phiên thật (id khác) thì quên lượt hiện tại/làm lại; phiên cùng id (rewind tại chỗ) thì giữ nguyên. */
   onSessionChange(): void {
-    this.current = null;
-    this.changed = 0;
-    this.redo = null;
+    const id = this.ctx.session().id;
+    if (id !== this.lastSessionId) {
+      this.lastSessionId = id;
+      this.current = null;
+      this.changed = 0;
+      this.redo = null;
+    }
     this.statusRef?.refresh();
     void this.recount();
   }
@@ -314,15 +321,20 @@ export class CheckpointFeature {
       s.lastContextTokens = 0; // số đo của lịch sử DÀI đã bị cắt sẽ làm đồng hồ ngữ cảnh sai
       s.options = undefined;
       if (turn?.todos) s.todos = turn.todos.map((x) => ({ ...x }));
+      s.historyEdited = true;
       // Các lượt từ điểm này về sau không còn trong `messages`: đánh dấu để đếm-từ-cuối không tính chúng nữa.
       const recs = this.readPrompts(sid);
       const at = recs.findIndex((r) => r.promptId === promptId);
       const fullyBack = what === 'both' && skipped === 0;
       if (at >= 0) this.writePrompts(sid, fullyBack ? recs.slice(0, at) : recs.map((r, i) => (i >= at ? { ...r, cut: true } : r)));
       if (fullyBack) await this.store.dropFrom(sid, promptId);
-      this.ctx.emit({ t: 'replay', items: rebuildTranscript(s.messages), reason: 'rewind' });
-      await asExt(this.ctx).saveSession?.();
-      asExt(this.ctx).setDraft?.(cut.text);
+      const items = rebuildTranscript(s.messages);
+      const rt = asExt(this.ctx);
+      // Cùng đối tượng phiên đã sửa tại chỗ: lõi cập nhật transcript của nó, phát replay + status. Thiếu thì tự phát replay.
+      if (rt.replaceSession) await rt.replaceSession(s, { reason: 'rewind', transcript: items });
+      else this.ctx.emit({ t: 'replay', items, reason: 'rewind' });
+      await rt.saveSession?.();
+      insertIntoInput(this.ctx, cut.text);
       convText = tr(lang, 'conv', { text: oneLine(cut.text, 50) });
     }
     await this.recount();
@@ -409,7 +421,12 @@ export const checkpointsFeature: FeatureModule = {
     const feature = new CheckpointFeature(ctx);
     instances.set(ctx, feature);
     void feature.store.gc().catch(() => undefined);
-    const unwrap = wrapHost(ctx.host, feature);
+    feature.onSessionChange();
+    // Lõi có `onFileWrite` thì dùng (không đụng vào host); không thì bọc `host.writeText`.
+    const rt = asExt(ctx);
+    let unwrap: () => void = () => undefined;
+    if (rt.onFileWrite) rt.onFileWrite((abs, before, after) => feature.onWrite(abs, before, after));
+    else unwrap = wrapHost(ctx.host, feature);
 
     const ext: RunExtension = {
       id: 'checkpoints',

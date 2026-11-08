@@ -95,6 +95,13 @@ function workspaceAllow(ctx: FeatureContext): { rules: string[]; hash: string } 
   return { rules: uniq, hash: hashRules(uniq) };
 }
 
+/** Luật từ dòng lệnh (`--allowedTools/--disallowedTools`): lớp `cli` của lõi (`getScoped`), hoặc cài đặt `cli.allowedTools|disallowedTools`. */
+function cliList(ctx: FeatureContext, action: 'allow' | 'deny'): string[] {
+  const scoped = (ctx.settings as { getScoped?: (key: string, scope: string) => unknown }).getScoped;
+  const fromLayer = typeof scoped === 'function' ? strList(scoped.call(ctx.settings, KEYS[action], 'cli')) : [];
+  return [...fromLayer, ...strList(ctx.settings.get<unknown>(action === 'allow' ? 'cli.allowedTools' : 'cli.disallowedTools', []))];
+}
+
 export interface RuleView {
   snapshot: RuleSnapshot;
   /** Luật theo nguồn để hiển thị: [phạm vi, hành động, chữ]. */
@@ -107,8 +114,8 @@ export function ruleView(ctx: FeatureContext): RuleView {
   const trusted = ctx.isTrusted();
   const ws = workspaceAllow(ctx);
   const wsOk = trusted && ws.rules.length > 0 && trustedHashes(ctx.home).includes(ws.hash);
-  const cliAllow = strList(ctx.settings.get<unknown>('cli.allowedTools', []));
-  const cliDeny = strList(ctx.settings.get<unknown>('cli.disallowedTools', []));
+  const cliAllow = cliList(ctx, 'allow');
+  const cliDeny = cliList(ctx, 'deny');
   const userAllow = listAt(ctx, 'user', 'allow');
   const snapshot: RuleSnapshot = {
     rules: buildRules([

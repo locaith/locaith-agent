@@ -4,7 +4,7 @@
  *   • `/output-style [tên] [--save]` — phong cách đầu ra `default|explanatory|learning|concise` + tuỳ chỉnh ở `.locaith/output-styles/*.md` (dự án, tin cậy)
  *     và `~/.locaith/output-styles/*.md` (core/commands/outputStyles.ts). Chọn → `session.outputStyle` (engine tự chèn vào system prompt);
  *     cài đặt `agent.outputStyle` là mặc định cho phiên chưa chọn (áp khi mở/đổi phiên);
- *   • `/fork` — rẽ nhánh phiên thành phiên mới (shared/sessionFork.ts, thuần); lõi lưu + chuyển sang phiên mới qua `adoptSession` (ext.ts).
+ *   • `/fork` — rẽ nhánh phiên thành phiên mới (shared/sessionFork.ts, thuần); lõi chuyển sang phiên mới qua `replaceSession` (ext.ts).
  */
 
 import * as path from 'node:path';
@@ -28,7 +28,7 @@ const tr = makeTr('review', {
   forkEmpty: ['Cuộc trò chuyện còn trống — chưa có gì để rẽ nhánh.', 'The conversation is empty — nothing to fork yet.'],
   forkDone: ['Đã rẽ nhánh: **{title}**. Cuộc gốc được giữ nguyên.', 'Forked: **{title}**. The original is kept.'],
   forkApprox: ['Một phần đầu đã được nén nên nhánh mới chỉ còn bản tóm tắt phần đó.', 'An early part was compacted, so the branch keeps only a summary of it.'],
-  forkUnsupported: ['Lõi chưa hỗ trợ chuyển sang phiên mới (thiếu adoptSession).', 'The runtime cannot switch to a new session yet (adoptSession missing).'],
+  forkUnsupported: ['Lõi chưa hỗ trợ chuyển sang phiên mới (thiếu replaceSession).', 'The runtime cannot switch to a new session yet (replaceSession missing).'],
   forkBusy: ['Hãy dừng tác vụ đang chạy trước.', 'Stop the running task first.'],
 });
 
@@ -84,10 +84,13 @@ async function forkCommand(ctx: FeatureContext, c: SlashRunContext): Promise<voi
   const parent: SessionState = ctx.session();
   if (parent.messages.length === 0) return c.output(tr(lang, 'forkEmpty'), 'plain');
   const ext = asExt(ctx);
-  if (!ext.adoptSession) return c.output(tr(lang, 'forkUnsupported'), 'error');
+  if (!ext.replaceSession) return c.output(tr(lang, 'forkUnsupported'), 'error');
   await ext.saveSession?.(); // phiên gốc phải được lưu đủ trước khi rời đi
-  const res = forkSession(parent, rebuildTranscript(parent.messages), { newId: newId('s'), now: Date.now(), lang, repair: repairOrphanToolCalls });
-  await ext.adoptSession(res.session, res.transcript, 'fork');
+  const live = ext.transcript?.();
+  const transcript = live && live.length ? live : rebuildTranscript(parent.messages); // transcript của lõi rỗng (phiên nạp từ tệp cũ) → dựng lại từ lịch sử
+  const res = forkSession(parent, [...transcript], { newId: newId('s'), now: Date.now(), lang, repair: repairOrphanToolCalls });
+  await ext.replaceSession(res.session, { reason: 'fork', transcript: res.transcript });
+  await ext.saveSession?.(); // ghi ngay phiên nhánh mới
   c.output(tr(lang, 'forkDone', { title: res.session.title }), 'plain');
   if (res.approximate) c.toast('warn', tr(lang, 'forkApprox'));
 }

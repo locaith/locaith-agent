@@ -140,7 +140,7 @@ describe('/output-style', () => {
 });
 
 describe('/fork', () => {
-  it('rẽ nhánh: lưu phiên gốc, dựng phiên mới qua adoptSession với transcript dựng lại', async () => {
+  it('rẽ nhánh: lưu phiên gốc, dựng phiên mới qua replaceSession với transcript của lõi', async () => {
     ctx = new FakeFeatureContext();
     await ctx.attach(reviewFeature);
     expect(await ctx.runSlash('fork')).toMatch(/còn trống/);
@@ -148,25 +148,25 @@ describe('/fork', () => {
     s.title = 'Sửa lỗi đăng nhập';
     s.messages.push({ role: 'user', content: [{ type: 'text', text: 'sửa lỗi' }] } as never, { role: 'assistant', content: [{ type: 'text', text: 'xong' }] } as never);
     const out = await ctx.runSlash('fork');
-    expect(ctx.saved).toBe(1);
-    expect(ctx.adopted).toHaveLength(1);
-    const a = ctx.adopted[0];
-    expect(a.reason).toBe('fork');
-    expect(a.session.id).not.toBe(s.id);
-    expect(a.session.title).toContain('(nhánh)');
-    expect(a.session.messages).toHaveLength(2);
-    expect((a.transcript as { kind: string }[]).some((i) => i.kind === 'user')).toBe(true);
+    expect(ctx.replaced).toHaveLength(1);
+    const a = ctx.replaced[0];
+    expect(a.opts?.reason).toBe('fork');
+    expect(a.next.id).not.toBe(s.id);
+    expect(a.next.title).toContain('(nhánh)');
+    expect(a.next.messages).toHaveLength(2);
+    expect((a.opts!.transcript as { kind: string }[]).some((i) => i.kind === 'user')).toBe(true);
     expect(s.messages).toHaveLength(2); // phiên gốc không đổi
+    expect(ctx.saved).toBe(2); // lưu phiên gốc trước, lưu phiên nhánh sau
     expect(out).toContain('Sửa lỗi đăng nhập');
     ctx.busy = true;
     expect(await ctx.runSlash('fork')).toMatch(/dừng tác vụ/);
   });
 
-  it('lõi chưa hỗ trợ adoptSession → nói rõ, không làm gì', async () => {
+  it('lõi chưa hỗ trợ replaceSession → nói rõ, không làm gì', async () => {
     ctx = new FakeFeatureContext();
-    (ctx as unknown as { adoptSession: undefined }).adoptSession = undefined;
+    (ctx as unknown as { replaceSession: undefined }).replaceSession = undefined;
     await ctx.attach(reviewFeature);
     ctx.session().messages.push({ role: 'user', content: [{ type: 'text', text: 'x' }] } as never);
-    expect(await ctx.runSlash('fork')).toMatch(/adoptSession/);
+    expect(await ctx.runSlash('fork')).toMatch(/replaceSession/);
   });
 });
