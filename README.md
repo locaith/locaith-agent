@@ -1,14 +1,13 @@
 # Locaith AI Agent for VS Code
 
-English-first VS Code Marketplace release for `LocaithAI.locaith-agent`, version `0.7.2`.
+English-first VS Code Marketplace release for `LocaithAI.locaith-agent`, version `0.7.3`.
 
 > This repository contains prebuilt release packages and checksums. The original source tree and build scripts are maintained separately.
 
-## What's new in 0.7.2
+## What's new in 0.7.3
 
-- **The Lo logo comes alive while you wait** — on a long wait it sweeps into a robot dog, a robot, a drone or a rocket and back (switch: `locaithAgent.ui.workingCharacters`); the "working" line now stays visible for the whole run, also while the assistant is thinking or a command runs.
-- **Open files outside the workspace, HTML opens in your browser, options at the end of the conversation with an "All" chip, storage cleanup** (pictures shrunk when attached; a "Clean up storage" card in Settings).
-- **Locaith CLI 0.4.0 — a full terminal app** on the same engine: `pip install locaith-cli`, then `locaith`.
+- **The status word on the working line is typed out, letter by letter** — with a blinking caret and a soft light sweep, held long enough to read, erased, then the next word follows ("Thinking", "Reading code", "Pondering"…). The "~tokens · seconds" beside it does not jump, and screen readers still hear the plain label once. Plain static label with Lite mode, when `locaithAgent.ui.workingCharacters` is off (it now covers the characters and the typed word), or when the OS asks for reduced motion. Same in the Chrome/Edge build.
+- **Locaith CLI 0.4.1** — `locaith provider` (and `/provider`): use another vendor's key or your own API (OpenRouter, Ollama, LM Studio, Groq… or any OpenAI-compatible address), keys bound to their address and never typed on the command line; a cloned repository can no longer redirect your key; the CLI spinner word is typed out too. `pip install -U locaith-cli`.
 
 See `CHANGELOG.md` for details.
 
@@ -30,9 +29,9 @@ Search for **Locaith AI Agent** in VS Code Extensions, or run:
 
 ## Install from the VSIX
 
-Download [`locaith-agent-0.7.2.vsix`](releases/locaith-agent-0.7.2.vsix), then choose **Extensions** → **...** → **Install from VSIX...**. From a terminal, run:
+Download [`locaith-agent-0.7.3.vsix`](releases/locaith-agent-0.7.3.vsix), then choose **Extensions** → **...** → **Install from VSIX...**. From a terminal, run:
 
-`code --install-extension releases/locaith-agent-0.7.2.vsix`
+`code --install-extension releases/locaith-agent-0.7.3.vsix`
 
 The package manifest declares VS Code engine `^1.90.0` and publisher `LocaithAI`. The Marketplace README is English-first; the package also includes a Vietnamese guide. The package is about 13 MB because it bundles 835 open-source skills.
 
@@ -46,13 +45,13 @@ SHA-256 of `locaith-agent-browser-0.4.4.zip`:
 
 The zip carries its own `LICENSE.txt` (Locaith Freeware License) and `THIRD_PARTY_NOTICES.md` (the third-party components of the browser bundle).
 
-**Chrome Web Store edition (0.7.2).** A second Chrome/Edge build shares its chat interface with the VS Code extension (same compact timeline):[`locaith-agent-browser-0.7.2.zip`](releases/locaith-agent-browser-0.7.2.zip), built from `extension/src/browser` by `npm run package:browser` and submitted to the Chrome Web Store as “Locaith AI — Trợ lý trình duyệt”. It does **not** (yet) include the page Watcher, the VS Code bridge or the Locaith AI Local models of the 0.4.4 package above. SHA-256: `B26DD826ADE2B636F82509D0651154990DF5C4422F84FFDC76ABEC7F6C6A45A7`. See `extension/docs/CHROME-STORE.md`.
+**Chrome Web Store edition (0.7.3).** A second Chrome/Edge build shares its chat interface with the VS Code extension (same compact timeline):[`locaith-agent-browser-0.7.3.zip`](releases/locaith-agent-browser-0.7.3.zip), built from `extension/src/browser` by `npm run package:browser` and submitted to the Chrome Web Store as “Locaith AI — Trợ lý trình duyệt”. It does **not** (yet) include the page Watcher, the VS Code bridge or the Locaith AI Local models of the 0.4.4 package above. SHA-256: `7B47C665F18E65A388EEB4C3FED135BFE7F17029E01B7778543387599D140307`. See `extension/docs/CHROME-STORE.md`.
 
 ## Package integrity
 
-SHA-256 of `locaith-agent-0.7.2.vsix`:
+SHA-256 of `locaith-agent-0.7.3.vsix`:
 
-`971A71F4449B643EC4A82B8291AD82F293F73798703A3CFA9258C41C193F68AC`
+`25248CC485F2425F2A83772E62B464ACE2CB07E198E41AC8B921427F81A2E6EC`
 
 All release checksums are listed in `SHA256SUMS.txt`.
 
@@ -64,9 +63,9 @@ Third-party components keep their own licenses: open-source libraries and fonts 
 
 ## Tiếng Việt
 
-Đây là gói cài đặt VSIX đã biên dịch của extension `LocaithAI.locaith-agent`, phiên bản `0.7.2`. Repo này chứa các gói phát hành, không kèm source code hoặc build scripts.
+Đây là gói cài đặt VSIX đã biên dịch của extension `LocaithAI.locaith-agent`, phiên bản `0.7.3`. Repo này chứa các gói phát hành, không kèm source code hoặc build scripts.
 
-Cài từ Marketplace bằng cách tìm **Locaith AI Agent** trong Extensions. Hoặc cài từ VSIX: mở **Extensions** trong VS Code → **...** → **Install from VSIX...**, rồi chọn `locaith-agent-0.7.2.vsix`.
+Cài từ Marketplace bằng cách tìm **Locaith AI Agent** trong Extensions. Hoặc cài từ VSIX: mở **Extensions** trong VS Code → **...** → **Install from VSIX...**, rồi chọn `locaith-agent-0.7.3.vsix`.
 
 `code --install-extension LocaithAI.locaith-agent`
 
@@ -76,4 +75,4 @@ Cài từ Marketplace bằng cách tìm **Locaith AI Agent** trong Extensions. H
 
 **Extension Chrome / Edge:** gói riêng `releases/locaith-agent-browser-0.4.4.zip` (SHA-256 `B88604383FE97E67B9FD6EAD24AA534305DA2BA68077CA03CBC478B1EEF152D2`). Giải nén vào MỘT thư mục cố định, mở `chrome://extensions` (Edge: `edge://extensions`), bật **Chế độ nhà phát triển** rồi chọn **Tải tiện ích đã giải nén**. Cập nhật: giải nén bản mới đè vào cùng thư mục rồi bấm **Tải lại**. Ghép đôi với VS Code (Locaith AI Agent từ 0.5.1) ở **Chợ → Chrome**. Trong gói có sẵn `LICENSE.txt` và `THIRD_PARTY_NOTICES.md`. Bản 0.4.3 thêm nhà cung cấp **Locaith AI Local** (Locaith-v5-flash, Locaith-v5-SI, cửa sổ ngữ cảnh 1 triệu token): kết nối bằng mã lấy ở `locaith.ai/#ext-browser`.
 
-**Bản Chrome Web Store (0.7.2):** gói thứ hai dùng chung giao diện với extension VS Code, dựng từ `extension/src/browser` bằng `npm run package:browser` và nộp lên Chrome Web Store với tên «Locaith AI — Trợ lý trình duyệt»: `releases/locaith-agent-browser-0.7.2.zip` (SHA-256 `B26DD826ADE2B636F82509D0651154990DF5C4422F84FFDC76ABEC7F6C6A45A7`). Bản này CHƯA có «Theo dõi tin nhắn», cầu nối VS Code và mô hình Locaith AI Local của gói 0.4.4 ở trên. Xem `extension/docs/CHROME-STORE.md`.
+**Bản Chrome Web Store (0.7.3):** gói thứ hai dùng chung giao diện với extension VS Code, dựng từ `extension/src/browser` bằng `npm run package:browser` và nộp lên Chrome Web Store với tên «Locaith AI — Trợ lý trình duyệt»: `releases/locaith-agent-browser-0.7.3.zip` (SHA-256 `7B47C665F18E65A388EEB4C3FED135BFE7F17029E01B7778543387599D140307`). Bản này CHƯA có «Theo dõi tin nhắn», cầu nối VS Code và mô hình Locaith AI Local của gói 0.4.4 ở trên. Xem `extension/docs/CHROME-STORE.md`.
