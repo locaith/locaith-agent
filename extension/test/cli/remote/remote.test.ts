@@ -560,6 +560,12 @@ describe('hiển thị trên locaith.ai', () => {
   it('nhãn máy: «<hostname> · CLI», tối đa 60 ký tự, bỏ ký tự lạ', () => {
     expect(machineLabel('may-tram')).toBe('may-tram · CLI');
     expect(machineLabel('máy-của-tôi')).toBe('my-ca-ti · CLI'); // bỏ chữ có dấu/ký tự ngoài tập cho phép (máy chủ cũng lọc như vậy)
+    // Tên máy dài (hostname máy CI: sjc22-bm211-388cc323-…) phải CẮT PHẦN TÊN, hậu tố « · CLI» luôn còn — nếu không, trên trang không phân biệt được với VS Code.
+    const long = machineLabel('sjc22-bm211-388cc323-4498-4c1e-8ed5-c9f2b1a7e4d3');
+    expect(long.length).toBeLessThanOrEqual(60);
+    expect(long).toMatch(/ · CLI$/);
+    expect(long.startsWith('sjc22-bm211')).toBe(true);
+    expect(machineLabel('x'.repeat(100))).toMatch(/^x+ · CLI$/);
     expect(machineLabel('x'.repeat(100)).length).toBeLessThanOrEqual(60);
     expect(machineLabel('   ')).toBe('May · CLI');
   });

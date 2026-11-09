@@ -86,10 +86,17 @@ export interface CliRemoteDeps {
 
 const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms).unref?.());
 
-/** Tên hiển thị của máy trên locaith.ai: «<hostname> · CLI» (≤ 60 ký tự, bỏ ký tự lạ) để phân biệt với VS Code cùng máy. */
+/** Hậu tố phân biệt CLI với VS Code trên cùng máy; nhãn dài quá giới hạn của máy chủ (60) thì CẮT PHẦN TÊN MÁY, không bao giờ cắt hậu tố. */
+const LABEL_SUFFIX = ' · CLI';
+/**
+ * Tên hiển thị của máy trên locaith.ai: «<hostname> · CLI» (≤ 60 ký tự, bỏ ký tự lạ). Hostname thật hay dài (máy CI: `sjc22-bm211-388cc323-…`) nên phải
+ * cắt phần tên trước — trước đây cắt cả chuỗi, làm mất « · CLI» và máy hiện trên trang không phân biệt được với VS Code.
+ */
 export function machineLabel(host: string = os.hostname()): string {
-  const h = host.replace(/[^A-Za-z0-9 ._()-]/g, '').replace(/\s+/g, ' ').trim() || 'May';
-  return `${h} · CLI`.slice(0, 60);
+  const clean = host.replace(/[^A-Za-z0-9 ._()-]/g, '').replace(/\s+/g, ' ').trim() || 'May';
+  const room = 60 - LABEL_SUFFIX.length;
+  const name = clean.length > room ? clean.slice(0, room).trimEnd() : clean;
+  return `${name}${LABEL_SUFFIX}`;
 }
 
 /** Phần mô tả máy gửi lên danh bạ (máy chủ chỉ giữ vài trường, cắt 24–40 ký tự; chỉ để hiển thị, không dùng phân quyền). */
