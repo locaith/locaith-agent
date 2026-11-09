@@ -1,4 +1,4 @@
-# Locaith CLI — hướng dẫn sử dụng (0.4.7)
+# Locaith CLI — hướng dẫn sử dụng (0.4.8)
 
 Trợ lý lập trình Locaith ngay trong terminal. **Cùng lõi** với extension VS Code: cùng engine, công cụ, kỹ năng, hooks, checkpoints/rewind,
 tác vụ nền, MCP, luật quyền, nén ngữ cảnh. Model chạy ở cổng Locaith (`locaith-v5-flash`, `locaith-v5-si`) hoặc khoá hãng khác của bạn
@@ -26,6 +26,7 @@ locaith -c                               # tiếp tục phiên gần nhất củ
 locaith -r                               # mở danh sách phiên đã lưu để CHỌN (↑↓ + Enter) — không cần nhớ mã
 locaith -r 2                             # mở thẳng phiên số 2 trong danh sách (cũng: -r "từ trong tiêu đề", -r <mã>)
 locaith -p "tóm tắt repo này"            # in một lần rồi thoát (cho script/CI)
+locaith --remote                         # bật điều khiển từ xa (locaith.ai) ngay khi mở — như gõ /remote
 cat build.log | locaith -p "vì sao lỗi?" # nhận cả stdin
 ```
 
@@ -69,7 +70,7 @@ Mọi dòng đã xong được **in thẳng vào scrollback** của terminal (cu
 
 `/help` `/clear` (= `/new`) `/compact [giữ gì]` `/context` `/cost` `/status` `/model [id]` `/mode [tên]` `/thinking [mức]` `/resume [số|từ khoá|mã|all]` `/sessions [list] [all]`
 `/rewind` `/fork` `/tasks` `/hooks` `/permissions` `/agents` `/mcp` `/memory` `/init` `/skills` `/plugins` `/review` `/simplify` `/security-review` `/verify`
-`/output-style` `/config` `/theme` `/login` `/logout` `/whoami` `/provider` `/doctor` `/update` `/export` `/copy` `/exit`.
+`/output-style` `/config` `/theme` `/login` `/logout` `/whoami` `/provider` — `/remote` `/doctor` `/update` `/export` `/copy` `/exit`.
 Lệnh tuỳ chỉnh: tạo `.locaith/commands/ten.md` (dự án) hoặc `~/.locaith/commands/ten.md` (cá nhân), dùng `$ARGUMENTS`, `@tệp`, `` !`lệnh` ``.
 Lệnh do máy chủ MCP cung cấp cũng hiện trong menu.
 
@@ -87,6 +88,32 @@ Mỗi cuộc trò chuyện tự lưu ở `~/.locaith/sessions`. Có bốn cách 
 `locaith -c` mở phiên gần nhất của thư mục. `/sessions all` và `/resume all` gồm cả phiên của thư mục khác (nhóm «Thư mục khác»). `/sessions list` (và `locaith sessions`, và chế độ `-p`) in bảng có **mã đầy đủ** kèm hướng dẫn mở lại.
 Mã phiên dạng `cli_<giờ><ngẫu nhiên>` nên các phiên tạo gần nhau chung 8 ký tự đầu — vì vậy bảng in mã ĐẦY ĐỦ, và gõ đầu mã trùng nhau thì CLI liệt kê các phiên khớp thay vì đoán.
 
+### Điều khiển từ xa qua locaith.ai (Remote)
+
+Xem và điều khiển phiên CLI **đang chạy** từ trang **locaith.ai** trên điện thoại hoặc máy khác — cùng cơ chế với extension VS Code (dùng chung lõi relay và mã hoá đầu-cuối). Máy hiện trong «Máy của bạn» với tên **«&lt;tên máy&gt; · CLI»**, kèm tên thư mục.
+
+```bash
+/remote            # bật (hỏi xác nhận lần đầu) và mở locaith.ai — trang tự vào máy bằng TÀI KHOẢN bạn đang đăng nhập (không mã, không ghép đôi)
+locaith --remote   # bật ngay khi mở CLI · lần sau mở lại ở cùng thư mục thì tự bật (cài đặt remote.autoStart)
+/remote status     # đang bật không · đã nối chưa · bao nhiêu trình duyệt đang mở
+/remote url        # in địa chỉ để mở tay (máy không có trình duyệt, SSH)
+/remote pair       # cửa sổ ghép đôi 5 phút cho thiết bị KHÔNG đăng nhập tài khoản này (liên kết một lần + mã xác nhận, bạn bấm «Cho phép» tại terminal)
+/remote key        # đổi khoá tài khoản: ngắt mọi trình duyệt đang vào
+/remote off        # tắt = thu hồi: ngắt mọi trình duyệt, gỡ máy khỏi danh bạ, xoá khoá
+```
+
+| Điều | Chi tiết |
+|---|---|
+| Cần gì | Đã đăng nhập Locaith (`locaith login`). Không có tài khoản thì Remote không có nghĩa (trang không biết máy nào) — CLI nói rõ và chỉ chạy `/login` |
+| Mặc định | **TẮT**. Bật lần đầu phải xác nhận, kèm lời cảnh báo: trình duyệt đăng nhập đúng tài khoản làm được mọi việc trợ lý làm được trên máy này |
+| Bảo mật đường truyền | Mã hoá đầu-cuối (relay chỉ thấy bản mã). Bí mật nằm ở mã máy 128 bit; «tin cậy theo tài khoản» dùng khoá 128 bit lưu trong danh bạ tài khoản (`ext_host_upsert`/`ext_hosts_list`) |
+| Ai vào được | Trình duyệt đăng nhập đúng tài khoản (không cần ghép đôi) · thiết bị đã ghép đôi bằng `/remote pair` |
+| Dấu hiệu trên máy | Dải trạng thái hiện «● Remote · đã nối locaith.ai»; khi có trình duyệt vào: «● Remote · N trình duyệt đang điều khiển · /remote off để ngắt» (màu cảnh báo) và một dòng thông báo |
+| Từ xa KHÔNG làm được | Chạy shell `!lệnh` (bị chặn: shell trong CLI chạy không qua hộp xin quyền) · lệnh gạch chéo chỉ dùng ở terminal (`/resume`, `/model`, `/login`, `/remote`…) · đổi sang «Bỏ qua mọi xác nhận» trừ khi bạn bật `remote.allowBypass` |
+| Từ xa LÀM được | Gửi tin (+ ảnh) · dừng · thử lại · nén ngữ cảnh · phiên mới · mở phiên cũ · đổi model/chế độ/suy luận · trả lời thẻ xin quyền (hộp quyền ở terminal tự đóng) |
+| Cài đặt | `remote.autoStart` (mặc định bật: đã bật ở thư mục nào thì lần sau tự bật lại) · `remote.allowBypass` (mặc định tắt) |
+| Dữ liệu trên máy | `~/.locaith/remote.json` (quyền 600): bí mật máy, khoá tài khoản, thiết bị đã ghép đôi. Không bao giờ ghi ra log/màn hình |
+
 ## Dòng lệnh
 
 | Lệnh | Việc |
@@ -97,16 +124,16 @@ Mã phiên dạng `cli_<giờ><ngẫu nhiên>` nên các phiên tạo gần nhau
 | `locaith login [--no-browser]` · `logout` · `whoami` | đăng nhập / xoá khoá đã lưu / xem tài khoản, gói, model |
 | `locaith consent --yes` | ghi nhận đồng ý thông báo dữ liệu (một lần, bởi chủ tài khoản) |
 | `locaith provider [add\|key\|list\|test\|remove]` | nhà cung cấp mô hình: thêm API tuỳ chỉnh (OpenRouter, Ollama…), lưu khoá hãng khác, thử kết nối — xem mục «Nhà cung cấp mô hình» |
-| `locaith sessions [--all]` | liệt kê phiên đã lưu (mở lại bằng `-r <id>` hoặc `-c`) |
+| `locaith sessions [--all]` | liệt kê phiên đã lưu (mở lại bằng `-r` / `-r <số|từ khoá|id>` / `-c`) |
 | `locaith config` | chỉ ra nơi đặt cài đặt, khoá, phiên, MCP, bộ nhớ |
 | `locaith update [--check]` · `help [chủ đề]` · `version` | nâng cấp · hướng dẫn chi tiết · phiên bản |
 
 Tuỳ chọn thường dùng: `-p/--print` · `--output-format text|json|stream-json` · `-c/--continue` · `-r/--resume [id]` · `--model <id>` ·
 `--permission-mode default|acceptEdits|plan|bypassPermissions` · `--allowedTools "Bash(npm test:*)" "Read"` (và `--disallowedTools`) · `--add-dir <thư mục>` ·
-`--append-system-prompt <chữ>` · `--max-turns <n>` · `--timeout <giây>` · `--cwd <thư mục>` · `--mcp-config <tệp>` · `--no-session-persistence` · `--verbose` · `--no-color` · `--lang vi|en`.
+`--append-system-prompt <chữ>` · `--max-turns <n>` · `--timeout <giây>` · `--cwd <thư mục>` · `--mcp-config <tệp>` · `--no-session-persistence` · `--remote` · `--verbose` · `--no-color` · `--lang vi|en`.
 Cờ cũ của 0.3.x vẫn chạy: `--allow none|reads|all` (= plan / default / bypassPermissions), `--json`, `--quiet`.
 
-`locaith help <commands|shortcuts|print|settings|permissions|providers|hooks|mcp|sessions|memory|troubleshooting>` in hướng dẫn từng chủ đề ngay trong terminal.
+`locaith help <commands|shortcuts|print|settings|permissions|providers|hooks|mcp|sessions|remote|memory|troubleshooting>` in hướng dẫn từng chủ đề ngay trong terminal.
 
 ## Chế độ in một lần (script/CI)
 

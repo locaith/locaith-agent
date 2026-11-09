@@ -136,6 +136,16 @@ export class MockRuntime implements CliRuntime {
     this.st = { ...this.st, ...patch };
     this.emit({ t: 'status', status: this.status() });
   }
+  /** Chỉ cho kiểm thử/demo: đặt (hoặc xoá, nếu undefined) trạng thái Remote ở dải dưới như runtime thật sẽ báo. */
+  setRemote(remote: RuntimeStatus['remote'] | undefined): void {
+    const { remote: _old, ...rest } = this.st;
+    this.st = remote ? { ...rest, remote } : rest;
+    this.emit({ t: 'status', status: this.status() });
+  }
+  /** Chỉ cho kiểm thử/demo: phát một action như thể lệnh gạch chéo vừa yêu cầu giao diện làm việc đó. */
+  fireAction(action: Extract<RuntimeEvent, { t: 'action' }>['action'], payload?: string): void {
+    this.emit({ t: 'action', action, ...(payload !== undefined ? { payload } : {}) });
+  }
 
   async submit(text: string, opts?: { attachments?: Attachment[] }): Promise<void> {
     this.calls.push({ fn: 'submit', args: [text, opts] });

@@ -5,7 +5,7 @@
 
 import type { Lang } from './i18n';
 
-export const HELP_TOPICS = ['commands', 'shortcuts', 'print', 'settings', 'permissions', 'providers', 'hooks', 'mcp', 'sessions', 'memory', 'troubleshooting'] as const;
+export const HELP_TOPICS = ['commands', 'shortcuts', 'print', 'settings', 'permissions', 'providers', 'hooks', 'mcp', 'sessions', 'remote', 'memory', 'troubleshooting'] as const;
 export type HelpTopic = (typeof HELP_TOPICS)[number];
 
 export function usageText(version: string, lang: Lang): string {
@@ -42,6 +42,7 @@ COMMON OPTIONS
   --append-system-prompt <t>    extra instructions for this run
   --max-turns <n>   --timeout <s>   --cwd <dir>   --mcp-config <file>
   --no-session-persistence      do not save this session
+  --remote                      turn on remote control from locaith.ai at start (same as typing /remote; needs a Locaith account)
   --verbose   --no-color   --lang vi|en   -h/--help   -v/--version
 
 KEYS: set LOCAITH_API_KEY (CI/servers) or run \`locaith login\`; another vendor's key: \`locaith provider key <vendor>\`. Never pass keys on the command line.
@@ -78,6 +79,7 @@ TUỲ CHỌN THƯỜNG DÙNG
   --append-system-prompt <t>    chỉ dẫn thêm cho lượt này
   --max-turns <n>   --timeout <giây>   --cwd <thư mục>   --mcp-config <tệp>
   --no-session-persistence      không lưu phiên này
+  --remote                      bật điều khiển từ xa từ locaith.ai ngay khi mở (như gõ /remote; cần tài khoản Locaith)
   --verbose   --no-color   --lang vi|en   -h/--help   -v/--version
 
 KHOÁ: đặt LOCAITH_API_KEY (CI/máy chủ) hoặc chạy \`locaith login\`. Không truyền khoá qua dòng lệnh.
@@ -92,6 +94,7 @@ const VI: Record<HelpTopic, string> = {
   /mode [tên]      chế độ quyền (Shift+Tab)         /thinking [mức]   mức suy luận
   /resume          chọn và mở lại một phiên đã lưu bằng ↑↓ + Enter  (hoặc  /resume 2 · /resume từ khoá · /resume mã)
   /sessions        như /resume; /sessions list in bảng có số thứ tự và mã đầy đủ; /sessions all gồm mọi thư mục
+  /remote          điều khiển phiên này từ locaith.ai (điện thoại / máy khác) — xem  locaith help remote
   /rewind          quay lại một lượt (mã / hội thoại / cả hai)       /fork   rẽ nhánh từ đây
   /tasks           tác vụ nền (dev server, build…)  /hooks           xem hooks đang chạy
   /permissions     luật cho phép/hỏi/chặn           /agents           agent con
@@ -169,6 +172,18 @@ Mỗi cuộc trò chuyện tự lưu ở ~/.locaith/sessions. Mở lại KHÔNG 
   ngoài phiên:  locaith -r (mở danh sách để chọn) · locaith -r 2 · locaith -r "đăng nhập" · locaith -r <mã> · locaith -c (phiên gần nhất của thư mục) · locaith sessions (in danh sách)
 /fork rẽ nhánh; /rewind quay lại một lượt (khôi phục mã và/hoặc hội thoại — cần checkpoints.enabled, mặc định bật).
 Nén ngữ cảnh tự động ở 80% cửa sổ (agent.compactAtPercent); kết quả công cụ cũ được lược trước; /compact để nén tay.`,
+  remote: `ĐIỀU KHIỂN TỪ XA (REMOTE)
+Xem và điều khiển phiên CLI đang chạy từ trang locaith.ai — trên điện thoại hoặc máy khác — giống extension VS Code. Máy hiện trong «Máy của bạn» với tên «<tên máy> · CLI».
+  /remote                bật (nếu chưa) và mở locaith.ai: trang tự vào máy này bằng TÀI KHOẢN Locaith bạn đang đăng nhập — không mã, không ghép đôi
+  locaith --remote       bật ngay khi mở CLI · lần sau mở lại ở cùng thư mục thì tự bật (cài đặt remote.autoStart)
+  /remote status         đang bật không, đã nối chưa, bao nhiêu trình duyệt đang mở
+  /remote url            in địa chỉ để mở tay (máy không có trình duyệt, SSH)
+  /remote pair           cửa sổ ghép đôi 5 phút cho thiết bị KHÔNG đăng nhập tài khoản này (liên kết dùng một lần + mã xác nhận; bạn bấm «Cho phép» ở terminal)
+  /remote key            đổi khoá tài khoản: ngắt mọi trình duyệt đang vào (trang còn đăng nhập đúng tài khoản tự vào lại bằng khoá mới)
+  /remote off            tắt = thu hồi: ngắt mọi trình duyệt, gỡ máy khỏi danh bạ, xoá khoá — gõ được ngay tại terminal
+Mặc định TẮT; bật lần đầu phải xác nhận. Cần đã đăng nhập (locaith login). Đường Internet mã hoá đầu-cuối (relay chỉ thấy bản mã).
+AN TOÀN: ai đăng nhập được tài khoản Locaith của bạn thì điều khiển được máy này — hãy bảo vệ tài khoản. Từ xa KHÔNG chạy được lệnh shell (!lệnh) và các lệnh gạch chéo chỉ dùng ở terminal
+(/resume, /model, /login, /remote…); không đổi sang chế độ «Bỏ qua mọi xác nhận» trừ khi bạn bật cài đặt remote.allowBypass. Khi có trình duyệt vào, dải dưới hiện «Remote · N trình duyệt đang điều khiển».`,
   memory: `KÝ ỨC VÀ CHỈ DẪN
 LOCAITH.md (hoặc AGENTS.md / CLAUDE.md) ở gốc dự án và ~/.locaith/LOCAITH.md: chỉ dẫn luôn được nạp. /init tạo LOCAITH.md bằng cách quét dự án; /memory mở để sửa.
 Ký ức bền (.locaith/memory/MEMORY.md và ~/.locaith/memory/MEMORY.md) được nạp lại mỗi lượt; trợ lý ghi bằng công cụ remember (không ghi bí mật).`,
@@ -190,6 +205,7 @@ const EN: Record<HelpTopic, string> = {
   /mode [name]     permission mode (Shift+Tab)      /thinking [level] reasoning level
   /resume          pick and reopen a saved session with ↑↓ + Enter  (or  /resume 2 · /resume keyword · /resume id)
   /sessions        like /resume; /sessions list prints a table with numbers and full ids; /sessions all covers every folder
+  /remote          control this session from locaith.ai (phone / another computer) — see  locaith help remote
   /rewind          go back to a turn (code / conversation / both)   /fork   branch from here
   /tasks           background tasks (dev servers…)  /hooks            show active hooks
   /permissions     allow/ask/deny rules             /agents           sub-agents
@@ -267,6 +283,18 @@ Every conversation is saved in ~/.locaith/sessions. You do NOT need to remember 
   outside:  locaith -r (opens the picker) · locaith -r 2 · locaith -r "login" · locaith -r <id> · locaith -c (this folder's latest) · locaith sessions (prints the list)
 /fork branches; /rewind goes back a turn (restores code and/or conversation — needs checkpoints.enabled, on by default).
 Context auto-compacts at 80% of the window (agent.compactAtPercent); old tool results are trimmed first; /compact compacts by hand.`,
+  remote: `REMOTE CONTROL
+See and control the running CLI session from locaith.ai — on your phone or another computer — like the VS Code extension. The machine shows up in “Your machines” as “<machine name> · CLI”.
+  /remote                turns it on (if needed) and opens locaith.ai: the page signs in to this machine with the Locaith ACCOUNT you are using — no code, no pairing
+  locaith --remote       turn it on at start · next time in the same folder it turns itself on (setting remote.autoStart)
+  /remote status         on or not, connected or not, how many browsers are open
+  /remote url            prints the address to open by hand (no browser, SSH)
+  /remote pair           5-minute pairing window for a device that is NOT signed in to this account (single-use link + confirmation code; you click “Allow” in the terminal)
+  /remote key            change the account key: cuts every browser that is in (a page still signed in to the account comes back with the new key)
+  /remote off            turn off = revoke: cuts every browser, removes the machine from the list, deletes the key — works right at the terminal
+OFF by default; the first time it asks for confirmation. Needs a sign-in (locaith login). The Internet path is end-to-end encrypted (the relay only sees ciphertext).
+SAFETY: anyone who can sign in to your Locaith account can control this machine — keep the account safe. Remote CANNOT run shell commands (!cmd) or slash commands that only make sense at the terminal
+(/resume, /model, /login, /remote…); it cannot switch to “Bypass all prompts” unless you turn on the setting remote.allowBypass. While a browser is in, the footer shows “Remote · N browser(s) controlling”.`,
   memory: `MEMORY AND INSTRUCTIONS
 LOCAITH.md (or AGENTS.md / CLAUDE.md) at the repo root and ~/.locaith/LOCAITH.md: instructions always loaded. /init creates LOCAITH.md by scanning the project; /memory opens it for editing.
 Persistent memory (.locaith/memory/MEMORY.md and ~/.locaith/memory/MEMORY.md) is reloaded every turn; the assistant writes with the remember tool (never secrets).`,

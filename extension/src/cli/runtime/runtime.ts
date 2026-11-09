@@ -1145,13 +1145,15 @@ export class Runtime implements CliRuntime {
       return Promise.resolve({ decision: 'deny', feedback: this.tr('permDeniedNonInteractive', { title: req.title, tool: req.tool }) });
     }
     return new Promise<PermissionDecision>((resolve) => {
+      // Trả lời xin quyền có thể tới từ NƠI KHÁC ngoài hộp thoại ở terminal (Remote: người dùng bấm «Cho phép» trên điện thoại): luôn phát `permission_cancel` để hộp ở terminal tự đóng
+      // thay vì nằm chờ một câu hỏi đã được trả lời. Hộp đã đóng bởi chính người trả lời ở terminal thì bỏ qua sự kiện này (giao diện lọc theo id).
       const done = (d: PermissionDecision) => {
         this.permWaiters.delete(req.id);
         signal.removeEventListener('abort', onAbort);
+        this.emit({ t: 'permission_cancel', id: req.id });
         resolve(d);
       };
       const onAbort = () => {
-        this.emit({ t: 'permission_cancel', id: req.id });
         done({ decision: 'deny', feedback: engineT(this.lang, 'aborted') });
       };
       this.permWaiters.set(req.id, done);
@@ -1540,6 +1542,8 @@ export class Runtime implements CliRuntime {
         rt.alwaysAllowFn = fn;
       },
       transcript: () => rt.transcript,
+      runtime: () => rt,
+      accountToken: () => readLocaithKey(this.home, this.env),
       saveSession: () => this.saveNow(),
       replaceSession: async (next, o) => {
         if (this.busy) throw new Error(this.tr('busy'));

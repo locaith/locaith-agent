@@ -18,6 +18,7 @@ import { mcpFeature } from './mcp';
 import { memoryFeature } from './memory';
 import { permissionsFeature } from './permissions';
 import { pluginsFeature } from './plugins';
+import { remoteFeature } from './remote';
 import { reviewFeature } from './review';
 import { skillsFeature } from './skills';
 import { verifyFeature } from './verify';
@@ -35,6 +36,7 @@ export function defaultFeatures(): FeatureModule[] {
     commandsFeature,
     memoryFeature,
     reviewFeature,
+    remoteFeature, // điều khiển từ xa qua locaith.ai (/remote) — sau cùng các tính năng có lệnh để chắc /remote không bị ai ghi đè
     verifyFeature,
   ];
 }
@@ -49,6 +51,7 @@ export {
   memoryFeature,
   permissionsFeature,
   pluginsFeature,
+  remoteFeature,
   reviewFeature,
   skillsFeature,
   verifyFeature,

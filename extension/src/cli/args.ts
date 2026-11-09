@@ -50,6 +50,8 @@ export interface ParsedArgs {
   noBrowser: boolean;
   /** `sessions --all`, `update --check` … cờ phụ của lệnh con. */
   flags: Record<string, boolean>;
+  /** `--remote`: bật điều khiển từ xa qua locaith.ai ngay khi mở giao diện (như gõ `/remote`). */
+  remote?: boolean;
   /** `locaith provider <hành-động> …` (chỉ có khi command === 'provider'). */
   provider?: ProviderArgs;
 }
@@ -320,6 +322,10 @@ export function parseArgs(argv: string[], cwd: string = process.cwd()): ParsedAr
       case '--force':
         o.flags[flag.slice(2)] = true;
         break;
+      case '--remote':
+        // Bật điều khiển từ xa (locaith.ai) ngay khi mở CLI — như gõ `/remote` sau khi khởi động. Chỉ có nghĩa với giao diện tương tác.
+        o.remote = true;
+        break;
       case '-h':
       case '--help':
         o.command = 'help';
@@ -351,6 +357,7 @@ export function parseArgs(argv: string[], cwd: string = process.cwd()): ParsedAr
     return o;
   }
   if (pvFlags.length) throw new UsageError(`Tuỳ chọn ${pvFlags[0]} chỉ dùng với \`locaith provider\``);
+  if (o.remote && (o.command !== 'chat' || printFlag)) throw new UsageError('--remote chỉ dùng với giao diện tương tác (không dùng với -p hay lệnh con): điều khiển từ xa cần một phiên đang mở để nhận lệnh.');
   const text = rest.join(' ').trim();
   if (o.command === 'chat') {
     if (printFlag) o.command = 'print';

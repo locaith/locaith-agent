@@ -55,6 +55,11 @@ export interface RuntimeStatus {
   bgTasks: { running: number; total: number };
   /** Số tệp đã đổi trong lượt gần nhất (thanh «N tệp đã đổi») nếu bật checkpoints. */
   changedFiles?: number;
+  /**
+   * (remote, tuỳ chọn) Điều khiển từ xa qua locaith.ai: chỉ có khi Remote ĐANG BẬT. `link`: connecting = đang nối relay · online = đã nối · queued = relay quá tải, đang xếp hàng;
+   * `sessions` = số trình duyệt đang mở. Giao diện hiện «● Remote · N» ở dải trạng thái và (chỉ khi `sessions` > 0) làm nổi để chủ máy biết có người đang điều khiển.
+   */
+  remote?: { link: 'connecting' | 'online' | 'queued'; sessions: number };
   /** Câu ngắn cần nhắc người dùng (ví dụ «có bản mới 0.4.1», «chưa đồng ý thông báo dữ liệu»). */
   notices: string[];
 }
@@ -107,8 +112,9 @@ export type RuntimeEvent =
   | { t: 'replay'; items: TItem[]; reason: 'resume' | 'fork' | 'rewind' | 'new' | 'clear' }
   /** Yêu cầu giao diện làm một việc. */
   /** (cli-rt) `insert` = đưa `payload` vào ô nhập (tin đang xếp hàng bị trả về sau khi dừng lượt); `redraw` kèm `payload: 'theme:<tên>'` khi /theme đổi giao diện;
-   *  `paste_image` = đính kèm ảnh đang có trong clipboard vào tin sắp gửi (lệnh /paste, /image). */
-  | { t: 'action'; action: 'exit' | 'redraw' | 'clear_screen' | 'open_editor' | 'copy' | 'insert' | 'paste_image'; payload?: string };
+   *  `paste_image` = đính kèm ảnh đang có trong clipboard vào tin sắp gửi (lệnh /paste, /image);
+   *  `open_url` = mở `payload` (địa chỉ https) bằng trình duyệt của máy (lệnh /remote). */
+  | { t: 'action'; action: 'exit' | 'redraw' | 'clear_screen' | 'open_editor' | 'copy' | 'insert' | 'paste_image' | 'open_url'; payload?: string };
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Giao diện gọi vào runtime
@@ -333,6 +339,10 @@ export interface FeatureContext {
   registerAlwaysAllow?(fn: (rule: string, scope: 'user' | 'local') => string | null): void;
   /** Transcript hiện tại (chỉ đọc). */
   transcript?(): readonly TItem[];
+  /** (remote) Chính runtime (giao diện công khai `CliRuntime`) — cho mô-đun cần ĐIỀU KHIỂN phiên từ nơi khác (Remote: nhận lệnh từ trình duyệt rồi `submit`/`interrupt`/`resume`…). */
+  runtime?(): CliRuntime;
+  /** (remote) Token thiết bị `lat_…` của tài khoản Locaith đang dùng (undefined = chưa đăng nhập) — để báo danh máy lên locaith.ai. Không bao giờ log/hiện. */
+  accountToken?(): string | undefined;
   /** Ghi phiên hiện tại ngay (trước /fork, /rewind…). */
   saveSession?(): Promise<void>;
   /**

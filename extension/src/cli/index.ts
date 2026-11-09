@@ -33,7 +33,7 @@ import { SessionRepo } from './runtime/sessions';
 import { runOnboarding, runTui, withTerminalUi } from './tui';
 import { compareVersions, latestKnown, runUpdate, updateAvailable } from './update';
 
-export const VERSION = '0.4.7';
+export const VERSION = '0.4.8';
 
 // ── nhỏ gọn: ngôn ngữ, tin cậy, tiện ích ─────────────────────────────────────────────────────────
 
@@ -330,7 +330,9 @@ async function chat(a: ParsedArgs, env: NodeJS.ProcessEnv, lang: Lang): Promise<
     throw err;
   }
   try {
-    return await runTui(rt, { version: VERSION, lang: curLang, cwd: a.cwd, env, noColor: a.noColor, home, initialPrompt: pickSession ? '/resume' : a.prompt });
+    // `--remote`: gõ sẵn `/remote` (không kèm việc khác). Chung chỗ với `locaith -r` (không mã): cả hai chỉ có nghĩa khi chưa có việc kèm theo.
+    const initialPrompt = pickSession ? '/resume' : a.remote && !a.prompt ? '/remote' : a.prompt;
+    return await runTui(rt, { version: VERSION, lang: curLang, cwd: a.cwd, env, noColor: a.noColor, home, initialPrompt });
   } finally {
     await rt.dispose();
   }

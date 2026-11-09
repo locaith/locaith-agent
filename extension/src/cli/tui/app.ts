@@ -13,6 +13,7 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import type { PermissionRequest, SuggestionOption, TItem, TodoItem } from '../../shared/protocol';
 import type { AskAnswer, AskRequest, Attachment, CliRuntime, RuntimeEvent, RuntimeStatus } from '../runtime/contract';
+import { openInBrowser } from '../browserLogin';
 import { setLang, t as tr, type Lang } from '../i18n';
 import { imageDimensions } from '../runtime/images';
 import { copyToClipboard, imageFromPath, readClipboardImageDetailed, type ClipboardImageResult } from './clipboard';
@@ -56,6 +57,8 @@ export interface TuiOptions {
   readImage?: () => Promise<Attachment | null>;
   /** Như `readImage` nhưng trả cả lý do thất bại (kiểm thử các thông báo lỗi); ưu tiên hơn `readImage`. */
   readImageResult?: () => Promise<ClipboardImageResult>;
+  /** Thay việc mở trình duyệt của lệnh /remote (kiểm thử không được bật trình duyệt thật). Mặc định `openInBrowser`. */
+  openUrl?: (url: string) => boolean;
 }
 
 interface DialogEntry {
@@ -442,11 +445,18 @@ export class TuiApp {
     }
   }
 
-  private onAction(action: 'exit' | 'redraw' | 'clear_screen' | 'open_editor' | 'copy' | 'insert' | 'paste_image', payload?: string): void {
+  private onAction(action: 'exit' | 'redraw' | 'clear_screen' | 'open_editor' | 'copy' | 'insert' | 'paste_image' | 'open_url', payload?: string): void {
     switch (action) {
       case 'paste_image':
         void this.pasteClipboardImage();
         return;
+      case 'open_url': {
+        // Chỉ mở địa chỉ https của trang locaith.ai (Remote) — runtime/mô-đun khác không có cách nào bắt terminal mở trang tuỳ ý. Mở bằng argv (không qua shell).
+        const url = payload ?? '';
+        if (!/^https:\/\/locaith\.ai(\/|$)/.test(url) && !(this.o.env ?? process.env).ND_AGENT_TEST) return;
+        (this.o.openUrl ?? openInBrowser)(url);
+        return;
+      }
       case 'exit':
         this.exit(0);
         return;
@@ -1206,11 +1216,19 @@ export class TuiApp {
 
     // tác vụ nền / tệp đã đổi
     const st = this.status;
-    if (st && !dlgEntry && (st.bgTasks.running > 0 || (st.changedFiles ?? 0) > 0)) {
+    if (st && !dlgEntry && (st.bgTasks.running > 0 || (st.changedFiles ?? 0) > 0 || st.remote)) {
       const parts: string[] = [];
       if (st.bgTasks.running > 0) parts.push(tr('tui.bg.tasks', { n: st.bgTasks.running }));
       if ((st.changedFiles ?? 0) > 0) parts.push(tr('tui.changed.files', { n: st.changedFiles ?? 0 }));
-      out.push('  ' + th.muted(parts.join(` ${th.g.sep} `)));
+      // Remote đang bật: luôn hiện (chủ máy phải biết có thể có người điều khiển từ xa); có trình duyệt đang mở thì làm nổi bằng màu cảnh báo.
+      let remote = '';
+      if (st.remote) {
+        const dot = th.caps.unicode ? '●' : '*';
+        const key = st.remote.sessions > 0 ? 'tui.remote.active' : st.remote.link === 'online' ? 'tui.remote.online' : st.remote.link === 'queued' ? 'tui.remote.queued' : 'tui.remote.connecting';
+        const txt = `${dot} ${tr(key, { n: st.remote.sessions })}`;
+        remote = st.remote.sessions > 0 ? th.warn(txt) : st.remote.link === 'online' ? th.ok(txt) : th.muted(txt);
+      }
+      out.push('  ' + [th.muted(parts.join(` ${th.g.sep} `)), remote].filter(Boolean).join(th.muted(` ${th.g.sep} `)));
     }
 
     // hàng đợi
