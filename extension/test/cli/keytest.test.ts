@@ -20,7 +20,7 @@ function fakeStdin(tty = true) {
   return e;
 }
 
-const empty = (): KeytestFindings => ({ chunks: 1, sawBs08: false, sawBs7f: false, sawBsBurst: false, sawStandaloneMark: false, sawReplacementChar: false, escLetters: 0, sawPaste: false });
+const empty = (): KeytestFindings => ({ chunks: 1, sawBs08: false, sawBs7f: false, sawBsBurst: false, lone08: 0, bsRuns: 0, wordDeletes: 0, sawStandaloneMark: false, sawReplacementChar: false, escLetters: 0, sawPaste: false });
 
 describe('locaith keytest', () => {
   it('là lệnh con hợp lệ và có trong trang trợ giúp (cả hai ngôn ngữ) + mục xử lý sự cố', () => {
@@ -85,13 +85,14 @@ describe('locaith keytest', () => {
     fs.rmSync(home, { recursive: true, force: true });
   });
 
-  it('0x08 đứng một mình ở Windows Terminal được quyết sau thời gian chờ (Ctrl+Backspace thật) và hiện "hết hạn chờ"', async () => {
+  it('Windows Terminal đã gửi 0x7f cho Backspace thường: 0x08 đứng một mình được quyết sau thời gian chờ (Ctrl+Backspace thật) và hiện "hết hạn chờ"', async () => {
     const stdin = fakeStdin();
     const lines: string[] = [];
     const home = fs.mkdtempSync(path.join(os.tmpdir(), 'lc-keytest-'));
-    const run = keytest({ version: '0.4.10', lang: 'vi', env: { WT_SESSION: 'x' }, platform: 'win32', stdin: stdin as never, out: (l) => lines.push(l), home, idleSeconds: 30 });
+    const run = keytest({ version: '0.4.11', lang: 'vi', env: { WT_SESSION: 'x' }, platform: 'win32', stdin: stdin as never, out: (l) => lines.push(l), home, idleSeconds: 30 });
     await sleep(20);
     stdin.emit('data', 'tiếng việt');
+    stdin.emit('data', '\x7f'); // Backspace thường: terminal chứng tỏ gửi 0x7f
     stdin.emit('data', '\x08');
     await sleep(160);
     stdin.emit('data', '\x03');
@@ -100,6 +101,50 @@ describe('locaith keytest', () => {
     expect(all).toContain('hết hạn chờ');
     expect(all).toContain('ctrl+backspace');
     expect(all).toContain('Ô nhập cuối cùng: tiếng ');
+    expect(all).toContain('đứng một mình');
+    expect(all).toContain('CLI đã xoá cả từ 1 lần');
+    fs.rmSync(home, { recursive: true, force: true });
+  });
+
+  it('0.4.11 — Windows Terminal + bộ gõ gửi Backspace thành 0x08 đứng một mình (chưa thấy 0x7f): xoá đúng 1 chữ mỗi lần, nhận xét giải thích', async () => {
+    const stdin = fakeStdin();
+    const lines: string[] = [];
+    const home = fs.mkdtempSync(path.join(os.tmpdir(), 'lc-keytest-'));
+    const run = keytest({ version: '0.4.11', lang: 'vi', env: { WT_SESSION: 'x' }, platform: 'win32', stdin: stdin as never, out: (l) => lines.push(l), home, idleSeconds: 30 });
+    await sleep(20);
+    stdin.emit('data', 'tiếng việt');
+    stdin.emit('data', '\x08');
+    stdin.emit('data', '\x08');
+    stdin.emit('data', '\x03');
+    expect(await run).toBe(0);
+    const all = lines.join('\n');
+    expect(all).toContain('ô nhập: tiếng việ');
+    expect(all).toContain('Ô nhập cuối cùng: tiếng vi');
+    expect(all).toContain('Có 2 gói 0x08 đứng một mình');
+    expect(all).toContain('coi là Backspace thường');
+    expect(all).not.toContain('CLI đã xoá cả từ');
+    fs.rmSync(home, { recursive: true, force: true });
+  });
+
+  it('0.4.11 — bộ gõ bù N Backspace (nhiều Backspace trong MỘT gói) cho chữ có dấu rời: mỗi lần nhấn mất đúng 1 chữ và nhận xét nêu rõ', async () => {
+    const stdin = fakeStdin();
+    const lines: string[] = [];
+    const home = fs.mkdtempSync(path.join(os.tmpdir(), 'lc-keytest-'));
+    const run = keytest({ version: '0.4.11', lang: 'vi', env: { WT_SESSION: 'x' }, platform: 'win32', stdin: stdin as never, out: (l) => lines.push(l), home, idleSeconds: 30 });
+    await sleep(20);
+    stdin.emit('data', 'Vie');
+    stdin.emit('data', '̂');
+    stdin.emit('data', '̣'); // ệ = e + mũ + chấm (3 điểm mã)
+    stdin.emit('data', 'tn');
+    stdin.emit('data', '\x08'); // n
+    stdin.emit('data', '\x08'); // t
+    stdin.emit('data', '\x08\x08\x08'); // bộ gõ bù 3 Backspace cho ệ
+    stdin.emit('data', '\x03');
+    expect(await run).toBe(0);
+    const all = lines.join('\n');
+    expect(all).toContain('Ô nhập cuối cùng: Vi');
+    expect(all).toContain('Có 1 gói gồm nhiều Backspace liền nhau');
+    expect(all).toContain('ĐIỂM MÃ');
     fs.rmSync(home, { recursive: true, force: true });
   });
 
@@ -124,6 +169,10 @@ describe('locaith keytest', () => {
 
   it('advise: nêu từng dấu hiệu, tiếng Anh cũng có', () => {
     expect(advise({ ...empty(), sawBs08: true }, 'ctrl-backspace', 'vi').join(' ')).toContain('0x08');
+    expect(advise({ ...empty(), sawBs08: true, lone08: 2 }, 'backspace', 'en').join(' ')).toContain('plain Backspace');
+    expect(advise({ ...empty(), sawBs08: true, sawBs7f: true, lone08: 1 }, 'ctrl-backspace', 'en').join(' ')).toContain('LOCAITH_CTRL_H=backspace');
+    expect(advise({ ...empty(), bsRuns: 2 }, 'ctrl-backspace', 'en').join(' ')).toContain('CODE POINT');
+    expect(advise({ ...empty(), wordDeletes: 3 }, 'ctrl-backspace', 'en').join(' ')).toContain('whole word 3 time');
     expect(advise({ ...empty(), sawReplacementChar: true }, 'backspace', 'vi').join(' ')).toContain('TCVN3');
     expect(advise({ ...empty(), escLetters: 3 }, 'backspace', 'en').join(' ')).toContain('Alt');
     expect(advise({ ...empty(), sawPaste: true }, 'backspace', 'en').join(' ')).toContain('paste');

@@ -254,11 +254,37 @@ describe('TuiApp + MockRuntime + xterm headless', () => {
     await b.type(KEY.ctrl('c'));
   });
 
-  it('cùng chuỗi đó nhưng terminal coi 0x08 là Ctrl+Backspace (Windows Terminal/Unix): vẫn xoá cả từ như người dùng ở đó mong đợi', async () => {
+  it('terminal phân biệt Backspace (0x7f) với Ctrl+Backspace (0x08) — Windows Terminal/Unix: sau khi thấy 0x7f, Ctrl+Backspace vẫn xoá cả từ như người dùng ở đó mong đợi', async () => {
     const b = await boot({ app: { ctrlH: 'ctrl-backspace' } });
     await b.type('tiếng viet');
-    await b.type('\x08');
+    await b.type('\x7f'); // Backspace thường: terminal đã chứng tỏ gửi 0x7f cho nó
+    expect(b.app.editor.text).toBe('tiếng vie');
+    await b.type('\x08'); // Ctrl+Backspace
     expect(b.app.editor.text).toBe('tiếng ');
+    await b.type(KEY.ctrl('c'));
+  });
+
+  // (0.4.11) «Gõ được rồi nhưng xoá vẫn mất cả cụm»: bộ gõ (Vietkey…) nuốt phím Backspace người dùng nhấn rồi gửi lại thành 0x08 ĐỨNG MỘT MÌNH. Ở Windows Terminal/VS Code CLI
+  // từng hiểu đó là Ctrl+Backspace → mỗi lần nhấn xoá luôn cả từ. Chưa có bằng chứng terminal phân biệt hai phím → phải là Backspace thường: xoá đúng MỘT chữ.
+  it('Windows Terminal + bộ gõ gửi Backspace thành 0x08 đơn độc (chưa từng thấy 0x7f): mỗi lần nhấn xoá đúng MỘT chữ, từ không mất', async () => {
+    const b = await boot({ app: { ctrlH: 'ctrl-backspace' } });
+    await b.type('tiếng việt');
+    for (const want of ['tiếng việ', 'tiếng vi', 'tiếng v', 'tiếng ']) {
+      await b.type('\x08');
+      expect(b.app.editor.text).toBe(want);
+    }
+    await b.type(KEY.ctrl('c'));
+  });
+
+  it('bộ gõ đã dùng 0x08 làm Backspace (gõ dấu: 0x08 + chữ cùng gói) thì dù trước đó thấy 0x7f, 0x08 đơn độc cũng chỉ xoá một chữ', async () => {
+    const b = await boot({ app: { ctrlH: 'ctrl-backspace' } });
+    await b.type('tiếng vie');
+    await b.type('\x7f'); // terminal gửi 0x7f cho Backspace thường…
+    await b.type('e');
+    await b.type('\x08ê'); // …nhưng bộ gõ gửi 0x08 liền chữ có dấu
+    expect(b.app.editor.text).toBe('tiếng viê');
+    await b.type('\x08');
+    expect(b.app.editor.text).toBe('tiếng vi');
     await b.type(KEY.ctrl('c'));
   });
 

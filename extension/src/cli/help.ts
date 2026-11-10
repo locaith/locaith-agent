@@ -195,7 +195,7 @@ Ký ức bền (.locaith/memory/MEMORY.md và ~/.locaith/memory/MEMORY.md) đư�
   Chưa đồng ý thông báo dữ liệu   locaith consent --yes (hoặc làm ở lần chạy đầu)
   Màu/khung bị vỡ          đặt NO_COLOR=1 hoặc LOCAITH_ASCII=1; dùng Windows Terminal/PowerShell 7 để có đủ màu
   Trợ lý bị treo           Esc để dừng; --timeout <giây> với -p; locaith doctor để kiểm mạng
-  Gõ tiếng Việt mất chữ    locaith keytest rồi gõ vài từ có dấu, gửi tệp ~/.locaith/keytest.txt; tạm thời đặt LOCAITH_CTRL_H=backspace nếu Backspace xoá cả từ
+  Gõ tiếng Việt mất chữ    locaith keytest rồi gõ vài từ có dấu và nhấn Backspace vài lần, gửi tệp ~/.locaith/keytest.txt; tạm thời đặt LOCAITH_CTRL_H=backspace nếu Backspace xoá cả từ
   Cập nhật                 locaith update (hoặc pip install -U locaith-cli)
 Báo lỗi: https://locaith.ai (kèm kết quả locaith doctor --json, đã tự ẩn khoá).`,
 };
@@ -307,7 +307,7 @@ Persistent memory (.locaith/memory/MEMORY.md and ~/.locaith/memory/MEMORY.md) is
   Data notice not accepted locaith consent --yes (or do it on first run)
   Broken colors/boxes      set NO_COLOR=1 or LOCAITH_ASCII=1; use Windows Terminal/PowerShell 7 for full color
   Assistant seems stuck    Esc to stop; --timeout <s> with -p; locaith doctor to check the network
-  Letters vanish typing Vietnamese   run locaith keytest, type a few accented words and send ~/.locaith/keytest.txt; as a stopgap set LOCAITH_CTRL_H=backspace if Backspace deletes whole words
+  Letters vanish typing Vietnamese   run locaith keytest, type a few accented words, press Backspace a few times and send ~/.locaith/keytest.txt; as a stopgap set LOCAITH_CTRL_H=backspace if Backspace deletes whole words
   Update                   locaith update (or pip install -U locaith-cli)
 Report bugs: https://locaith.ai (attach locaith doctor --json output; keys are masked).`,
 };

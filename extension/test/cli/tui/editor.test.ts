@@ -37,8 +37,13 @@ describe('Editor — chỉnh sửa', () => {
     expect(e.cursor).toBe(3);
     expect([...e.text].length).toBe(3); // không còn dấu rời
     e.insert('t');
-    e.backspace();
-    e.backspace();
+    e.backspace(); // t
+    expect(e.text).toBe('viế');
+    e.backspace(); // bộ gõ tổ hợp còn nhớ ế gồm e + mũ + sắc (gõ liền): bỏ dấu sắc
+    expect(e.text).toBe('viê');
+    e.backspace(); // bỏ mũ
+    expect(e.text).toBe('vie');
+    e.backspace(); // chữ gốc
     expect(e.text).toBe('vi');
   });
   // (0.4.10) Bộ gõ «Unicode tổ hợp» đổi dấu bằng cách xoá ĐÚNG dấu cuối rồi gõ dấu mới; Backspace xoá cả chữ ở đây nuốt chữ đứng trước («Việt» → «Vị̂t»).
@@ -75,8 +80,93 @@ describe('Editor — chỉnh sửa', () => {
     expect(e.text).toBe('viêt');
     e.backspace(); // t
     expect(e.text).toBe('viê');
-    e.backspace(); // ê vừa ghép từ dấu cũ: tail đã mất hiệu lực vì có chữ chen vào → xoá cả chữ
+    e.backspace(); // ê ghép từ e + mũ (gõ liền): bỏ mũ
+    expect(e.text).toBe('vie');
+    e.backspace();
     expect(e.text).toBe('vi');
+  });
+  // (0.4.11) Bộ gõ «Unicode tổ hợp» KHÔNG chỉ xoá/sửa chữ cuối: khi người dùng nhấn Backspace trên chữ có dấu, bộ gõ nuốt phím rồi gửi N Backspace (N = số điểm mã của chữ ấy).
+  // Chữ nằm trước vài chữ khác vẫn phải mất đúng N điểm mã — không phải N CHỮ («một lần nhấn mất cả cụm»).
+  it('chữ có dấu rời không phải chữ cuối: N Backspace (N = số điểm mã bộ gõ đã gửi cho chữ ấy) xoá đúng chữ đó, không xoá thừa chữ đứng trước', () => {
+    const e = ed('');
+    e.insert('Vi');
+    e.insert('e');
+    e.insert('̂'); // mũ
+    e.insert('̣'); // nặng → ệ (3 điểm mã: e + mũ + chấm)
+    e.insert('tn'); // gõ tiếp: ệ không còn là chữ cuối
+    expect(e.text).toBe('Việtn');
+    e.backspace(); // n
+    e.backspace(); // t
+    expect(e.text).toBe('Việ');
+    e.backspace();
+    e.backspace();
+    e.backspace(); // bộ gõ bù 3 Backspace cho ệ
+    expect(e.text).toBe('Vi');
+  });
+  it('«Unicode tổ hợp chỉ dấu thanh» (UniKey): ê dựng sẵn + dấu sắc rời — chữ ế là 2 điểm mã nên 2 Backspace xoá đúng ế, giữ nguyên chữ đứng trước', () => {
+    const e = ed('');
+    e.insert('ti');
+    e.insert('ê'); // dựng sẵn
+    e.insert('́'); // sắc rời
+    e.insert('ng');
+    expect(e.text).toBe('tiếng');
+    e.backspace();
+    e.backspace(); // ng
+    e.backspace();
+    e.backspace(); // bù 2 Backspace cho ế = ê + ◌́
+    expect(e.text).toBe('ti');
+    const f = ed('');
+    f.insert('tiê'); // ê dựng sẵn, bộ gõ gửi dấu sắc rời
+    f.insert('́');
+    f.backspace(); // chỉ bỏ dấu sắc: còn ê dựng sẵn (KHÔNG tụt về e)
+    expect(f.text).toBe('tiê');
+    f.backspace();
+    expect(f.text).toBe('ti');
+  });
+  it('bất biến khi gõ/xoá/di chuyển ngẫu nhiên với dấu rời: không ném lỗi, con trỏ hợp lệ, bản ghi cách gõ luôn khớp đúng chữ trong văn bản', () => {
+    let seed = 20261110;
+    const rnd = (): number => (seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0) / 2 ** 32;
+    const pieces = ['a', 'e', 'ê', 'ư', 't', 'n', ' ', 'Việt', 'ế', '̂', '́', '̣', '̀', '̃', '😀', '\n', 'x', 'ng'];
+    for (let run = 0; run < 3000; run++) {
+      if (run % 500 === 0) seed = 20261110 + run * 7919; // vài hạt giống khác nhau
+      const e = ed('');
+      for (let step = 0; step < 50; step++) {
+        const r = rnd();
+        if (r < 0.5) e.insert(pieces[Math.floor(rnd() * pieces.length)]);
+        else if (r < 0.74) e.backspace();
+        else if (r < 0.79) e.left();
+        else if (r < 0.84) e.right();
+        else if (r < 0.87) e.home();
+        else if (r < 0.9) e.end();
+        else if (r < 0.93) e.del();
+        else if (r < 0.96) e.deleteWordBack();
+        else if (r < 0.98) e.killToEnd();
+        else e.yank();
+        expect(e.cursor).toBeGreaterThanOrEqual(0);
+        expect(e.cursor).toBeLessThanOrEqual(e.text.length);
+        const live = (e as unknown as { live(): Array<{ start: number; seq: string[] }> }).live();
+        let prevEnd = 0;
+        for (const rec of live) {
+          const letter = rec.seq.join('').normalize('NFC');
+          expect(rec.seq.length).toBeGreaterThanOrEqual(2);
+          expect(rec.start).toBeGreaterThanOrEqual(prevEnd);
+          expect(e.text.slice(rec.start, rec.start + letter.length)).toBe(letter);
+          prevEnd = rec.start + letter.length;
+        }
+      }
+    }
+  });
+  it('cách gõ chỉ nhớ khi gõ liền: nhảy con trỏ, nạp lại hay sửa kiểu khác thì Backspace xoá cả chữ như thường', () => {
+    const e = ed('');
+    e.insert('Vie');
+    e.insert('̂');
+    e.insert('̣');
+    e.insert('t');
+    e.home();
+    e.end(); // con trỏ nhảy → bộ gõ cũng đã bỏ bộ đệm
+    e.backspace(); // t
+    e.backspace(); // ệ cả chữ
+    expect(e.text).toBe('Vi');
   });
   it('tail hết hiệu lực khi con trỏ rời đi / văn bản đổi: Backspace quay về xoá cả chữ (không bỏ dấu "ma")', () => {
     const e = ed('');

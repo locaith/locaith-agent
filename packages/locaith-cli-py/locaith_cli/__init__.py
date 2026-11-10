@@ -8,4 +8,4 @@ gói `nodejs-wheel-binaries`). Nhờ vậy `pip install locaith-cli` cho ra lệ
 from .cli import main
 
 __all__ = ["main"]
-__version__ = "0.4.10"
+__version__ = "0.4.11"

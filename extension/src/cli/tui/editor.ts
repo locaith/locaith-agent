@@ -81,29 +81,49 @@ export function layoutRows(text: string, width: number): VRow[] {
   return rows;
 }
 
-/** Dấu kết hợp mà bộ gõ «Unicode tổ hợp» gõ RỜI: nhớ thứ tự điểm mã bộ gõ đã gửi cho chữ vừa ghép (xem `Editor.backspace`). */
-interface ComposedTail {
-  /** Văn bản và con trỏ ngay sau khi ghép — chỉ còn hiệu lực khi cả hai y nguyên. */
-  text: string;
-  cursor: number;
-  /** Chỉ số bắt đầu của chữ đó trong `text`. */
+/**
+ * Một chữ được ghép từ dấu RỜI trong lúc gõ (bộ gõ «Unicode tổ hợp»): nhớ các điểm mã THEO ĐÚNG THỨ TỰ bộ gõ đã gửi (xem `Editor.backspace`).
+ * Bộ gõ đếm số Backspace theo các điểm mã ấy — ệ có thể là 1 (dựng sẵn), 2 (ê + ◌̣) hay 3 (e + ◌̂ + ◌̣) — nên ô nhập phải xoá đúng từng điểm mã, không xoá cả chữ.
+ */
+interface ComposedLetter {
+  /** Chỉ số UTF-16 của chữ trong `text` (dạng đã ghép NFC). */
   start: number;
-  /** Các điểm mã THEO THỨ TỰ BỘ GÕ GỬI (chữ gốc rồi từng dấu) — khác thứ tự chuẩn NFD khi dấu thanh gõ sau dấu mũ (ệ: e + ̂ + ̣, NFD là e + ̣ + ̂). */
+  /** Chữ gốc rồi từng dấu, THEO THỨ TỰ BỘ GÕ GỬI — khác thứ tự chuẩn NFD khi dấu thanh gõ sau dấu mũ (ệ: e + ̂ + ̣, NFD là e + ̣ + ̂). Luôn ≥ 2 phần tử. */
   seq: string[];
 }
+
+/** Chỉ số ngay sau chữ đã ghép. */
+const letterEnd = (r: ComposedLetter): number => r.start + r.seq.join('').normalize('NFC').length;
 
 export class Editor {
   text = '';
   cursor = 0;
   killed = '';
   private desiredCol: number | null = null;
-  private tail: ComposedTail | null = null;
+  /** Các chữ ghép từ dấu rời đang còn «nhớ cách gõ»; chỉ hiệu lực khi `text` vẫn y hệt `composedFor` (mọi sửa đổi khác tự làm mất hiệu lực). */
+  private composed: ComposedLetter[] = [];
+  private composedFor: string | null = null;
+
+  private live(): ComposedLetter[] {
+    return this.composedFor === this.text ? this.composed : [];
+  }
+
+  private remember(list: ComposedLetter[]): void {
+    this.composed = list;
+    this.composedFor = list.length ? this.text : null;
+  }
+
+  /** Quên cách gõ (con trỏ nhảy chỗ khác, nạp lại văn bản…): bộ gõ cũng đã bỏ bộ đệm của nó. */
+  private forget(): void {
+    this.composed = [];
+    this.composedFor = null;
+  }
 
   setText(s: string, cursor: number = s.length): void {
     this.text = s;
     this.cursor = Math.max(0, Math.min(cursor, s.length));
     this.desiredCol = null;
-    this.tail = null;
+    this.forget();
   }
 
   clear(): void {
@@ -122,53 +142,61 @@ export class Editor {
       if (this.cursor > 0 && /^\p{M}/u.test(s)) {
         const lead = /^\p{M}+/u.exec(s)![0];
         const p = prevBoundary(this.text, this.cursor);
-        const seq = [...this.typedSeq(p, this.text.slice(p, this.cursor)), ...lead];
+        const old = this.live();
+        const g = this.text.slice(p, this.cursor);
+        // Điểm mã của chữ đứng trước THEO ĐÚNG THỨ TỰ bộ gõ đã gửi nếu biết; nếu không thì chính chữ đó (chữ dựng sẵn là MỘT điểm mã — bộ gõ «chỉ dấu thanh rời» gửi ê rồi mới tới dấu sắc).
+        const known = old.find((r) => r.start === p && letterEnd(r) === this.cursor);
+        const seq = [...(known ? known.seq : [...g]), ...lead];
         const merged = seq.join('').normalize('NFC');
+        const delta = merged.length - (this.cursor - p);
+        // Chỉ nhớ khi dấu thật sự dính vào chữ (một cụm): dấu đứng sau xuống dòng/ký tự điều khiển không dính, khỏi nhớ một «chữ» mà con trỏ không bao giờ dừng ở đó.
+        const kept = [...old.filter((r) => letterEnd(r) <= p), ...(graphemes(merged).length === 1 ? [{ start: p, seq }] : []), ...old.filter((r) => r.start >= this.cursor).map((r) => ({ ...r, start: r.start + delta }))];
         this.text = this.text.slice(0, p) + merged + this.text.slice(this.cursor);
         this.cursor = p + merged.length;
         this.desiredCol = null;
-        this.tail = { text: this.text, cursor: this.cursor, start: p, seq };
+        this.remember(kept);
         const rest = s.slice(lead.length);
         if (rest) this.insert(rest);
         return;
       }
       s = s.normalize('NFC');
     }
-    this.tail = null;
-    this.text = this.text.slice(0, this.cursor) + s + this.text.slice(this.cursor);
+    const old = this.live();
+    const at = this.cursor;
+    this.text = this.text.slice(0, at) + s + this.text.slice(at);
     this.cursor += s.length;
     this.desiredCol = null;
-  }
-
-  /** Các điểm mã của chữ `g` (bắt đầu ở `p`, ngay trước con trỏ) theo thứ tự bộ gõ đã gửi nếu biết, nếu không thì dạng NFD chuẩn. */
-  private typedSeq(p: number, g: string): string[] {
-    const t = this.tail;
-    if (t && t.start === p && t.cursor === this.cursor && t.text === this.text && t.seq.join('').normalize('NFC') === g) return [...t.seq];
-    return [...g.normalize('NFD')];
+    this.remember(old.filter((r) => letterEnd(r) <= at || r.start >= at).map((r) => (r.start >= at ? { ...r, start: r.start + s.length } : r)));
   }
 
   /**
-   * Xoá lùi. Thường là một CỤM chữ (ê, ế, emoji ZWJ…). Ngoại lệ: chữ vừa được ghép từ các dấu mà bộ gõ «Unicode tổ hợp» gõ RỜI thì mỗi Backspace bỏ ĐÚNG MỘT điểm mã bộ gõ đã
-   * gửi (dấu cuối cùng) — như Notepad/Word, và đúng cách bộ gõ đó tính số Backspace khi đổi dấu (ế → ề: «xoá dấu sắc, gõ dấu huyền»). Xoá cả chữ ở đây thì Backspace thừa nuốt chữ
-   * đứng trước, dấu mới rơi vào chữ sai («Việt» → «Vị̂t»: mất «e»).
+   * Xoá lùi. Thường là một CỤM chữ (ê, ế, emoji ZWJ…). Ngoại lệ: chữ được ghép từ các dấu mà bộ gõ «Unicode tổ hợp» gõ RỜI thì mỗi Backspace bỏ ĐÚNG MỘT điểm mã bộ gõ đã gửi
+   * (dấu cuối cùng) — như Notepad/Word, và đúng cách bộ gõ đó tính số Backspace: khi đổi dấu (ế → ề: «xoá dấu sắc, gõ dấu huyền») và khi người dùng nhấn Backspace trên chữ có dấu
+   * (bộ gõ nuốt phím rồi gửi N Backspace, N = số điểm mã của chữ). Xoá cả chữ cho MỖI Backspace thì Backspace thừa nuốt các chữ đứng trước — «một lần nhấn mất cả cụm» — và dấu mới
+   * rơi vào chữ sai («Việt» → «Vị̂t»: mất «e»). Cách gõ chỉ được nhớ trong lúc gõ liền; con trỏ nhảy chỗ khác hay sửa kiểu khác thì quay lại xoá cả chữ.
    */
   backspace(): void {
     if (this.cursor <= 0) return;
-    const t = this.tail;
-    if (t && t.seq.length > 1 && t.cursor === this.cursor && t.text === this.text) {
-      const seq = t.seq.slice(0, -1);
+    const old = this.live();
+    const p = prevBoundary(this.text, this.cursor);
+    const known = old.find((r) => r.start === p && letterEnd(r) === this.cursor);
+    if (known && known.seq.length > 1) {
+      const seq = known.seq.slice(0, -1);
       const rest = seq.join('').normalize('NFC');
-      this.text = this.text.slice(0, t.start) + rest + this.text.slice(this.cursor);
-      this.cursor = t.start + rest.length;
+      const delta = rest.length - (this.cursor - p);
+      const kept = [...old.filter((r) => letterEnd(r) <= p), ...(seq.length > 1 && graphemes(rest).length === 1 ? [{ start: p, seq }] : []), ...old.filter((r) => r.start >= this.cursor).map((r) => ({ ...r, start: r.start + delta }))];
+      this.text = this.text.slice(0, p) + rest + this.text.slice(this.cursor);
+      this.cursor = p + rest.length;
       this.desiredCol = null;
-      this.tail = seq.length > 1 ? { text: this.text, cursor: this.cursor, start: t.start, seq } : null;
+      this.remember(kept);
       return;
     }
-    this.tail = null;
-    const p = prevBoundary(this.text, this.cursor);
+    const removed = this.cursor - p;
+    const kept = [...old.filter((r) => letterEnd(r) <= p), ...old.filter((r) => r.start >= this.cursor).map((r) => ({ ...r, start: r.start - removed }))];
     this.text = this.text.slice(0, p) + this.text.slice(this.cursor);
     this.cursor = p;
     this.desiredCol = null;
+    this.remember(kept);
   }
 
   del(): void {
@@ -181,13 +209,13 @@ export class Editor {
   left(): void {
     this.cursor = prevBoundary(this.text, this.cursor);
     this.desiredCol = null;
-    this.tail = null;
+    this.forget();
   }
 
   right(): void {
     this.cursor = nextBoundary(this.text, this.cursor);
     this.desiredCol = null;
-    this.tail = null;
+    this.forget();
   }
 
   private wordLeftIndex(from: number): number {
@@ -217,13 +245,13 @@ export class Editor {
   wordLeft(): void {
     this.cursor = this.wordLeftIndex(this.cursor);
     this.desiredCol = null;
-    this.tail = null;
+    this.forget();
   }
 
   wordRight(): void {
     this.cursor = this.wordRightIndex(this.cursor);
     this.desiredCol = null;
-    this.tail = null;
+    this.forget();
   }
 
   /** Ctrl+W: xoá từ trước con trỏ. */
@@ -256,14 +284,14 @@ export class Editor {
   home(): void {
     this.cursor = this.lineBounds()[0];
     this.desiredCol = null;
-    this.tail = null;
+    this.forget();
   }
 
   /** Ctrl+E / End: cuối dòng logic. */
   end(): void {
     this.cursor = this.lineBounds()[1];
     this.desiredCol = null;
-    this.tail = null;
+    this.forget();
   }
 
   /** Ctrl+K: xoá tới cuối dòng (nếu đã ở cuối thì xoá dấu xuống dòng). */
@@ -331,7 +359,7 @@ export class Editor {
       i += g.length;
     }
     this.cursor = i;
-    this.tail = null;
+    this.forget();
     return true;
   }
 

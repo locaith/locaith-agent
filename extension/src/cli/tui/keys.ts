@@ -65,6 +65,8 @@ function fromCodepoint(cp: number, m: { shift: boolean; alt: boolean; ctrl: bool
  *    Coi 0x08 là «xoá cả từ» ở đó nghĩa là MỖI lần Backspace xoá luôn từ đứng trước — và bộ gõ tiếng Việt (UniKey, EVKey, OpenKey… gõ «ê» bằng Backspace rồi chèn lại chữ có dấu)
  *    nuốt mất cả từ mỗi khi gõ một dấu: «gõ đến đâu có dấu là mất chữ đến đó». Ở máy dùng Windows Terminal thì không thấy lỗi vì ở đó Backspace là 0x7f.
  * Không chắc (Windows không có WT_SESSION / TERM_PROGRAM=vscode) → coi là Backspace thường: lỡ xoá thừa cả từ tệ hơn nhiều so với việc Ctrl+Backspace chỉ xoá một chữ.
+ * (0.4.11) Ngay cả ở chế độ 'ctrl-backspace', 0x08 đứng một mình chỉ là Ctrl+Backspace khi terminal đã CHỨNG TỎ phân biệt hai phím (từng gửi 0x7f cho Backspace thường) — xem
+ * `KeyParserOptions.deferCtrlH`: bộ gõ tiếng Việt nuốt phím Backspace người dùng nhấn rồi gửi lại thành 0x08, và khi đó mỗi lần xoá sẽ mất cả từ.
  */
 export type CtrlHMode = 'ctrl-backspace' | 'backspace';
 
@@ -81,14 +83,18 @@ export interface KeyParserOptions {
   /** Cách hiểu byte 0x08 (xem `CtrlHMode`). Mặc định 'ctrl-backspace' (giữ hành vi cũ cho test và terminal Unix). */
   ctrlH?: CtrlHMode;
   /**
-   * Chống bộ gõ tiếng Việt ở chế độ 'ctrl-backspace'. Bộ gõ kiểu «xoá chữ rồi gõ lại có dấu» (UniKey, EVKey, OpenKey, Vietkey…) đẩy Backspace vào console bằng cách của nó,
-   * và trên Windows có đường làm 0x08 đến CLI NGAY CẢ khi terminal đang gửi 0x7f cho Backspace thường (WM_CHAR(8) vào Windows Terminal / VS Code…). Hiểu 0x08 ấy là
-   * Ctrl+Backspace thì mỗi lần gõ dấu nuốt cả từ đứng trước — «gõ có dấu là mất chữ». Khi bật:
-   *  • 0x08 đứng liền trước dữ liệu khác (cùng gói) → Backspace THƯỜNG: Ctrl+Backspace thật luôn đến như một gói riêng;
-   *  • 0x08 đứng MỘT MÌNH ở cuối gói → chờ (xem `pendingMs`) xem có chữ theo sau không: có → Backspace thường, hết hạn → Ctrl+Backspace như cũ.
+   * Chống bộ gõ tiếng Việt ở chế độ 'ctrl-backspace'. Bộ gõ (UniKey, EVKey, OpenKey, Vietkey…) đẩy Backspace vào console bằng cách của nó, và trên Windows có đường làm 0x08 đến CLI
+   * NGAY CẢ khi terminal đang gửi 0x7f cho Backspace thường (WM_CHAR(8) vào Windows Terminal / VS Code…): vừa là Backspace kèm chữ mới (gõ dấu), vừa là Backspace do người dùng nhấn
+   * (bộ gõ nuốt phím rồi gửi lại). Hiểu 0x08 ấy là Ctrl+Backspace thì mỗi lần gõ dấu — và mỗi lần nhấn Backspace — nuốt cả từ đứng trước. Khi bật:
+   *  • 0x08 đứng liền trước dữ liệu khác (cùng gói), hoặc nhiều 0x08 liền nhau trong một gói → Backspace THƯỜNG, và nhớ «ở đây 0x08 là Backspace»;
+   *  • 0x08 đứng MỘT MÌNH chỉ là Ctrl+Backspace (xoá cả từ) khi terminal đã CHỨNG TỎ phân biệt được hai phím — tức đã từng gửi 0x7f cho Backspace thường — và chưa từng thấy 0x08
+   *    làm Backspace của bộ gõ; khi đó còn chờ (xem `pendingMs`) xem có chữ theo sau không. Chưa chứng tỏ được → Backspace thường: lỡ xoá thừa cả từ tệ hơn nhiều so với
+   *    Ctrl+Backspace chỉ xoá một chữ (muốn xoá cả từ vẫn có Ctrl+W, Alt+Backspace).
    * Mặc định tắt cho bộ phân tích dùng trực tiếp (test); `TerminalSession` bật.
    */
   deferCtrlH?: boolean;
+  /** Người dùng ép LOCAITH_CTRL_H=ctrl-backspace: coi như terminal đã chứng tỏ sẵn (0x08 đứng một mình luôn là Ctrl+Backspace sau thời gian chờ). */
+  strictCtrlH?: boolean;
 }
 
 /** Thời gian chờ (ms) trước khi một 0x08 đứng một mình được coi là Ctrl+Backspace thật — đủ dài cho độ trễ giữa Backspace và chữ mới của bộ gõ chậm, đủ ngắn để không ai thấy trễ. */
@@ -99,11 +105,19 @@ export class KeyParser {
   private paste: string[] | null = null;
   /** Đoán dán khi không có bracketed paste (mặc định bật). */
   heuristicPaste = true;
+  /** Đã thấy 0x7f làm Backspace thường: terminal này gửi 0x7f cho Backspace, nên 0x08 đứng một mình mới có thể là Ctrl+Backspace (xem `KeyParserOptions.deferCtrlH`). */
+  private sawDel: boolean;
+  /** Đã thấy 0x08 làm Backspace của bộ gõ (liền trước chữ khác, hoặc nhiều 0x08 một gói): ở đây 0x08 là Backspace thường, kể cả khi đứng một mình. */
+  private bs08IsBackspace = false;
 
-  constructor(private readonly opts: KeyParserOptions = {}) {}
+  constructor(private readonly opts: KeyParserOptions = {}) {
+    this.sawDel = !!opts.strictCtrlH;
+  }
 
   /** Đưa dữ liệu thô vào; trả về các sự kiện phân tích được. */
   feed(data: string): KeyEvent[] {
+    // Nhiều 0x08 trong MỘT gói (không nối từ các lần giữ phím rời nhau): bộ gõ bù N Backspace cho một chữ gồm N điểm mã — Backspace thường, và nhớ.
+    if (this.opts.deferCtrlH && this.opts.ctrlH !== 'backspace' && /\x08{2}/.test(data)) this.bs08IsBackspace = true;
     this.buf += data;
     return this.drain(false);
   }
@@ -190,15 +204,23 @@ export class KeyParser {
         // Ctrl+H / Ctrl+Backspace — hay Backspace thường ở conhost: xem CtrlHMode
         if (this.opts.ctrlH === 'backspace') return { events: [mk('backspace', raw)], used: 1 };
         if (this.opts.deferCtrlH) {
-          // Cả gói chỉ toàn 0x08 (một lần nhấn, hoặc giữ phím nên đến thành nhiều 0x08 liền nhau): chờ xem có chữ theo sau không (người gọi hẹn giờ rồi flush).
-          // Có bất kỳ gì khác theo sau → bộ gõ («xoá chữ rồi gõ lại có dấu»), không phải Ctrl+Backspace.
-          if (/^\x08+$/.test(b)) {
-            if (!force) return 'wait';
-          } else return { events: [mk('backspace', raw)], used: 1 };
+          // Có bất kỳ gì khác theo sau 0x08 («xoá chữ rồi gõ lại có dấu»; cùng gói hay gói kế trong thời gian chờ) → bộ gõ, không phải Ctrl+Backspace: Backspace thường,
+          // và nhớ rằng ở đây 0x08 là Backspace của bộ gõ.
+          if (!/^\x08+$/.test(b)) {
+            this.bs08IsBackspace = true;
+            return { events: [mk('backspace', raw)], used: 1 };
+          }
+          // Cả bộ đệm chỉ toàn 0x08: chỉ là Ctrl+Backspace khi terminal đã chứng tỏ phân biệt (từng gửi 0x7f cho Backspace thường) và bộ gõ chưa dùng 0x08 làm Backspace
+          // (`feed` đã nhớ khi nhiều 0x08 đến trong MỘT gói — bộ gõ bù N Backspace cho chữ N điểm mã). Chưa chắc → Backspace thường.
+          if (this.bs08IsBackspace || !this.sawDel) return { events: [mk('backspace', raw)], used: 1 };
+          // Đã chắc terminal phân biệt: chờ xem có chữ theo sau không (người gọi hẹn giờ rồi flush) — giữ phím Ctrl+Backspace thì 0x08 đến rời nhau, nối vào đây và cùng thành Ctrl+Backspace.
+          if (!force) return 'wait';
         }
         return { events: [mk('backspace', raw, { ctrl: true })], used: 1 };
       }
-      case 127: return { events: [mk('backspace', raw)], used: 1 };
+      case 127:
+        this.sawDel = true;
+        return { events: [mk('backspace', raw)], used: 1 };
       case 0: return { events: [mk('char', raw, { ctrl: true }, ' ')], used: 1 };
     }
     if (c >= 1 && c <= 26) return { events: [mk('char', raw, { ctrl: true }, String.fromCharCode(96 + c))], used: 1 };

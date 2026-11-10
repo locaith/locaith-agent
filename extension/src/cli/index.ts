@@ -34,7 +34,7 @@ import { SessionRepo } from './runtime/sessions';
 import { runOnboarding, runTui, withTerminalUi } from './tui';
 import { compareVersions, latestKnown, runUpdate, updateAvailable } from './update';
 
-export const VERSION = '0.4.10';
+export const VERSION = '0.4.11';
 
 // ── nhỏ gọn: ngôn ngữ, tin cậy, tiện ích ─────────────────────────────────────────────────────────
 

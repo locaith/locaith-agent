@@ -37,6 +37,8 @@ export interface SessionOptions {
   escTimeoutMs?: number;
   /** Cách hiểu byte 0x08. Mặc định: terminal THẬT (processHandlers) → đoán theo môi trường (conhost của Windows: Backspace thường); còn lại giữ 'ctrl-backspace'. */
   ctrlH?: CtrlHMode;
+  /** Coi sẵn là terminal phân biệt Backspace (0x7f) với Ctrl+Backspace (0x08). Mặc định: chỉ khi người dùng ép LOCAITH_CTRL_H=ctrl-backspace (terminal thật). */
+  strictCtrlH?: boolean;
 }
 
 export class TerminalSession {
@@ -48,7 +50,9 @@ export class TerminalSession {
   private cleanups: Array<() => void> = [];
 
   constructor(private readonly o: SessionOptions) {
-    this.parser = new KeyParser({ ctrlH: o.ctrlH ?? (o.processHandlers ? ctrlHMode(process.env, process.platform) : 'ctrl-backspace'), deferCtrlH: true });
+    const real = !!o.processHandlers;
+    const strict = o.strictCtrlH ?? (real && (process.env.LOCAITH_CTRL_H ?? '').trim().toLowerCase() === 'ctrl-backspace');
+    this.parser = new KeyParser({ ctrlH: o.ctrlH ?? (real ? ctrlHMode(process.env, process.platform) : 'ctrl-backspace'), deferCtrlH: true, ...(strict ? { strictCtrlH: true } : {}) });
   }
 
   get isActive(): boolean {

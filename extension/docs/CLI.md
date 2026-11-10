@@ -1,4 +1,4 @@
-# Locaith CLI — hướng dẫn sử dụng (0.4.10)
+# Locaith CLI — hướng dẫn sử dụng (0.4.11)
 
 Trợ lý lập trình Locaith ngay trong terminal. **Cùng lõi** với extension VS Code: cùng engine, công cụ, kỹ năng, hooks, checkpoints/rewind,
 tác vụ nền, MCP, luật quyền, nén ngữ cảnh. Model chạy ở cổng Locaith (`locaith-v5-flash`, `locaith-v5-si`) hoặc khoá hãng khác của bạn
@@ -121,7 +121,7 @@ locaith --remote   # bật ngay khi mở CLI · lần sau mở lại ở cùng t
 | `locaith` · `locaith "việc"` | phiên tương tác (có/không câu mở đầu) |
 | `locaith -p "việc"` · `locaith ask "việc"` | in một lần (`ask` là tên cũ, vẫn chạy) |
 | `locaith doctor [--json]` | kiểm Node, git, ffmpeg, khoá, kết nối thật tới cổng, bản mới — và nói cách sửa |
-| `locaith keytest` | ghi lại từng gói phím terminal + bộ gõ (Vietkey, UniKey, EVKey…) gửi tới CLI và cho biết ô nhập sẽ hiện gì; lưu `~/.locaith/keytest.txt` để đính kèm khi báo lỗi gõ tiếng Việt. Nhấn Ctrl+C khi xong |
+| `locaith keytest` | ghi lại từng gói phím terminal + bộ gõ (Vietkey, UniKey, EVKey…) gửi tới CLI và cho biết ô nhập sẽ hiện gì; lưu `~/.locaith/keytest.txt` để đính kèm khi báo lỗi gõ tiếng Việt. Gõ vài từ có dấu rồi nhấn Backspace vài lần để xoá chúng; nhấn Ctrl+C khi xong |
 | `locaith login [--no-browser]` · `logout` · `whoami` | đăng nhập / xoá khoá đã lưu / xem tài khoản, gói, model |
 | `locaith consent --yes` | ghi nhận đồng ý thông báo dữ liệu (một lần, bởi chủ tài khoản) |
 | `locaith provider [add\|key\|list\|test\|remove]` | nhà cung cấp mô hình: thêm API tuỳ chỉnh (OpenRouter, Ollama…), lưu khoá hãng khác, thử kết nối — xem mục «Nhà cung cấp mô hình» |
@@ -228,7 +228,7 @@ Nhiều máy chủ OpenAI-compatible không có `/models`: khai `models` để d
 |---|---|
 | 401 / token hết hạn | `locaith login` lại (token sống 90 ngày không dùng) |
 | đăng nhập «đơ» ở máy khác / SSH / không thấy trình duyệt mở | từ 0.4.9 CLI in đường dẫn đăng nhập (copy được) và hiện ô dán: mở đường dẫn ở máy có trình duyệt, đăng nhập, rồi dán *mã* hoặc địa chỉ `http://127.0.0.1…/callback?code=…` vào ô. Muốn bỏ hẳn bước tự mở trình duyệt: `LOCAITH_NO_BROWSER=1` hoặc `locaith login --no-browser`; trong phiên: `/login` → «trình duyệt ở máy khác» |
-| gõ tiếng Việt, **có dấu là mất chữ** (một số laptop) | bộ gõ (Vietkey, UniKey, EVKey, OpenKey…) gõ dấu bằng «Backspace rồi gõ lại chữ có dấu» và mỗi bộ đẩy phím một kiểu. Từ 0.4.10: (1) byte `0x08` liền trước chữ thay thế là Backspace thường ở MỌI terminal (kể cả Windows Terminal / VS Code, nơi `0x08` đứng một mình vẫn là Ctrl+Backspace xoá cả từ — quyết sau 70 ms); (2) bộ gõ «Unicode tổ hợp» (dấu rời) đổi dấu bằng cách xoá đúng dấu cuối — Backspace nay bỏ đúng một dấu thay vì cả chữ; (3) 0.4.9: console cũ conhost gửi Backspace là `0x08`. Ép tay: `LOCAITH_CTRL_H=backspace` (hoặc `ctrl-backspace`). **Vẫn lỗi: chạy `locaith keytest`, gõ vài từ có dấu (`Tieengs Vieetj`, `dduwowcj`, `tieesf`), nhấn Ctrl+C rồi gửi tệp `~/.locaith/keytest.txt`** — nó cho thấy chính xác bộ gõ gửi gì. Thử thêm: đổi bảng mã bộ gõ sang «Unicode dựng sẵn» |
+| gõ tiếng Việt, **có dấu là mất chữ** hoặc **nhấn Backspace mất cả cụm/cả từ** (một số laptop) | bộ gõ (Vietkey, UniKey, EVKey, OpenKey…) gõ dấu bằng «Backspace rồi gõ lại chữ có dấu» và mỗi bộ đẩy phím một kiểu. Từ 0.4.11: (1) Backspace anh NHẤN mà bộ gõ gửi lại thành byte `0x08` đứng một mình không còn bị hiểu là Ctrl+Backspace (xoá cả từ) — `0x08` đơn độc chỉ là Ctrl+Backspace khi terminal đã gửi `0x7f` cho Backspace thường và bộ gõ chưa dùng `0x08`; (2) bộ gõ «Unicode tổ hợp» (dấu rời) tính số Backspace theo điểm mã (ệ = 2–3) — CLI nhớ cách gõ của MỌI chữ gõ liền và xoá đúng từng điểm mã nên một lần nhấn chỉ mất một chữ. Từ 0.4.10: `0x08` liền trước chữ thay thế là Backspace thường ở mọi terminal; 0.4.9: console cũ conhost gửi Backspace là `0x08`. Ép tay: `LOCAITH_CTRL_H=backspace` (hoặc `ctrl-backspace`). Muốn xoá cả từ ở mọi terminal: Ctrl+W hoặc Alt+Backspace. **Vẫn lỗi: chạy `locaith keytest`, gõ vài từ có dấu (`Tieengs Vieetj`, `dduwowcj`, `tieesf`), NHẤN Backspace vài lần để xoá chúng, nhấn Ctrl+C rồi gửi tệp `~/.locaith/keytest.txt`** — nó cho thấy chính xác bộ gõ gửi gì. Thử thêm: đổi bảng mã bộ gõ sang «Unicode dựng sẵn» |
 | «Chưa đồng ý thông báo dữ liệu» | `locaith consent --yes` (hoặc đồng ý ở lần chạy đầu) |
 | màu/khung bị vỡ | `NO_COLOR=1` hoặc `LOCAITH_ASCII=1`; dùng Windows Terminal / PowerShell 7 để có đủ màu |
 | trợ lý treo | `Esc` để dừng; với `-p` đặt `--timeout <giây>`; `locaith doctor` để kiểm mạng |

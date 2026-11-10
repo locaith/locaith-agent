@@ -57,6 +57,12 @@ export interface KeytestFindings {
   sawBs7f: boolean;
   /** 0x08 đến CÙNG GÓI với chữ khác (dấu hiệu bộ gõ «xoá + gõ lại»). */
   sawBsBurst: boolean;
+  /** Số gói chỉ gồm ĐÚNG MỘT 0x08 (Backspace của người dùng đi qua bộ gõ, hoặc Ctrl+Backspace thật). */
+  lone08: number;
+  /** Số gói chỉ gồm ≥ 2 byte Backspace liền nhau (bộ gõ bù N Backspace cho chữ gồm N điểm mã). */
+  bsRuns: number;
+  /** Số lần CLI hiểu một phím là «xoá cả từ» (Ctrl/Alt+Backspace). */
+  wordDeletes: number;
   sawStandaloneMark: boolean;
   sawReplacementChar: boolean;
   /** Số gói ESC + chữ ASCII (Alt dính). */
@@ -71,6 +77,17 @@ export function advise(f: KeytestFindings, mode: 'backspace' | 'ctrl-backspace',
   if (f.chunks === 0) return [vi ? 'Không nhận được phím nào — terminal có thể không chuyển phím vào chương trình (thử cmd.exe / Windows Terminal thường, không qua SSH).' : 'No keys received — the terminal may not be passing keys to programs (try plain cmd.exe / Windows Terminal, not over SSH).'];
   if (f.sawBs08) out.push(vi ? `Backspace đến dưới dạng byte 0x08. CLI đang hiểu 0x08 là «${mode === 'backspace' ? 'Backspace thường' : 'Ctrl+Backspace, trừ khi liền ngay chữ theo sau (bộ gõ)'}».` : `Backspace arrives as byte 0x08. The CLI treats 0x08 as "${mode === 'backspace' ? 'plain Backspace' : 'Ctrl+Backspace unless a character follows right away (an input method)'}".`);
   if (f.sawBs7f) out.push(vi ? 'Backspace đến dưới dạng byte 0x7f (Backspace thường).' : 'Backspace arrives as byte 0x7f (plain Backspace).');
+  if (f.lone08 > 0) {
+    const how =
+      mode === 'backspace'
+        ? vi ? 'CLI coi là Backspace thường (xoá 1 chữ).' : 'The CLI treats it as plain Backspace (deletes one character).'
+        : f.sawBs7f && !f.sawBsBurst
+          ? vi ? 'Terminal cũng gửi 0x7f cho Backspace thường nên CLI hiểu 0x08 đứng một mình là Ctrl+Backspace (xoá cả từ). Nếu chỉ nhấn Backspace mà mất cả từ: đặt LOCAITH_CTRL_H=backspace.' : 'The terminal also sends 0x7f for plain Backspace, so the CLI reads a lone 0x08 as Ctrl+Backspace (deletes a word). If plain Backspace removes whole words, set LOCAITH_CTRL_H=backspace.'
+          : vi ? 'Chưa thấy terminal gửi 0x7f (hoặc bộ gõ đã dùng 0x08 làm Backspace) nên CLI coi là Backspace thường (xoá 1 chữ).' : 'The terminal has not sent 0x7f yet (or the input method already uses 0x08 as Backspace), so the CLI treats it as plain Backspace (deletes one character).';
+    out.push(vi ? `Có ${f.lone08} gói 0x08 đứng một mình (Backspace vừa nhấn đi qua bộ gõ, hoặc Ctrl+Backspace). ${how}` : `${f.lone08} chunk(s) were a lone 0x08 (the Backspace you pressed passing through the input method, or Ctrl+Backspace). ${how}`);
+  }
+  if (f.bsRuns > 0) out.push(vi ? `Có ${f.bsRuns} gói gồm nhiều Backspace liền nhau: bộ gõ tính số Backspace theo ĐIỂM MÃ của chữ (chữ có dấu rời = 2–3 điểm mã). CLI xoá đúng từng điểm mã nên mỗi lần nhấn chỉ mất 1 chữ.` : `${f.bsRuns} chunk(s) were several Backspaces in a row: the input method counts Backspaces per CODE POINT of the letter (a letter with loose marks is 2–3 code points). The CLI removes exactly one code point each, so one key press removes one letter.`);
+  if (f.wordDeletes > 0) out.push(vi ? `CLI đã xoá cả từ ${f.wordDeletes} lần (Ctrl/Alt+Backspace). Nếu chỉ nhấn Backspace thường thì đây là lỗi: gửi tệp ghi cho em.` : `The CLI deleted a whole word ${f.wordDeletes} time(s) (Ctrl/Alt+Backspace). If you only pressed plain Backspace that is a bug: send the log file.`);
   if (f.sawBsBurst) out.push(vi ? 'Bộ gõ đang dùng kiểu «Backspace rồi gõ lại chữ có dấu» (Backspace và chữ đến cùng một gói).' : 'The input method uses "Backspace, then retype the accented letter" (both arrive in one chunk).');
   if (f.sawStandaloneMark) out.push(vi ? 'Bộ gõ gửi DẤU RỜI (Unicode tổ hợp). CLI ghép lại thành chữ dựng sẵn; nếu vẫn lỗi, đổi bảng mã của bộ gõ sang «Unicode dựng sẵn» (Unicode) rồi thử lại.' : 'The input method sends loose combining marks (decomposed Unicode). The CLI recombines them; if it still fails, switch the input method to precomposed Unicode and retry.');
   if (f.sawReplacementChar) out.push(vi ? 'Có ký tự lỗi «�»: bộ gõ có thể đang ở bảng mã cũ (TCVN3, VNI, VPS…). Đổi sang Unicode.' : 'There are "�" characters: the input method may be on a legacy code table (TCVN3, VNI, VPS…). Switch to Unicode.');
@@ -100,25 +117,26 @@ export async function keytest(o: KeytestOptions): Promise<number> {
     return 2;
   }
   const mode = ctrlHMode(o.env, o.platform);
+  const strict = (o.env.LOCAITH_CTRL_H ?? '').trim().toLowerCase() === 'ctrl-backspace';
   const codePage = winCodePage(o.platform);
   const header = [
     `Locaith CLI ${o.version} — keytest`,
     `Hệ điều hành: ${o.platform} ${os.release()} · Node ${process.version}`,
     `Terminal: WT_SESSION=${o.env.WT_SESSION ? 'có' : 'không'} · TERM_PROGRAM=${o.env.TERM_PROGRAM ?? '-'} · TERM=${o.env.TERM ?? '-'} · ConEmuPID=${o.env.ConEmuPID ? 'có' : 'không'} · LOCAITH_CTRL_H=${o.env.LOCAITH_CTRL_H ?? '-'}`,
-    `CLI hiểu byte 0x08 là: ${mode === 'backspace' ? 'Backspace thường' : 'Ctrl+Backspace (trừ khi có chữ theo sau)'}` + (codePage ? ` · code page console ${codePage}` : ''),
+    `CLI hiểu byte 0x08 là: ${mode === 'backspace' ? 'Backspace thường' : strict ? 'Ctrl+Backspace (trừ khi có chữ theo sau)' : 'Backspace thường; chỉ là Ctrl+Backspace khi terminal đã gửi 0x7f cho Backspace và 0x08 đứng một mình'}` + (codePage ? ` · code page console ${codePage}` : ''),
   ];
   for (const l of header) say(l);
   say('');
   say(
     vi
-      ? 'Bật bộ gõ tiếng Việt (Vietkey…) rồi gõ vài từ có dấu, ví dụ:  Tieengs Vieetj   dduwowcj   hoafng   (nhớ thử cả sửa dấu: tieesf).\nMỗi dòng dưới đây là MỘT gói phím terminal gửi tới CLI. Nhấn Ctrl+C khi xong.'
-      : 'Turn on your Vietnamese input method and type a few accented words, e.g.  Tieengs Vieetj   dduwowcj   hoafng   (also try a correction: tieesf).\nEach line below is ONE chunk of keys the terminal sent to the CLI. Press Ctrl+C when done.',
+      ? 'Bật bộ gõ tiếng Việt (Vietkey…) rồi gõ vài từ có dấu, ví dụ:  Tieengs Vieetj   dduwowcj   hoafng   (nhớ thử cả sửa dấu: tieesf), rồi NHẤN Backspace vài lần để xoá chính các chữ có dấu vừa gõ.\nMỗi dòng dưới đây là MỘT gói phím terminal gửi tới CLI. Nhấn Ctrl+C khi xong.'
+      : 'Turn on your Vietnamese input method and type a few accented words, e.g.  Tieengs Vieetj   dduwowcj   hoafng   (also try a correction: tieesf), then PRESS Backspace a few times to delete those accented letters.\nEach line below is ONE chunk of keys the terminal sent to the CLI. Press Ctrl+C when done.',
   );
   say('');
 
   const log: string[] = [...header, ''];
-  const f: KeytestFindings = { chunks: 0, sawBs08: false, sawBs7f: false, sawBsBurst: false, sawStandaloneMark: false, sawReplacementChar: false, escLetters: 0, sawPaste: false };
-  const parser = new KeyParser({ ctrlH: mode, deferCtrlH: true });
+  const f: KeytestFindings = { chunks: 0, sawBs08: false, sawBs7f: false, sawBsBurst: false, lone08: 0, bsRuns: 0, wordDeletes: 0, sawStandaloneMark: false, sawReplacementChar: false, escLetters: 0, sawPaste: false };
+  const parser = new KeyParser({ ctrlH: mode, deferCtrlH: true, ...(strict ? { strictCtrlH: true } : {}) });
   const ed = new Editor();
   let last = Date.now();
   let finished = false;
@@ -135,8 +153,10 @@ export async function keytest(o: KeytestOptions): Promise<number> {
     }
     const k = e.key;
     if (k.name === 'backspace') {
-      if (k.ctrl || k.alt) ed.deleteWordBack();
-      else ed.backspace();
+      if (k.ctrl || k.alt) {
+        f.wordDeletes++;
+        ed.deleteWordBack();
+      } else ed.backspace();
       return describeKey(k);
     }
     if (k.name === 'char') {
@@ -170,13 +190,15 @@ export async function keytest(o: KeytestOptions): Promise<number> {
     const chunk = typeof d === 'string' ? d : d.toString('utf8');
     if (finished) return;
     f.chunks++;
+    if (chunk === '\x08') f.lone08++;
+    if (/^[\x08\x7f]{2,}$/.test(chunk)) f.bsRuns++;
     if (chunk.includes('\x08')) {
       f.sawBs08 = true;
-      if (chunk.length > 1) f.sawBsBurst = true;
+      if (/[^\x08\x7f]/.test(chunk)) f.sawBsBurst = true; // Backspace CÙNG GÓI với chữ khác (nhiều Backspace liền nhau thuần không tính)
     }
     if (chunk.includes('\x7f')) {
       f.sawBs7f = true;
-      if (chunk.length > 1) f.sawBsBurst = true;
+      if (/[^\x08\x7f]/.test(chunk)) f.sawBsBurst = true; // Backspace CÙNG GÓI với chữ khác (nhiều Backspace liền nhau thuần không tính)
     }
     if (/\p{M}/u.test(chunk)) f.sawStandaloneMark = true;
     if (chunk.includes('�')) f.sawReplacementChar = true;
