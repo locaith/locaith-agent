@@ -49,6 +49,44 @@ export type BrowserLoginError = 'timeout' | 'state' | 'denied' | 'exchange' | 'n
 
 export type BrowserLoginResult = { ok: true; token: string; user?: { name?: string; emailMasked?: string } } | { ok: false; error: BrowserLoginError };
 
+/** Mã uỷ quyền một lần — đúng định dạng máy chủ chấp nhận (ext_auth_exchange: `^[A-Za-z0-9_-]{20,64}$`; thực tế base64url của 20 byte = 27 ký tự). */
+const CODE_RE = /^[A-Za-z0-9_-]{20,64}$/;
+
+export type PastedLogin = { kind: 'code'; code: string } | { kind: 'token'; token: string } | { kind: 'denied' } | { kind: 'state' } | { kind: 'invalid' };
+
+/**
+ * Đọc thứ người dùng DÁN khi trình duyệt ở MÁY KHÁC (SSH, máy ảo, WSL không chuyển cổng…) nên trang «Cho phép» không gọi ngược về cổng loopback của CLI được:
+ * trình duyệt báo «không truy cập được 127.0.0.1» nhưng thanh địa chỉ vẫn giữ `http://127.0.0.1:<cổng>/callback?code=…&state=…` — chép địa chỉ đó là đủ.
+ * Nhận: cả địa chỉ (xuống dòng/dấu cách do ngắt dòng cứng của terminal bị bỏ), chỉ phần `code=…&state=…`, chỉ mã, hoặc token `lat_…` có sẵn.
+ * `state` (nếu có) PHẢI khớp phiên này; mã vẫn vô dụng nếu thiếu `verifier` nằm trong bộ nhớ tiến trình CLI (PKCE).
+ */
+export function parsePastedLogin(input: string, state: string): PastedLogin {
+  const trimmed = input.trim().replace(/^["'<(]+|[>"')]+$/g, '');
+  const s = trimmed.replace(/\s+/g, '');
+  if (!s) return { kind: 'invalid' };
+  if (TOKEN_RE.test(s)) return { kind: 'token', token: s };
+  let params: URLSearchParams | undefined;
+  if (/^[a-z][a-z0-9+.-]*:\/\//i.test(s)) {
+    try {
+      params = new URL(s).searchParams;
+    } catch {
+      return { kind: 'invalid' };
+    }
+  } else if (/(?:^|[?&])(?:code|error)=/.test(s)) {
+    params = new URLSearchParams(s.replace(/^[^?]*\?/, ''));
+  }
+  if (params) {
+    if (params.get('error')) return { kind: 'denied' };
+    const code = params.get('code');
+    if (!code || !CODE_RE.test(code)) return { kind: 'invalid' };
+    const got = params.get('state');
+    if (got !== null && got !== state) return { kind: 'state' };
+    return { kind: 'code', code };
+  }
+  // Mã TRẦN: phải là MỘT cụm liền như người dùng dán (một câu chữ có dấu cách không được coi là mã, kẻo gửi chữ vô nghĩa lên máy chủ đổi mã).
+  return /^\S+$/.test(trimmed) && CODE_RE.test(s) ? { kind: 'code', code: s } : { kind: 'invalid' };
+}
+
 export interface BrowserLoginOptions {
   /** Gốc trang web (https://locaith.ai). */
   webUrl: string;
@@ -64,10 +102,21 @@ export interface BrowserLoginOptions {
   openUrl?: (url: string) => boolean;
   /** Báo tiến trình cho người dùng (URL để mở tay). */
   notify?: (message: string, url?: string) => void;
+  /** false = KHÔNG tự mở trình duyệt, chỉ đưa liên kết (người dùng mở ở máy nào cũng được rồi dán địa chỉ trang đích về qua `askPaste`). Mặc định true. */
+  open?: boolean;
+  /**
+   * Cho người dùng DÁN lại địa chỉ trang đích / mã khi trình duyệt ở máy khác (xem `parsePastedLogin`). Chạy SONG SONG với việc chờ cổng loopback: bên nào xong trước thắng.
+   * `signal` bị huỷ khi đã đăng nhập xong bằng đường loopback (để đóng ô nhập). Trả null = người dùng bỏ (huỷ đăng nhập); chuỗi rỗng = chỉ muốn chờ trình duyệt (thôi hỏi).
+   * Hỏi lại tối đa vài lần nếu dán sai (`onPasteInvalid` báo lý do).
+   */
+  askPaste?: (signal: AbortSignal) => Promise<string | null>;
+  onPasteInvalid?: () => void;
 }
 
 /** Mở trình duyệt mặc định của hệ điều hành bằng argv (không qua shell → URL có `&` vẫn nguyên vẹn). */
 export function openInBrowser(url: string): boolean {
+  // LOCAITH_NO_BROWSER=1: máy không có trình duyệt / không muốn tự mở (SSH, container, CI) → coi như không mở được: CLI đưa LIÊN KẾT và cho dán địa chỉ trang đích.
+  if (process.env.LOCAITH_NO_BROWSER === '1') return false;
   try {
     const os = platform();
     const cmd = os === 'win32' ? 'explorer.exe' : os === 'darwin' ? 'open' : 'xdg-open';
@@ -169,10 +218,12 @@ export async function loginWithBrowser(o: BrowserLoginOptions): Promise<BrowserL
     });
     const url = `${o.webUrl.replace(/\/+$/, '')}/#ext-auth?${q.toString()}`;
 
-    const codeOrError = await new Promise<{ code?: string; error?: string }>((resolve) => {
-      const timer = setTimeout(() => resolve({ error: 'timeout' }), timeoutMs);
-      const finish = (v: { code?: string; error?: string }) => {
+    const codeOrError = await new Promise<{ code?: string; token?: string; error?: string }>((resolve) => {
+      const ac = new AbortController();
+      const timer = setTimeout(() => finish({ error: 'timeout' }), timeoutMs);
+      const finish = (v: { code?: string; token?: string; error?: string }) => {
         clearTimeout(timer);
+        ac.abort(); // đóng ô «dán địa chỉ» nếu còn mở
         resolve(v);
       };
 
@@ -206,13 +257,50 @@ export async function loginWithBrowser(o: BrowserLoginOptions): Promise<BrowserL
         else finish({ code });
       });
 
-      if (!openUrl(url)) {
-        o.notify?.(t('cli.acct.browserFailed'), url);
-        return; // vẫn chờ, người dùng mở tay
+      // Liên kết LUÔN được đưa cho người dùng (trước đây ở màn hình đầu tiên nó đi qua console.error, bị giao diện terminal che mất → «cứ đơ ở đó»).
+      if (o.open === false) o.notify?.(t('cli.acct.manual'), url);
+      else if (!openUrl(url)) o.notify?.(t('cli.acct.browserFailed'), url); // vẫn chờ, người dùng mở tay
+      else o.notify?.(t('cli.acct.browserOpened'), url);
+
+      // Trình duyệt ở máy khác thì cổng loopback không bao giờ nhận được gì: cho DÁN lại địa chỉ trang đích (chạy song song, bên nào xong trước thắng).
+      if (o.askPaste) {
+        o.notify?.(t('cli.acct.pasteHint'));
+        void (async () => {
+          for (let attempt = 0; attempt < 8 && !done && !ac.signal.aborted; attempt++) {
+            const text = await o.askPaste!(ac.signal).catch(() => null);
+            if (done || ac.signal.aborted) return;
+            if (text === null) {
+              close();
+              finish({ error: 'cancelled' });
+              return;
+            }
+            if (text.trim() === '') return; // «chỉ chờ trình duyệt»: thôi hỏi, vẫn nghe cổng loopback
+            const p = parsePastedLogin(text, state);
+            if (p.kind === 'code') {
+              close();
+              finish({ code: p.code });
+              return;
+            }
+            if (p.kind === 'token') {
+              close();
+              finish({ token: p.token });
+              return;
+            }
+            if (p.kind === 'denied' || p.kind === 'state') {
+              close();
+              finish({ error: p.kind });
+              return;
+            }
+            o.onPasteInvalid?.();
+          }
+        })();
       }
-      o.notify?.(t('cli.acct.browserOpened'), url);
     });
 
+    if (codeOrError.token) {
+      close();
+      return { ok: true, token: codeOrError.token };
+    }
     if (!codeOrError.code) {
       close();
       return { ok: false, error: (codeOrError.error as BrowserLoginError) ?? 'exchange' };

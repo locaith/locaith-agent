@@ -4,6 +4,7 @@
  * các dòng trạng thái suy nghĩ → đọc trang gốc → dựng artifact → câu trả lời có bảng + mã + văn xuôi nhiều dấu.
  */
 import type {
+  AgentRunRow,
   AttachmentInfo,
   DiffInfo,
   HostMessage,
@@ -15,6 +16,7 @@ import type {
   TodoItem,
   UiEvent,
   ViewState,
+  WfProgress,
 } from '../../src/shared/protocol';
 import { DEFAULT_UI_SETTINGS } from '../../src/shared/protocol';
 
@@ -933,6 +935,126 @@ export function ccTimelineState(opts: { working?: boolean } = {}): ViewState {
         ts: now - 62_000,
         done: false,
         blocks: live,
+      },
+    ],
+  });
+}
+
+/**
+ * (0.7.7) Bảng agent của một workflow (hộp «Agents in this turn»): `n` agent trong ba pha Trace / Verify / Synthesize — xong, đang chạy, xếp hàng, lỗi; có thể chạm giới hạn
+ * (`hit`) hoặc không có ngân sách (mặc định). Chỉ ≤ 80 dòng được gửi như host thật; `counts` đếm đủ.
+ */
+export function agentBoardState(o: { n?: number; hit?: boolean; model?: string } = {}): ViewState {
+  const n = o.n ?? 40;
+  const now = Date.now();
+  const rows: AgentRunRow[] = [];
+  const phaseOf = (i: number): string => (i <= n * 0.55 ? 'Trace' : i <= n * 0.9 ? 'Verify' : 'Synthesize');
+  const topics = ['bộ máy hạ tầng', 'giao diện người dùng', 'lõi game', 'âm thanh', 'mạng đa người chơi', 'hiệu năng', 'bảo mật', 'tài liệu', 'công cụ dựng', 'phân tích dữ liệu'];
+  for (let i = 1; i <= n; i++) {
+    const phase = phaseOf(i);
+    const state: AgentRunRow['state'] = i <= n * 0.4 ? (i % 17 === 0 ? 'error' : 'done') : i <= n * 0.5 ? 'running' : 'queued';
+    const base: AgentRunRow = { n: i, label: `${phase === 'Trace' ? 'Truy vết' : phase === 'Verify' ? 'Kiểm chứng' : 'Tổng hợp'} ${topics[i % topics.length]} (${i})`, type: phase === 'Verify' ? 'reviewer' : 'researcher', phase, state, tokens: 0, tools: 0 };
+    if (state === 'queued') {
+      rows.push(base);
+      continue;
+    }
+    const dur = 40_000 + (i % 9) * 17_000;
+    Object.assign(base, { startedAt: now - dur - (i % 5) * 3000, tokens: 80_000 + (i % 11) * 61_000, tools: 6 + (i % 13), model: 'deepseek-v4-pro' });
+    if (state === 'running') Object.assign(base, { activity: ['Đang đọc src/core/engine/engine.ts', 'Đang tìm trong mã “workflow”', 'Đang chạy lệnh: npm test', 'Đang suy nghĩ…'][i % 4] });
+    else {
+      Object.assign(base, { endedAt: now - (n - i) * 900 - 2000 });
+      if (state === 'error') Object.assign(base, { error: 'Hết thời gian chờ (600 giây). Agent con không trả báo cáo.', failed: 2 });
+      else Object.assign(base, { preview: 'Kết luận: phần này ổn; còn một chỗ gọi không kiểm lỗi ở dòng 212 và một điều kiện đua khi huỷ giữa chừng.' });
+    }
+    rows.push(base);
+  }
+  const counts = { queued: 0, running: 0, done: 0, error: 0, stopped: 0, total: rows.length };
+  for (const r of rows) counts[r.state]++;
+  // Chọn dòng như host thật (core/agents/progress.ts): đang chạy ≤ 40, lỗi ≤ 20, hàng đợi ≤ 12, còn lại là các agent xong gần nhất — tổng ≤ 80.
+  const running = rows.filter((r) => r.state === 'running').slice(0, 40);
+  const errors = rows.filter((r) => r.state === 'error').slice(-20);
+  const queued = rows.filter((r) => r.state === 'queued').slice(0, 12);
+  const done = rows.filter((r) => r.state === 'done').slice(-Math.max(0, 80 - running.length - errors.length - queued.length));
+  const shown = [...running, ...errors, ...queued, ...done].sort((a, b) => a.n - b.n);
+  const phases = ['Trace', 'Verify', 'Synthesize'].map((name) => ({ name, total: rows.filter((r) => r.phase === name).length, done: rows.filter((r) => r.phase === name && r.state === 'done').length, error: rows.filter((r) => r.phase === name && r.state === 'error').length }));
+  const tokens = rows.reduce((s, r) => s + r.tokens, 0);
+  const wf: WfProgress = {
+    rev: 7,
+    phase: 'Trace',
+    counts,
+    phases,
+    limits: { maxAgents: 1000, concurrent: 16, tokenBudget: o.hit ? 5_000_000 : null },
+    ...(o.hit ? { hit: { kind: 'tokens' as const, limit: 5_000_000, skipped: 9 } } : {}),
+    rows: shown,
+  };
+  const call: ABlock = {
+    type: 'tool',
+    id: 'wf1',
+    name: 'workflow_run',
+    args: { description: 'Đánh giá game theo 6 góc song song', script: 'phase("Trace"); …' },
+    state: 'running',
+    startedAt: now - 263_000,
+    agent: { tokens, tools: rows.reduce((s, r) => s + r.tools, 0), failed: counts.error, activity: `${counts.running} agent đang chạy`, wf },
+  };
+  return baseState({
+    title: 'Swarm: đánh giá game',
+    running: true,
+    canQueue: true,
+    mode: 'bypass',
+    allowBypass: true,
+    thinkingLevel: 'swarm',
+    provider: 'locaith',
+    model: o.model ?? 'locaith-v5-flash',
+    providers: [LOCAITH_PROVIDER, ...PROVIDERS],
+    transcript: [
+      { kind: 'user', id: 'u0', text: 'dùng swarm đánh giá game theo 6 góc song song rồi tổng hợp cho anh', attachments: [], ts: now - 270_000 },
+      { kind: 'assistant', id: 'a0', provider: 'locaith', model: o.model ?? 'locaith-v5-flash', ts: now - 268_000, done: false, blocks: [{ type: 'text', id: 'a0:t', text: 'Mình chạy một workflow chia 3 pha: truy vết, kiểm chứng độc lập, tổng hợp.' }, call] },
+    ],
+  });
+}
+
+/**
+ * Chrome/Edge: dòng công cụ có URL rất dài (không dấu cách) ở CẢ ba chỗ — mô tả (đối số `url`), chữ phụ bên phải (`summary` = địa chỉ cuối sau chuyển hướng) và tên tab.
+ * Lỗi người dùng báo 10/11: chữ phụ nowrap không co lại, tràn đè lên tên hành động («Trang») và dòng «Thu gọn danh sách lệnh gọi».
+ */
+export function chromeLongUrlState(): ViewState {
+  const now = Date.now();
+  const LONG = 'https://n-ek3g4kbiqmwkd4rssv6e35mliptzipyrmpiwi-0lu-script.googleusercontent.com/userCodeAppPanel?createOAuthDialog=true&lfhs=2&usp=forms_web_b#fixedlongfragment0123456789abcdefghijklmnopqrstuvwxyz';
+  const SHORT = 'https://script.google.com/home/projects/1CBP2ZM7xyz/edit';
+  const page = (id: string, name: string, args: Record<string, unknown>, summary: string | undefined, i: number): ABlock => ({
+    type: 'tool',
+    id,
+    name,
+    args,
+    state: 'done',
+    ...(summary !== undefined ? { summary } : {}),
+    output: 'ok',
+    startedAt: now - 60_000 + i * 4000,
+    durationMs: 400 + i * 120,
+  });
+  return baseState({
+    title: 'cái trang này bị lỗi giao diện ở mục…',
+    mode: 'default',
+    thinkingLevel: 'high',
+    transcript: [
+      { kind: 'user', id: 'u0', text: 'nhờ đăng và ký xác nhận mất rồi, em có cách nào vào f12 để sửa rồi chỉnh lại cho đúng chính tả được không?', attachments: [], ts: now - 120_000 },
+      {
+        kind: 'assistant',
+        id: 'a0',
+        provider: 'deepseek',
+        model: 'deepseek-v4-pro',
+        ts: now - 110_000,
+        done: false,
+        blocks: [
+          page('c0', 'tabs_list', {}, 'tab 291018705', 0),
+          page('c1', 'tab_open', { url: SHORT }, 'tab 291018708', 1),
+          page('c2', 'page_read', { tab_id: 291018708 }, '0.4s', 2),
+          page('c3', 'page_snapshot', { tab_id: 291018708 }, '0/0 phần tử', 3),
+          page('c4', 'page_navigate', { url: LONG }, LONG, 4),
+          page('c5', 'page_read', { url: LONG }, LONG.replace('https://', ''), 5),
+          page('c6', 'page_find', { query: 'Kinh nghiệm một số nước châu Á về trọng tài thương mại trực tuyến và khuyến nghị cho Việt Nam' }, '3 kết quả', 6),
+          { type: 'text', id: 'a0:t', text: 'Khung nhúng mở trực tiếp ra trang trống. Em kiểm tra lại tab gốc xem form đã tải đầy đủ chưa.' },
+        ],
       },
     ],
   });

@@ -649,6 +649,23 @@ body.vscode-high-contrast-light .tw-caret {
 .cc-tool .tool-meta {
   gap: 6px;
 }
+/* (0.7.7) Chữ phụ DÀI không dấu cách (địa chỉ cuối sau chuyển hướng của Chrome, kết quả dài…) trước đây là nowrap + flex:none: không co lại được nên tràn ra ngoài khung
+   và ĐÈ lên tên hành động («Trang») cùng dòng «Thu gọn». Giờ co lại + «…» (đầy đủ ở tooltip), tối đa ~60% bề ngang dòng để còn chỗ cho tên + mô tả; chevron giữ nguyên cỡ. */
+.cc-tool .tool-meta {
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: 60%;
+}
+.cc-tool .tool-meta-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.cc-tool .tool-meta .tool-chevron,
+.cc-tool .tool-meta .diff-stat,
+.cc-tool .tool-meta .cc-lines {
+  flex: none;
+}
 
 /* ── Thẻ diff trong dòng công cụ: tên tệp + «+a −b» đã có ở dòng ngay trên → bỏ lặp; chỉ còn «Mở diff trong editor» (và nhãn Tệp mới). ── */
 .cc-tool .diff {

@@ -110,7 +110,7 @@ export class CliProviders {
       account,
     });
     if (this.override) this.service.registry.addExtraProvider(this.override, [{ id: this.overrideModel, label: this.overrideModel }]);
-    this.pool = new ModelPool(this.service, { maxPerProvider: 4 });
+    this.pool = new ModelPool(this.service);
   }
 
   // ── cấu hình ────────────────────────────────────────────────────────────────

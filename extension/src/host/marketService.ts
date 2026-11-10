@@ -58,6 +58,7 @@ export class MarketService {
         ...(e.unsupported ? { unsupported: e.unsupported } : {}),
         ...(e.note ? { note: e.note } : {}),
         ...(e.needs ? { needs: e.needs } : {}),
+        ...(e.inputs?.length ? { inputs: e.inputs.map((i) => ({ label: i.label, ...(i.secret ? { secret: true } : {}), ...(i.optional ? { optional: true } : {}) })) } : {}),
         connected: connected.has(e.id),
         ...(connected.has(e.id) && s ? { status: s.status, ...(s.error ? { error: s.error } : {}) } : {}),
       };

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { AgentRegistry } from '../src/core/agents/definitions';
 import type { AgentServices } from '../src/core/agents/runner';
+import { autoConcurrency } from '../src/core/agents/tools';
 import { Semaphore } from '../src/core/agents/semaphore';
 import { DEFAULT_ENGINE_SETTINGS } from '../src/core/engine/types';
 import { AUTO_PROVIDER_ID, ModelPool } from '../src/core/orchestration/pool';
@@ -68,7 +69,7 @@ describe('chế độ Swarm', () => {
     expect(chooseTier({ tools: [], thinking: { level: 'max', summaries: false } })).toBe('top');
   });
 
-  it('ngân sách mặc định của workflow: Swarm 300 agent / 16 luồng / 5M token; thường 60 / 8 / 2M — thẻ xin phép nêu rõ', async () => {
+  it('mặc định của workflow (0.7.7): tới 1000 agent, KHÔNG ngân sách token — Swarm 16 luồng / 4 giờ, thường theo CPU (≥4) / 2 giờ; thẻ xin phép nêu rõ', async () => {
     const run = async (level: 'high' | 'swarm') => {
       const provider = new FakeProvider([
         () => ({ events: [] as never, ...textTurn('x') }) as never,
@@ -84,10 +85,22 @@ describe('chế độ Swarm', () => {
       return h.permissionRequests.find((r) => r.tool === 'workflow_run')?.title ?? '(không có thẻ)';
     };
     const swarm = await run('swarm');
-    expect(swarm).toContain('tối đa 300 agent, 16 chạy cùng lúc');
-    expect(swarm).toMatch(/ngân sách 5(,|\.)0k token|ngân sách 5000(,|\.)0k|ngân sách 5.000k/);
+    expect(swarm).toContain('tối đa 1000 agent, 16 chạy cùng lúc');
+    expect(swarm).toContain('không giới hạn token'); // không còn «ngân sách 5M token»
+    expect(swarm).toContain('hạn 240 phút');
+    expect(swarm).not.toMatch(/ngân sách/);
     const normal = await run('high');
-    expect(normal).toContain('tối đa 60 agent, 8 chạy cùng lúc');
+    expect(normal).toMatch(/tối đa 1000 agent, \d+ chạy cùng lúc, không giới hạn token, hạn 120 phút/);
+    const n = Number(/(\d+) chạy cùng lúc/.exec(normal)?.[1]);
+    expect(n).toBeGreaterThanOrEqual(4);
+    expect(n).toBeLessThanOrEqual(16);
+  });
+
+  it('autoConcurrency: min(16, CPU − 2), tối thiểu 4', () => {
+    expect(autoConcurrency(2)).toBe(4);
+    expect(autoConcurrency(8)).toBe(6);
+    expect(autoConcurrency(12)).toBe(10);
+    expect(autoConcurrency(64)).toBe(16);
   });
 
   it('sao lưu → khôi phục giữ nguyên mức Swarm của phiên', () => {

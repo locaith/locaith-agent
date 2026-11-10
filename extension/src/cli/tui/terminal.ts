@@ -3,7 +3,7 @@
  * Khôi phục LUÔN đồng bộ và idempotent (hiện con trỏ, tắt bracketed paste, bỏ raw mode, reset kiểu).
  */
 
-import { KeyParser, type KeyEvent } from './keys';
+import { KeyParser, ctrlHMode, type CtrlHMode, type KeyEvent } from './keys';
 
 export interface InStream {
   isTTY?: boolean;
@@ -35,17 +35,21 @@ export interface SessionOptions {
   /** Lỗi không bắt được. */
   onCrash?(err: unknown): void;
   escTimeoutMs?: number;
+  /** Cách hiểu byte 0x08. Mặc định: terminal THẬT (processHandlers) → đoán theo môi trường (conhost của Windows: Backspace thường); còn lại giữ 'ctrl-backspace'. */
+  ctrlH?: CtrlHMode;
 }
 
 export class TerminalSession {
-  readonly parser = new KeyParser();
+  readonly parser: KeyParser;
   private active = false;
   private restored = true;
   private escTimer: ReturnType<typeof setTimeout> | null = null;
   private dataHandler = (d: string | Buffer): void => this.onData(typeof d === 'string' ? d : d.toString('utf8'));
   private cleanups: Array<() => void> = [];
 
-  constructor(private readonly o: SessionOptions) {}
+  constructor(private readonly o: SessionOptions) {
+    this.parser = new KeyParser({ ctrlH: o.ctrlH ?? (o.processHandlers ? ctrlHMode(process.env, process.platform) : 'ctrl-backspace') });
+  }
 
   get isActive(): boolean {
     return this.active;

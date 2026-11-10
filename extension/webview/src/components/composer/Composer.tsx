@@ -161,7 +161,8 @@ function QueueList({ items }: { items: QueuedInfo[] }) {
               <Icon name="send" size={11} />
               <span>{t('queue.sendNow')}</span>
             </button>
-            <button type="button" class="queue-x" onClick={() => post({ type: 'queue_remove', id: q.id })} title={t('queue.remove')} aria-label={t('queue.remove')}>
+            {/* (0.7.7) Hủy tin chờ = TRẢ về ô nhập (edit: true), không xoá mất: người dùng từng phải gõ lại từ đầu. Muốn bỏ hẳn thì xoá chữ trong ô nhập. */}
+            <button type="button" class="queue-x" onClick={() => post({ type: 'queue_remove', id: q.id, edit: true })} title={t('queue.remove')} aria-label={t('queue.remove')}>
               <Icon name="x" size={12} />
             </button>
           </li>

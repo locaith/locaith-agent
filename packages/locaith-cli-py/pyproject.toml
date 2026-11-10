@@ -6,7 +6,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "locaith-cli"
-version = "0.4.8"
+version = "0.4.9"
 description = "Locaith CLI — trợ lý lập trình Locaith ngay trong terminal, như Claude Code / Codex: giao diện đẹp, đọc/sửa tệp, chạy lệnh, MCP, hooks, rewind, cùng lõi với extension VS Code. Cài: pip install locaith-cli"
 readme = "README.md"
 requires-python = ">=3.8"

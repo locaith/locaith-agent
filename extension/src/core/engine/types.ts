@@ -71,6 +71,8 @@ export interface ToolDef<I = any> {
   concurrencySafe: boolean;
   /** Không đưa cho model cho tới khi một skill mở khoá. */
   hidden?: boolean;
+  /** Trần thời gian của RIÊNG công cụ này (ms). Không đặt = mặc định chung (10 phút); `null` = không trần (chỉ nút Dừng) cho công cụ tự quản hạn giờ (agent con, workflow). */
+  timeoutMs?: number | null;
   /** Chỉ hiện ở một chế độ quyền nhất định (ví dụ exit_plan_mode chỉ có khi đang lập kế hoạch). */
   onlyInMode?: PermissionMode;
   /** Có hiện ở chế độ lập kế hoạch không. Mặc định: risk là read/network/meta. */
@@ -320,7 +322,7 @@ export interface EngineSettings {
   clearToolResultsAtPercent?: number;
   /** Số tin nhắn gần nhất giữ nguyên khi tóm tắt toàn bộ (mặc định 20; không cắt đôi cặp tool_use/tool_result). */
   keepRecentMessages?: number;
-  /** Trần tuyệt đối (token) cho ngưỡng nén; 0 = tự động (300k cho cửa sổ > 400k khi người dùng không tự đặt compactAtPercent). */
+  /** Trần tuyệt đối (token) cho ngưỡng nén; 0 = tự động (400k cho cửa sổ > 400k khi người dùng không tự đặt compactAtPercent). */
   compactAtTokens?: number;
   /** Người dùng đã tự đặt compactAtPercent (tắt trần tự động). */
   compactAtUserSet?: boolean;

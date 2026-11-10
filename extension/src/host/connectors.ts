@@ -4,24 +4,36 @@
  *   • oauth  — OAuth 2.1 theo chuẩn MCP (đăng ký ứng dụng tự động + PKCE) qua một cổng loopback tạm trên máy bạn;
  *   • github — phiên đăng nhập GitHub CÓ SẴN của VS Code (không cho đăng ký ứng dụng tự động), hoặc token cá nhân (PAT) bạn dán vào;
  *   • none   — dịch vụ mở, không cần đăng nhập.
+ * (0.7.7) Thêm «key» và các mục chạy trên máy có `inputs`: người dùng nhập khoá API / ID khách hàng / địa chỉ máy chủ riêng; giá trị nằm trong SecretStorage và chỉ được ghép vào cấu hình lúc KHỞI ĐỘNG server.
  * Token OAuth/PAT chỉ nằm trong SecretStorage của VS Code (mã hoá bằng kho khoá của hệ điều hành), không bao giờ ghi vào cài đặt hay gửi sang giao diện.
  * Tệp này KHÔNG import `vscode`: mọi thứ phụ thuộc môi trường được tiêm vào (xem ConnectorDeps) nên kiểm thử được bằng máy chủ giả.
  */
 
 import * as http from 'node:http';
 import type { AddressInfo } from 'node:net';
-import { BIO_SERVER_NAME, CATALOG, catalogEntry, localConfig, type CatalogEntry } from '../core/mcp/catalog';
+import { BIO_SERVER_NAME, CATALOG, catalogEntry, localConfig, type CatalogEntry, type CatalogInput } from '../core/mcp/catalog';
 import type { McpAuth, McpServerConfig } from '../core/mcp/client';
 import type { McpServerEntry } from '../core/mcp/manager';
 import { OAuthError } from '../core/mcp/oauth';
 import { OAuthSession, authorize, type OAuthState } from '../core/mcp/oauthFlow';
 
+/** Mô tả (KHÔNG chứa giá trị) một thứ người dùng đã nhập khi kết nối: giá trị nằm ở SecretStorage `mcp.input.<id>.<idx>`. */
+export interface InputMeta {
+  idx: number;
+  key: string;
+  kind: CatalogInput['kind'];
+  secret: boolean;
+  prefix?: string;
+}
+
 export interface ConnectorRecord {
   id: string;
   name: string;
-  auth: 'none' | 'oauth' | 'github' | 'token' | 'local';
+  auth: 'none' | 'oauth' | 'github' | 'token' | 'local' | 'key';
   url?: string;
   cfg?: McpServerConfig;
+  /** (0.7.7) Khoá/ID/địa chỉ người dùng đã nhập khi kết nối (chỉ mô tả; giá trị ở SecretStorage). */
+  inputs?: InputMeta[];
   custom?: boolean;
   /** Đổi mỗi lần kết nối lại → server được khởi động lại với phiên đăng nhập mới. */
   rev?: string;
@@ -35,7 +47,9 @@ export interface ConnectorDeps {
   /** Phiên GitHub của VS Code: `create` = hiện hộp đăng nhập nếu chưa có. Trả undefined nếu chưa đăng nhập. */
   githubToken(create: boolean): Promise<string | undefined>;
   /** Hỏi người dùng một dòng chữ (token…); undefined = huỷ. */
-  prompt(o: { title: string; prompt: string; password?: boolean; value?: string }): Promise<string | undefined>;
+  prompt(o: { title: string; prompt: string; password?: boolean; value?: string; placeholder?: string }): Promise<string | undefined>;
+  /** (0.7.7) Đăng ký một giá trị bí mật để nhật ký che đi (khoá API vừa nhập / vừa đọc từ SecretStorage). */
+  registerSecret?(value: string): void;
   workspaceFolder(): string | undefined;
   homedir: string;
   log(level: 'debug' | 'info' | 'warn' | 'error', msg: string): void;
@@ -104,6 +118,27 @@ class GithubAuth implements McpAuth {
   }
 }
 
+/** Tên khoá trong SecretStorage của một thứ người dùng nhập. */
+export const inputSecretName = (id: string, idx: number): string => `mcp.input.${id}.${idx}`;
+
+/** (0.7.7) Header xác thực do người dùng nhập (mục «key»): đọc lại từ SecretStorage ở MỖI yêu cầu nên đổi khoá không cần khởi động lại. */
+class HeadersAuth implements McpAuth {
+  constructor(
+    private readonly metas: InputMeta[],
+    private readonly get: (idx: number) => Promise<string | undefined>,
+    private readonly name: string,
+  ) {}
+  async headers(): Promise<Record<string, string>> {
+    const out: Record<string, string> = {};
+    for (const m of this.metas) {
+      const v = await this.get(m.idx);
+      if (!v) throw new Error(`Chưa có khoá cho ${this.name} — ngắt kết nối rồi kết nối lại và nhập khoá.`);
+      out[m.key] = `${m.prefix ?? ''}${v}`;
+    }
+    return out;
+  }
+}
+
 class TokenAuth implements McpAuth {
   constructor(private readonly get: () => Promise<string | undefined>) {}
   async headers(): Promise<Record<string, string>> {
@@ -146,11 +181,87 @@ export class ConnectorService {
     const out: McpServerEntry[] = [];
     for (const r of this.list()) {
       if (r.id === BIO_SERVER_NAME) continue; // Bio-Memory do BioMemoryService quản lý
-      const cfg: McpServerConfig | null = r.cfg ?? (r.url ? { url: r.url } : null);
-      if (!cfg) continue;
-      out.push({ name: r.id, cfg, scope: 'connector', origin: r.name, label: r.name, rev: r.rev, ...(await this.authFor(r)) });
+      const base: McpServerConfig | null = r.cfg ?? (r.url ? { url: r.url } : null);
+      if (!base) continue;
+      const withIn = await this.withInputs(r, base);
+      out.push({ name: r.id, cfg: withIn.cfg, scope: 'connector', origin: r.name, label: r.name, rev: r.rev, ...(withIn.maskEnv ? { maskEnv: withIn.maskEnv } : {}), ...(withIn.auth ? { auth: withIn.auth } : await this.authFor(r)) });
     }
     return out;
+  }
+
+  /**
+   * Ghép những thứ người dùng đã nhập vào cấu hình lúc KHỞI ĐỘNG: biến môi trường (`env`), đối số (`arg`) — còn header (`header`) đi qua `HeadersAuth`, không nằm trong cấu hình.
+   * `maskEnv` = tên biến môi trường bí mật để giao diện hiện «•••» (tên biến không nhất thiết có chữ KEY/TOKEN, ví dụ MDB_MCP_CONNECTION_STRING).
+   */
+  private async withInputs(r: ConnectorRecord, cfg: McpServerConfig): Promise<{ cfg: McpServerConfig; auth?: McpAuth; maskEnv?: string[] }> {
+    if (!r.inputs?.length) return { cfg };
+    const next: McpServerConfig = { ...cfg, ...(cfg.args ? { args: [...cfg.args] } : {}), ...(cfg.env ? { env: { ...cfg.env } } : {}) };
+    const maskEnv: string[] = [];
+    const headers: InputMeta[] = [];
+    for (const m of r.inputs) {
+      if (m.kind === 'header') {
+        headers.push(m);
+        continue;
+      }
+      const v = await this.d.secrets.get(inputSecretName(r.id, m.idx));
+      if (v === undefined || v === '') continue;
+      if (m.secret) this.d.registerSecret?.(v);
+      if (m.kind === 'env') {
+        next.env = { ...next.env, [m.key]: v };
+        if (m.secret) maskEnv.push(m.key);
+      } else next.args = [...(next.args ?? []), ...(m.key ? [m.key, v] : [v])];
+    }
+    const auth = headers.length
+      ? new HeadersAuth(
+          headers,
+          async (idx) => {
+            const v = await this.d.secrets.get(inputSecretName(r.id, idx));
+            if (v) this.d.registerSecret?.(v);
+            return v;
+          },
+          r.name,
+        )
+      : undefined;
+    return { cfg: next, ...(auth ? { auth } : {}), ...(maskEnv.length ? { maskEnv } : {}) };
+  }
+
+  /**
+   * Hỏi lần lượt các thứ cần nhập (hộp nhập VS Code; ô bí mật dạng mật khẩu) và kiểm tra nhẹ. Esc ở bất kỳ ô nào = huỷ cả việc kết nối (chưa lưu gì).
+   * Ô tuỳ chọn để trống = bỏ qua. Giá trị không được chứa xuống dòng / ký tự NUL (tránh chèn header hay biến môi trường lạ).
+   */
+  private async askInputs(e: CatalogEntry): Promise<{ ok: true; metas: InputMeta[]; values: Map<number, string> } | { ok: false; message: string }> {
+    const list = e.inputs ?? [];
+    const metas: InputMeta[] = [];
+    const values = new Map<number, string>();
+    for (let i = 0; i < list.length; i++) {
+      const spec = list[i];
+      const v = await this.d.prompt({
+        title: `${e.name} — ${spec.label}${list.length > 1 ? ` (${i + 1}/${list.length})` : ''}`,
+        prompt: `${spec.help ?? spec.label}${spec.optional ? ' (có thể để trống)' : ''}${spec.secret ? ' Giá trị được lưu mã hoá trong SecretStorage của VS Code.' : ''}`,
+        password: !!spec.secret,
+        ...(spec.placeholder ? { placeholder: spec.placeholder } : {}),
+      });
+      if (v === undefined) return { ok: false, message: 'Đã huỷ.' };
+      const val = v.trim();
+      if (!val) {
+        if (spec.optional) continue;
+        return { ok: false, message: `Thiếu «${spec.label}» — chưa kết nối ${e.name}.` };
+      }
+      // eslint-disable-next-line no-control-regex
+      if (/[\u0000\r\n]/.test(val)) return { ok: false, message: `«${spec.label}» không được chứa xuống dòng.` };
+      metas.push({ idx: i, key: spec.key, kind: spec.kind, secret: !!spec.secret, ...(spec.prefix ? { prefix: spec.prefix } : {}) });
+      values.set(i, val);
+    }
+    return { ok: true, metas, values };
+  }
+
+  private async storeInputs(id: string, values: Map<number, string>, secretIdx: Set<number>): Promise<void> {
+    // Kết nối lại: xoá giá trị cũ của lần trước (một ô tuỳ chọn lần này bỏ trống không được để sót giá trị cũ trong kho bí mật).
+    for (const m of this.list().find((r) => r.id === id)?.inputs ?? []) await this.d.secrets.delete(inputSecretName(id, m.idx));
+    for (const [idx, v] of values) {
+      await this.d.secrets.set(inputSecretName(id, idx), v);
+      if (secretIdx.has(idx)) this.d.registerSecret?.(v);
+    }
   }
 
   private async authFor(r: ConnectorRecord): Promise<{ auth?: McpAuth }> {
@@ -176,7 +287,15 @@ export class ConnectorService {
     if (e.unsupported) return { ok: false, message: e.unsupported };
     if (e.id === BIO_SERVER_NAME) return { ok: false, message: 'Bio-Memory-Locaith được cài ở mục riêng phía trên.' };
     try {
-      if (e.transport === 'stdio') return await this.connectLocal(e);
+      // Mục cần người dùng nhập khoá/ID/địa chỉ (0.7.7): hỏi TRƯỚC; huỷ giữa chừng thì không lưu gì.
+      let given: { metas: InputMeta[]; values: Map<number, string> } | undefined;
+      if (e.inputs?.length) {
+        const got = await this.askInputs(e);
+        if (!got.ok) return { ok: false, message: got.message };
+        given = got;
+      }
+      if (e.transport === 'stdio') return await this.connectLocal(e, given);
+      if (e.auth === 'key') return await this.connectKey(e, given);
       if (e.auth === 'none') return await this.add({ id: e.id, name: e.name, auth: 'none', url: e.url });
       if (e.auth === 'github') return await this.connectGithub(e);
       return await this.connectOauth({ id: e.id, name: e.name, url: e.url! });
@@ -190,11 +309,20 @@ export class ConnectorService {
     return { ok: true, message: `Đã kết nối ${r.name}.` };
   }
 
-  private async connectLocal(e: CatalogEntry): Promise<ConnectResult> {
+  private async connectLocal(e: CatalogEntry, given?: { metas: InputMeta[]; values: Map<number, string> }): Promise<ConnectResult> {
     const cfg = localConfig(e, this.d.workspaceFolder(), this.d.homedir);
     if (!cfg) return { ok: false, message: 'Mục này cần một thư mục workspace đang mở.' };
-    const r = await this.add({ id: e.id, name: e.name, auth: 'local', cfg });
-    return { ok: true, message: `${r.message} Lần đầu chạy, npx có thể mất vài chục giây để tải gói${e.needs === 'node' ? ' (cần Node.js)' : ''}.` };
+    if (given) await this.storeInputs(e.id, given.values, new Set(given.metas.filter((m) => m.secret).map((m) => m.idx)));
+    const r = await this.add({ id: e.id, name: e.name, auth: 'local', cfg, ...(given?.metas.length ? { inputs: given.metas } : {}) });
+    const need = e.needs === 'node' ? ' (cần Node.js)' : e.needs === 'python' ? ' (cần cài uv: docs.astral.sh/uv)' : '';
+    return { ok: true, message: `${r.message} Lần đầu chạy, ${e.command ?? 'trình chạy'} có thể mất vài chục giây để tải gói${need}.` };
+  }
+
+  /** Máy chủ HTTP xác thực bằng khoá API người dùng nhập (header). */
+  private async connectKey(e: CatalogEntry, given?: { metas: InputMeta[]; values: Map<number, string> }): Promise<ConnectResult> {
+    if (!given?.metas.some((m) => m.kind === 'header')) return { ok: false, message: 'Mục này cần khoá API — chưa có gì để lưu.' };
+    await this.storeInputs(e.id, given.values, new Set(given.metas.filter((m) => m.secret).map((m) => m.idx)));
+    return this.add({ id: e.id, name: e.name, auth: 'key', url: e.url, inputs: given.metas });
   }
 
   private async connectGithub(e: CatalogEntry): Promise<ConnectResult> {
@@ -277,6 +405,7 @@ export class ConnectorService {
     if (!rec) return { ok: false, message: 'Kết nối này không còn.' };
     await this.d.secrets.delete(`mcp.oauth.${id}`);
     await this.d.secrets.delete(`mcp.token.${id}`);
+    for (const m of rec.inputs ?? []) await this.d.secrets.delete(inputSecretName(id, m.idx));
     await this.save(this.list().filter((r) => r.id !== id));
     return { ok: true, message: `Đã ngắt kết nối ${rec.name} và xoá thông tin đăng nhập.` };
   }

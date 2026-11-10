@@ -2,9 +2,12 @@
 
 import { LocaithGatewayClient } from '../core/providers/locaithGateway';
 import type { ModelInfo } from '../core/types';
-import type { BrowserLoginResult } from './browserLogin';
+import type { BrowserLoginOptions, BrowserLoginResult } from './browserLogin';
 import { t } from './i18n';
 import './strings';
+
+/** Cách giao diện nhận thông báo / cho dán địa chỉ khi đăng nhập qua trình duyệt (onboarding của TUI dùng hộp thoại; `locaith login` dùng dòng lệnh). */
+export type BrowserLoginHooks = Pick<BrowserLoginOptions, 'notify' | 'askPaste' | 'onPasteInvalid' | 'open'>;
 
 export interface AccountDeps {
   baseUrl: string;
@@ -24,7 +27,7 @@ export interface AccountDeps {
   /** `--no-browser`: không mở trình duyệt, hỏi dán token. */
   noBrowser?: boolean;
   /** Đăng nhập qua trình duyệt (PKCE + loopback). Không có = bản dựng không hỗ trợ. */
-  browserLogin?(): Promise<BrowserLoginResult>;
+  browserLogin?(hooks?: BrowserLoginHooks): Promise<BrowserLoginResult>;
   /**
    * Chạy BÊN TRONG màn hình hướng dẫn lần đầu (onboarding): không in ✔ trong chữ (giao diện tự thêm) và không nhắc
    * «tiếp theo: whoami, consent» vì chính onboarding sẽ làm các bước đó ngay sau.

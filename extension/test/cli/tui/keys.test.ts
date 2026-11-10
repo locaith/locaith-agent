@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { KeyParser, describeKey, normalizePaste, type KeyEvent } from '../../../src/cli/tui/keys';
+import { KeyParser, ctrlHMode, describeKey, normalizePaste, type KeyEvent } from '../../../src/cli/tui/keys';
+import { TerminalSession } from '../../../src/cli/tui/terminal';
 
 const names = (evs: KeyEvent[]): string[] => evs.map((e) => (e.type === 'paste' ? `paste:${e.text.replace(/\n/g, '⏎')}` : describeKey(e.key)));
 const parse = (...chunks: string[]): string[] => {
@@ -51,6 +52,59 @@ describe('KeyParser', () => {
   it('bỏ qua báo cáo vị trí con trỏ và focus', () => expect(parse('\x1b[12;40R\x1b[I\x1b[Ox')).toEqual(['x']));
   it('bỏ qua trả lời OSC', () => expect(parse('\x1b]11;rgb:0000/0000/0000\x07a')).toEqual(['a']));
   it('emoji nhiều byte không bị vỡ', () => expect(parse('a😀b')).toEqual(['a😀b']));
+});
+
+describe('byte 0x08: Backspace thường (conhost của Windows) hay Ctrl+Backspace (Windows Terminal, VS Code, Unix)? — lỗi «gõ tiếng Việt có dấu là mất chữ»', () => {
+  const parseWith = (ctrlH: 'backspace' | 'ctrl-backspace', ...chunks: string[]): string[] => {
+    const p = new KeyParser({ ctrlH });
+    const out: KeyEvent[] = [];
+    for (const c of chunks) out.push(...p.feed(c));
+    out.push(...p.flush());
+    return names(out);
+  };
+
+  it('ở conhost, 0x08 là Backspace THƯỜNG (không còn «ctrl+backspace» xoá cả từ)', () => {
+    expect(parseWith('backspace', '\x08')).toEqual(['backspace']);
+    expect(parseWith('ctrl-backspace', '\x08')).toEqual(['ctrl+backspace']);
+    expect(parse('\x08')).toEqual(['ctrl+backspace']); // mặc định giữ hành vi cũ (test + terminal Unix)
+  });
+
+  it('0x7f luôn là Backspace thường', () => {
+    expect(parseWith('backspace', '\x7f')).toEqual(['backspace']);
+    expect(parseWith('ctrl-backspace', '\x7f')).toEqual(['backspace']);
+  });
+
+  it('bộ gõ kiểu «Backspace + chữ mới» (UniKey/EVKey gõ ê): dù đến CÙNG MỘT gói hay tách gói, ra đúng [chữ, backspace thường, chữ có dấu]', () => {
+    expect(parseWith('backspace', 'vie', '\x08', 'ê')).toEqual(['vie', 'backspace', 'ê']);
+    expect(parseWith('backspace', 'vie\x08ê')).toEqual(['vie', 'backspace', 'ê']);
+    expect(parseWith('backspace', 'vie\x7fê')).toEqual(['vie', 'backspace', 'ê']);
+    expect(parseWith('backspace', 'a\x08á\x08ấ')).toEqual(['a', 'backspace', 'á', 'backspace', 'ấ']);
+  });
+
+  it('ctrlHMode: Windows không có Windows Terminal/VS Code → backspace; có WT_SESSION hoặc TERM_PROGRAM=vscode → ctrl-backspace; hệ khác → ctrl-backspace', () => {
+    expect(ctrlHMode({}, 'win32')).toBe('backspace');
+    expect(ctrlHMode({ WT_SESSION: 'abc' }, 'win32')).toBe('ctrl-backspace');
+    expect(ctrlHMode({ TERM_PROGRAM: 'vscode' }, 'win32')).toBe('ctrl-backspace');
+    expect(ctrlHMode({}, 'linux')).toBe('ctrl-backspace');
+    expect(ctrlHMode({}, 'darwin')).toBe('ctrl-backspace');
+  });
+
+  it('LOCAITH_CTRL_H ép cách hiểu (lối thoát cho terminal lạ), không phân biệt hoa thường', () => {
+    expect(ctrlHMode({ LOCAITH_CTRL_H: 'backspace' }, 'linux')).toBe('backspace');
+    expect(ctrlHMode({ LOCAITH_CTRL_H: 'CTRL-BACKSPACE' }, 'win32')).toBe('ctrl-backspace');
+    expect(ctrlHMode({ LOCAITH_CTRL_H: 'linh tinh' }, 'win32')).toBe('backspace'); // giá trị lạ: bỏ qua, dùng đoán theo môi trường
+  });
+
+  it('TerminalSession dùng tuỳ chọn ctrlH cho bộ phân tích phím của nó', () => {
+    const got: string[] = [];
+    const handlers: Array<(d: string) => void> = [];
+    const stdin = { isTTY: false, on: (_e: string, f: (d: string) => void) => void handlers.push(f), resume: () => undefined, setEncoding: () => undefined };
+    const s = new TerminalSession({ stdin: stdin as never, stdout: { write: () => true }, onEvent: (e) => void got.push(...names([e])), ctrlH: 'backspace' });
+    s.start();
+    handlers[0]('\x08');
+    s.stop();
+    expect(got).toEqual(['backspace']);
+  });
 });
 
 describe('normalizePaste', () => {

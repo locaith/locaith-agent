@@ -114,11 +114,11 @@ function patchTool(blocks: ABlock[], callId: string, patch: (t: ToolBlock) => To
 
 /** Rút phần tiến độ ra khỏi sự kiện `agent_progress` (bỏ trường rỗng để so sánh/lưu cho gọn). */
 export function agentProgressOf(ev: AgentProgress): AgentProgress {
-  return { tokens: ev.tokens, tools: ev.tools, ...(ev.failed ? { failed: ev.failed } : {}), ...(ev.activity ? { activity: ev.activity } : {}) };
+  return { tokens: ev.tokens, tools: ev.tools, ...(ev.failed ? { failed: ev.failed } : {}), ...(ev.activity ? { activity: ev.activity } : {}), ...(ev.wf ? { wf: ev.wf } : {}) };
 }
 
 export function sameAgentProgress(a: AgentProgress | undefined, b: AgentProgress): boolean {
-  return !!a && a.tokens === b.tokens && a.tools === b.tools && (a.failed ?? 0) === (b.failed ?? 0) && (a.activity ?? '') === (b.activity ?? '');
+  return !!a && a.tokens === b.tokens && a.tools === b.tools && (a.failed ?? 0) === (b.failed ?? 0) && (a.activity ?? '') === (b.activity ?? '') && (a.wf?.rev ?? -1) === (b.wf?.rev ?? -1);
 }
 
 /** Áp một sự kiện lên danh sách transcript. Trả về mảng mới (hoặc chính mảng cũ nếu không có gì đổi). */

@@ -37,7 +37,7 @@ export interface ServerApprovalView {
   truncated: boolean;
 }
 
-export function describeServerForApproval(cfg: McpServerConfig, max: number = MAX_SERVER_VIEW_CHARS): ServerApprovalView {
+export function describeServerForApproval(cfg: McpServerConfig, max: number = MAX_SERVER_VIEW_CHARS, maskEnv: readonly string[] = []): ServerApprovalView {
   let truncated = false;
   const cut = (s: string): string => {
     if (s.length <= max) return s;
@@ -58,7 +58,7 @@ export function describeServerForApproval(cfg: McpServerConfig, max: number = MA
   if (cfg.cwd) extra.push(cut(`cwd: ${quoteToken(cfg.cwd)}`));
   const env = Object.entries(cfg.env ?? {});
   if (env.length) {
-    extra.push(cut(`env: ${env.map(([k, v]) => `${exposed(k)}=${SECRET_NAME.test(k) ? '•••' : quoteToken(String(v))}`).join(' ')}`));
+    extra.push(cut(`env: ${env.map(([k, v]) => `${exposed(k)}=${SECRET_NAME.test(k) || maskEnv.includes(k) ? '•••' : quoteToken(String(v))}`).join(' ')}`));
   }
   const headers = Object.keys(cfg.headers ?? {});
   if (headers.length) extra.push(cut(`headers: ${headers.map((h) => exposed(h)).join(', ')} (giá trị ẩn)`));

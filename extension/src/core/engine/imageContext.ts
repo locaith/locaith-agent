@@ -6,8 +6,9 @@
  * An toàn với cặp tool_use/tool_result: chỉ bỏ phần `images` của kết quả công cụ (chữ của kết quả giữ nguyên, thêm dòng báo); khối `tool_result`
  * không bao giờ bị xoá hay đổi `toolUseId`. Khối `image` của người dùng được thay tại chỗ bằng khối chữ nên thứ tự và số khối không đổi.
  *
- * Lưu ý bộ nhớ đệm prompt: mỗi lần có ảnh MỚI vượt ngưỡng, ảnh cũ nhất bị lược nên đoạn đầu của lịch sử đổi một lần (bộ nhớ đệm hỏng một lần cho tới ảnh kế tiếp).
- * Đó là đánh đổi có chủ đích — ảnh nặng hơn chữ nhiều lần.
+ * Lưu ý bộ nhớ đệm prompt: ảnh cũ nhất bị lược làm đoạn đầu của lịch sử đổi, tức bộ nhớ đệm hỏng từ chỗ đó. Trước 0.7.7 mỗi ảnh MỚI vượt ngưỡng lại lược thêm đúng một ảnh → hỏng ở MỖI ảnh
+ * (nhật ký cổng Locaith: 135 lần ≈ 7% chi phí của client mới). Nay lược THEO ĐỢT (`imageDropCount`): làm tròn số ảnh bỏ lên bội của một bước ≈ max/3 nên ranh giới chỉ nhích mỗi `bước`
+ * ảnh mới (mặc định 8 → 3). `max` vẫn là TRẦN cứng (không bao giờ gửi quá max ảnh); số ảnh được giữ dao động trong [max − bước + 1, max]. Ảnh nặng hơn chữ nhiều lần nên vẫn đáng lược.
  */
 import type { ChatMessage, ContentBlock, ToolResultBlock } from '../types';
 
@@ -24,6 +25,21 @@ export function countContextImages(messages: readonly ChatMessage[]): number {
   return n;
 }
 
+/** Bước lược ảnh: ranh giới giữa ảnh bị bỏ và ảnh được giữ chỉ nhích mỗi `bước` ảnh mới. `max` nhỏ (≤ 3) → 1 (lược chính xác từng ảnh). */
+export function imageDropStep(max: number): number {
+  return Math.max(1, Math.ceil(max / 3));
+}
+
+/**
+ * Số ảnh CŨ NHẤT phải bỏ khi lịch sử có `total` ảnh và trần là `max`: `total − max` làm tròn LÊN bội của `imageDropStep(max)`. Hàm thuần theo `total` nên không cần lưu trạng thái:
+ * mọi `total` trong cùng một đợt cho cùng số ảnh bỏ → cùng ranh giới → tiền tố gửi model KHÔNG đổi (bộ nhớ đệm prompt còn nguyên) cho tới đợt kế.
+ */
+export function imageDropCount(total: number, max: number): number {
+  if (total <= max) return 0;
+  const step = imageDropStep(max);
+  return Math.ceil((total - max) / step) * step;
+}
+
 /**
  * Bản gửi đã lược ảnh cũ. `max` ≤ 0 hoặc không phải số = không giới hạn (trả đúng mảng đầu vào). Không sửa `messages`.
  */
@@ -32,7 +48,7 @@ export function limitImagesInContext(messages: readonly ChatMessage[], max: numb
   const total = countContextImages(messages);
   if (total <= max) return messages as ChatMessage[];
   const note = IMAGE_TRIMMED_NOTE[lang];
-  let drop = total - max; // số ảnh CŨ NHẤT phải bỏ
+  let drop = imageDropCount(total, Math.floor(max)); // số ảnh CŨ NHẤT phải bỏ (theo đợt)
   const out: ChatMessage[] = [];
   for (const m of messages) {
     if (drop <= 0 || !m.content.some((b) => imagesIn(b) > 0)) {

@@ -269,7 +269,9 @@ export class ToolDispatcher {
         emit({ t: 'tool_start', id: assistantId, callId: call.id, name: call.name, args: call.input });
       }
 
-      let result = await raceWithAbort(def.execute(call.input, ctx), signal, this.o.toolTimeoutMs ?? 10 * 60_000);
+      // Trần thời gian MỖI công cụ (mặc định 10 phút). `agent` và `workflow_run` đặt `timeoutMs: null`: một agent con / workflow nhiều agent hợp lệ chạy hàng chục phút đến hàng giờ
+      // (workflow có hạn giờ riêng, người dùng có nút Dừng) — cắt ở 10 phút từng khiến lệnh báo lỗi trong khi workflow vẫn chạy mồ côi ngầm.
+      let result = await raceWithAbort(def.execute(call.input, ctx), signal, def.timeoutMs === null ? null : (def.timeoutMs ?? this.o.toolTimeoutMs ?? 10 * 60_000));
       if (signal.aborted) return fail(t(language, 'toolCancelled'), 'cancelled');
       if (beforeNote) result = { ...result, content: `${beforeNote}\n${result.content}` };
       // Móc toolAfter (PostToolUse, chẩn đoán IDE…): thêm ghi chú/sửa kết quả mà model nhìn thấy.
@@ -318,9 +320,10 @@ async function collectPermissionAdvice(
   return out;
 }
 
-function raceWithAbort<T>(work: Promise<T>, signal: AbortSignal, timeoutMs: number): Promise<T> {
+/** `timeoutMs` = null → KHÔNG có trần thời gian (chỉ nút Dừng): công cụ tự quản hạn giờ riêng (agent con, workflow nhiều agent). */
+function raceWithAbort<T>(work: Promise<T>, signal: AbortSignal, timeoutMs: number | null): Promise<T> {
   return new Promise<T>((resolve, reject) => {
-    const timer = setTimeout(() => reject(new Error(`Hết thời gian chờ (${Math.round(timeoutMs / 1000)} giây).`)), timeoutMs);
+    const timer = timeoutMs === null ? undefined : setTimeout(() => reject(new Error(`Hết thời gian chờ (${Math.round(timeoutMs / 1000)} giây).`)), timeoutMs);
     const onAbort = () => reject(new Error('Đã dừng.'));
     if (signal.aborted) onAbort();
     else signal.addEventListener('abort', onAbort, { once: true });

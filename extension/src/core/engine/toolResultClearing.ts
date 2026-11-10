@@ -33,6 +33,8 @@ export interface ClearOptions {
   clearAtPercent: number;
   /** Lược cho tới khi còn ≤ phần trăm này của cửa sổ. */
   targetPercent: number;
+  /** (0.7.7) Đích TUYỆT ĐỐI (token ước lượng), thay cho `targetPercent` khi có — dùng cho nén tự động bị TRẦN chặn (xem `autoClearTarget`): chừa độ trễ dưới ngưỡng để không lược mỗi lượt. */
+  targetTokens?: number;
   /** Số kết quả gần nhất giữ nguyên văn. */
   keepRecentResults: number;
   lang: Lang;
@@ -138,7 +140,7 @@ export function clearOldToolResults(session: SessionState, o: ClearOptions): Cle
   if (o.clearAtPercent <= 0) return none;
   const start = (o.contextWindow * o.clearAtPercent) / 100;
   if (!o.force && before < start) return none;
-  const target = (o.contextWindow * Math.max(0, Math.min(o.targetPercent, o.clearAtPercent || o.targetPercent))) / 100;
+  const target = o.targetTokens !== undefined && Number.isFinite(o.targetTokens) ? Math.max(0, o.targetTokens) : (o.contextWindow * Math.max(0, Math.min(o.targetPercent, o.clearAtPercent || o.targetPercent))) / 100;
 
   const uses = toolUseIndex(session.messages);
   let running = before;

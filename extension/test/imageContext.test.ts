@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { DEFAULT_MAX_IMAGES_IN_CONTEXT, IMAGE_TRIMMED_NOTE, countContextImages, limitImagesInContext } from '../src/core/engine/imageContext';
+import { DEFAULT_MAX_IMAGES_IN_CONTEXT, IMAGE_TRIMMED_NOTE, countContextImages, imageDropCount, imageDropStep, limitImagesInContext } from '../src/core/engine/imageContext';
 import { DEFAULT_ENGINE_SETTINGS } from '../src/core/engine/types';
 import type { ChatMessage, ContentBlock } from '../src/core/types';
 import { textTurn } from './helpers/fakeProvider';
@@ -77,6 +77,45 @@ describe('limitImagesInContext', () => {
     const out = limitImagesInContext([userImg('1'), userImg('2')], 1, 'en');
     expect(out[0].content[1]).toEqual({ type: 'text', text: IMAGE_TRIMMED_NOTE.en });
     expect(out[1].content[1]).toMatchObject({ type: 'image' });
+  });
+});
+
+/** (0.7.7) Lược THEO ĐỢT: ranh giới ảnh bị bỏ chỉ nhích mỗi `bước` ảnh mới → tiền tố gửi model đứng yên (bộ nhớ đệm prompt còn) giữa hai đợt. */
+describe('lược ảnh theo đợt (giữ bộ nhớ đệm prompt)', () => {
+  it('bước = ⌈max/3⌉, tối thiểu 1: max nhỏ vẫn lược chính xác từng ảnh', () => {
+    expect([1, 2, 3, 4, 6, 8, 9, 12, 100].map(imageDropStep)).toEqual([1, 1, 1, 2, 2, 3, 3, 4, 34]);
+    for (let total = 3; total <= 12; total++) expect(imageDropCount(total, 2)).toBe(total - 2);
+  });
+
+  it('mặc định 8 (bước 3): 9–11 ảnh bỏ 3, 12–14 ảnh bỏ 6 — số ảnh GIỮ luôn ≤ 8 và ≥ 6', () => {
+    const drops = Array.from({ length: 12 }, (_, i) => imageDropCount(i + 9, 8)); // total 9..20
+    expect(drops).toEqual([3, 3, 3, 6, 6, 6, 9, 9, 9, 12, 12, 12]);
+    for (let total = 9; total <= 60; total++) {
+      const keep = total - imageDropCount(total, 8);
+      expect(keep).toBeLessThanOrEqual(8);
+      expect(keep).toBeGreaterThanOrEqual(6);
+    }
+    expect(imageDropCount(8, 8)).toBe(0);
+    expect(imageDropCount(5, 8)).toBe(0);
+  });
+
+  it('ranh giới đứng yên giữa hai đợt: ảnh ĐẦU TIÊN được gửi (và mọi ảnh cũ hơn) không đổi khi thêm ảnh mới trong cùng đợt', () => {
+    const history = (n: number): ChatMessage[] => Array.from({ length: n }, (_, i) => userImg(String(i + 1)));
+    const firstSent = (n: number): string => imagesOf(limitImagesInContext(history(n), 8))[0];
+    expect(new Set([9, 10, 11].map(firstSent))).toEqual(new Set(['data-4']));
+    expect(new Set([12, 13, 14].map(firstSent))).toEqual(new Set(['data-7']));
+    expect(firstSent(15)).toBe('data-10');
+    // mọi ảnh cũ hơn ranh giới đã thành dòng chữ ở MỌI lần gọi trong đợt → đoạn đầu bản gửi giống hệt nhau
+    const a = JSON.stringify(limitImagesInContext(history(9), 8).slice(0, 3));
+    const b = JSON.stringify(limitImagesInContext(history(11), 8).slice(0, 3));
+    expect(a).toBe(b);
+  });
+
+  it('không bao giờ gửi quá max ảnh, kể cả với kết quả công cụ nhiều ảnh', () => {
+    const msgs = [toolUse('t1'), toolRes('t1', ['a', 'b', 'c', 'd', 'e']), toolUse('t2'), toolRes('t2', ['f', 'g', 'h', 'i', 'j'])];
+    const out = limitImagesInContext(msgs, 8);
+    expect(imagesOf(out).length).toBeLessThanOrEqual(8);
+    expect(imagesOf(out)).toEqual(['data-d', 'data-e', 'data-f', 'data-g', 'data-h', 'data-i', 'data-j'].slice(0, 7)); // 10 ảnh, bỏ 3 cũ nhất
   });
 });
 

@@ -150,7 +150,11 @@ function ToolRowView({ block, nested = false }: { block: ToolBlock; nested?: boo
           </span>
         )}
         {lineCount !== undefined && !showDiff && <span class="tool-meta-text cc-lines">{t('cc.lines', { n: formatInt(lineCount, lang) })}</span>}
-        {meta.length > 0 && <span class="tool-meta-text">{meta.join(' · ')}</span>}
+        {meta.length > 0 && (
+          <span class="tool-meta-text" title={meta.join(' · ')}>
+            {meta.join(' · ')}
+          </span>
+        )}
         {expandable && <Icon name={open ? 'chevron-up' : 'chevron-down'} size={14} class="tool-chevron" />}
       </span>
     </>

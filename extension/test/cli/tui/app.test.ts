@@ -239,6 +239,48 @@ describe('TuiApp + MockRuntime + xterm headless', () => {
     await b.until(() => !b!.rt.status().running);
   }, 30000);
 
+  // (0.4.9) Báo cáo: «gõ tiếng Việt có dấu trên một vài laptop là mất chữ». Nguyên nhân tìm ra: ở console cổ điển của Windows (conhost) Backspace THƯỜNG gửi 0x08, mà CLI coi 0x08 là
+  // «Ctrl+Backspace = xoá cả từ» → bộ gõ (UniKey/EVKey… gõ «ê» bằng Backspace rồi chèn lại chữ có dấu) nuốt cả từ đứng trước mỗi khi gõ một dấu.
+  it('bộ gõ kiểu «Backspace + chữ có dấu» ở conhost (0x08): chỉ xoá MỘT chữ, từ đã gõ còn nguyên', async () => {
+    const b = await boot({ app: { ctrlH: 'backspace' } });
+    await b.type('tiếng vie');
+    await b.type('\x08'); // IME xoá chữ «e» cuối…
+    await b.type('ê'); // …rồi chèn «ê»
+    expect(b.app.editor.text).toBe('tiếng viê');
+    await b.type('\x08');
+    await b.type('ế');
+    await b.type('t');
+    expect(b.app.editor.text).toBe('tiếng viết');
+    await b.type(KEY.ctrl('c'));
+  });
+
+  it('cùng chuỗi đó nhưng terminal coi 0x08 là Ctrl+Backspace (Windows Terminal/Unix): vẫn xoá cả từ như người dùng ở đó mong đợi', async () => {
+    const b = await boot({ app: { ctrlH: 'ctrl-backspace' } });
+    await b.type('tiếng viet');
+    await b.type('\x08');
+    expect(b.app.editor.text).toBe('tiếng ');
+    await b.type(KEY.ctrl('c'));
+  });
+
+  it('Alt + chữ có dấu (ESC + ê) được CHÈN như chữ thường thay vì bị nuốt; Alt+b vẫn là phím tắt nhảy từ', async () => {
+    const b = await boot();
+    await b.type('xin chào');
+    await b.type('\x1bê');
+    expect(b.app.editor.text).toBe('xin chàoê');
+    await b.type('\x1b̂'); // ESC + dấu mũ rời (U+0302): ghép vào chữ trước nó
+    await b.type('\x1bb'); // Alt+b: nhảy về đầu từ
+    expect(b.app.editor.cursor).toBe(4);
+    await b.type(KEY.ctrl('c'));
+  });
+
+  it('Alt + chữ ASCII không phải phím tắt vẫn bị bỏ qua (không chèn ký tự lạ)', async () => {
+    const b = await boot();
+    await b.type('ab');
+    await b.type('\x1bz');
+    expect(b.app.editor.text).toBe('ab');
+    await b.type(KEY.ctrl('c'));
+  });
+
   it('Shift+Tab đổi chế độ quyền và hiện ở dải trạng thái', async () => {
     b = await boot();
     await b.type(KEY.shiftTab);

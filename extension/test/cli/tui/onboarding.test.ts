@@ -1,5 +1,6 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import type { AccountDeps } from '../../../src/cli/account';
+import { LocaithGatewayClient } from '../../../src/core/providers/locaithGateway';
 import { getLang, setLang } from '../../../src/cli/i18n';
 import { runOnboarding, runOnboardingFlow, detectByokKeys, type OnboardingOptions, type OnboardingUi } from '../../../src/cli/tui/onboarding';
 import type { PickItem } from '../../../src/cli/runtime/contract';
@@ -166,6 +167,165 @@ describe('runOnboardingFlow (logic)', () => {
     expect(r.loggedIn).toBe(false);
     expect(ui.said.some((s) => s.startsWith('warn:'))).toBe(true);
     expect(calls).toEqual([]);
+  });
+});
+
+describe('đăng nhập bằng trình duyệt trong onboarding (0.4.9): liên kết nhìn thấy được + dán địa chỉ cho máy khác', () => {
+  const LINK = 'https://locaith.ai/#ext-auth?client=vscode&challenge=abc&state=xyz&redirect=http%3A%2F%2F127.0.0.1%3A53123%2Fcallback';
+  const tok = 'lat_' + 'b'.repeat(43);
+
+  // loginCmd kiểm token bằng /account của cổng thật → thay bằng bản giả (không cần mạng), như test/cliAccount.test.ts.
+  let restore = (): void => undefined;
+  beforeEach(() => {
+    const a = LocaithGatewayClient.prototype.getAccount;
+    const c = LocaithGatewayClient.prototype.getConsent;
+    LocaithGatewayClient.prototype.getAccount = async () => ({ ok: true, account: { ok: true, account: { name: 'An', plan: 'free' }, plan: 'free', limits: { unlimited: true } } }) as never;
+    LocaithGatewayClient.prototype.getConsent = async () => ({ ok: true, state: { accepted: true, version: 1, current: 1 } }) as never;
+    restore = () => {
+      LocaithGatewayClient.prototype.getAccount = a;
+      LocaithGatewayClient.prototype.getConsent = c;
+    };
+  });
+  afterEach(() => restore());
+
+  /** accountDeps có browserLogin thật-hơn: gọi `hooks` y như loginWithBrowser (notify liên kết → askPaste song song) rồi trả kết quả theo `finish`. */
+  const withBrowser = (finish: (h: NonNullable<Parameters<NonNullable<AccountDeps['browserLogin']>>[0]>, ac: AbortController) => Promise<{ ok: true; token: string } | { ok: false; error: 'cancelled' }>) =>
+    ((): AccountDeps => ({
+      ...(deps([])(undefined) as AccountDeps),
+      browserLogin: async (h) => {
+        const ac = new AbortController();
+        h!.notify!('Đã mở trình duyệt. Nếu không thấy trang, mở tay liên kết này:', LINK);
+        h!.notify!('Trình duyệt ở MÁY KHÁC…'); // câu hướng dẫn không kèm liên kết: onboarding bỏ qua (đã nằm trong hộp dán)
+        return finish(h!, ac);
+      },
+    })) as never;
+
+  it('liên kết hiện TRONG màn hình (ui.block, nguyên văn) — không đi qua console.error như trước', async () => {
+    const ui = scripted(['browser', 'yes']);
+    const blocks: string[] = [];
+    (ui as { block?: (t: string) => void }).block = (t) => void blocks.push(t);
+    const consoleErr: unknown[][] = [];
+    const orig = console.error;
+    console.error = (...a: unknown[]) => void consoleErr.push(a);
+    try {
+      const r = await runOnboardingFlow(base({ languageChosen: true, accountDeps: withBrowser(async () => ({ ok: true, token: tok })) }), ui);
+      expect(r.loggedIn).toBe(true);
+    } finally {
+      console.error = orig;
+    }
+    expect(blocks).toEqual([LINK]);
+    expect(ui.said.some((s) => s.startsWith('info:') && s.includes('mở tay liên kết'))).toBe(true);
+    expect(ui.said.some((s) => s.includes('MÁY KHÁC'))).toBe(false); // không lặp câu hướng dẫn đã có trong hộp
+    expect(consoleErr).toEqual([]);
+  });
+
+  it('không có ui.block thì liên kết vẫn hiện (lùi về say(text))', async () => {
+    const ui = scripted(['browser', 'yes']);
+    await runOnboardingFlow(base({ languageChosen: true, accountDeps: withBrowser(async () => ({ ok: true, token: tok })) }), ui);
+    expect(ui.said).toContain(`text:${LINK}`);
+  });
+
+  it('hộp «dán địa chỉ» mở trong lúc chờ: dán xong → đăng nhập; ô nhập là KÍN (secret) và có chỗ giữ chữ', async () => {
+    const seen: Array<{ title: string; secret?: boolean; placeholder?: string; hasSignal: boolean }> = [];
+    const ui = scripted(['browser', 'yes']);
+    ui.input = async (title, _detail, secret, o) => {
+      seen.push({ title, secret, placeholder: o?.placeholder, hasSignal: !!o?.signal });
+      return 'http://127.0.0.1:53123/callback?code=code_abcdefghijklmnopqrstuv&state=xyz';
+    };
+    const r = await runOnboardingFlow(
+      base({
+        languageChosen: true,
+        accountDeps: withBrowser(async (h, ac) => {
+          const pasted = await h.askPaste!(ac.signal);
+          return pasted ? { ok: true, token: tok } : { ok: false, error: 'cancelled' };
+        }),
+      }),
+      ui,
+    );
+    expect(r.loggedIn).toBe(true);
+    expect(seen).toHaveLength(1);
+    expect(seen[0]).toMatchObject({ secret: true, hasSignal: true });
+    expect(seen[0].title).toMatch(/Cho phép/);
+    expect(seen[0].placeholder).toMatch(/127\.0\.0\.1/);
+  });
+
+  it('Enter khi ô còn trống → hộp mở lại (không đóng, kẻo màn hình trống trơn trong lúc CLI vẫn chờ)', async () => {
+    const answers: Array<string | null> = ['', '   ', 'http://127.0.0.1:1/callback?code=code_abcdefghijklmnopqrstuv&state=xyz'];
+    const ui = scripted(['browser', 'yes']);
+    let opened = 0;
+    ui.input = async () => (opened++, answers.shift() ?? null);
+    let got: string | null = null;
+    await runOnboardingFlow(
+      base({
+        languageChosen: true,
+        accountDeps: withBrowser(async (h, ac) => {
+          got = await h.askPaste!(ac.signal);
+          return { ok: true, token: tok };
+        }),
+      }),
+      ui,
+    );
+    expect(opened).toBe(3);
+    expect(got).toContain('code=code_abc');
+  });
+
+  it('Esc ở hộp dán → huỷ đăng nhập, quay lại màn chọn cách đăng nhập (chọn «bỏ qua» thì đi tiếp)', async () => {
+    const ui = scripted(['browser', 'skip', 'yes']);
+    ui.input = async () => null;
+    const r = await runOnboardingFlow(
+      base({
+        languageChosen: true,
+        accountDeps: withBrowser(async (h, ac) => {
+          const v = await h.askPaste!(ac.signal);
+          return v === null ? { ok: false, error: 'cancelled' } : { ok: true, token: tok };
+        }),
+      }),
+      ui,
+    );
+    expect(r).toMatchObject({ loggedIn: false, cancelled: false, trusted: true });
+    expect(ui.said.some((s) => s.startsWith('warn:'))).toBe(true);
+  });
+
+  it('đăng nhập xong bằng đường loopback (cùng máy) → hộp dán nhận signal huỷ và tự đóng', async () => {
+    let closedBySignal = false;
+    const ui = scripted(['browser', 'yes']);
+    ui.input = (_t, _d, _s, o) =>
+      new Promise<string | null>((resolve) =>
+        o?.signal?.addEventListener('abort', () => {
+          closedBySignal = true;
+          resolve(null);
+        }),
+      );
+    const r = await runOnboardingFlow(
+      base({
+        languageChosen: true,
+        accountDeps: withBrowser(async (h, ac) => {
+          void h.askPaste!(ac.signal);
+          await sleep(20);
+          ac.abort(); // loginWithBrowser huỷ ngay khi cổng loopback nhận được
+          return { ok: true, token: tok };
+        }),
+      }),
+      ui,
+    );
+    await sleep(20);
+    expect(r.loggedIn).toBe(true);
+    expect(closedBySignal).toBe(true);
+  });
+
+  it('dán sai → báo qua giao diện (không im lặng)', async () => {
+    const ui = scripted(['browser', 'yes']);
+    await runOnboardingFlow(
+      base({
+        languageChosen: true,
+        accountDeps: withBrowser(async (h) => {
+          h.onPasteInvalid!();
+          return { ok: true, token: tok };
+        }),
+      }),
+      ui,
+    );
+    expect(ui.said.some((s) => s.startsWith('warn:') && /địa chỉ/.test(s))).toBe(true);
   });
 });
 

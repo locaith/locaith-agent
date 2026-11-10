@@ -58,11 +58,37 @@ function fromCodepoint(cp: number, m: { shift: boolean; alt: boolean; ctrl: bool
   return null;
 }
 
+/**
+ * Byte 0x08 (Ctrl+H) là gì?
+ *  - Windows Terminal, VS Code, và đa số terminal Unix: Backspace gửi 0x7f, còn Ctrl+Backspace mới gửi 0x08 → 'ctrl-backspace' (xoá cả từ).
+ *  - Console CỔ ĐIỂN của Windows (conhost: cmd.exe / PowerShell mở thẳng, Windows 10 mặc định) NGƯỢC LẠI: Backspace THƯỜNG là 0x08, Ctrl+Backspace là 0x7f.
+ *    Coi 0x08 là «xoá cả từ» ở đó nghĩa là MỖI lần Backspace xoá luôn từ đứng trước — và bộ gõ tiếng Việt (UniKey, EVKey, OpenKey… gõ «ê» bằng Backspace rồi chèn lại chữ có dấu)
+ *    nuốt mất cả từ mỗi khi gõ một dấu: «gõ đến đâu có dấu là mất chữ đến đó». Ở máy dùng Windows Terminal thì không thấy lỗi vì ở đó Backspace là 0x7f.
+ * Không chắc (Windows không có WT_SESSION / TERM_PROGRAM=vscode) → coi là Backspace thường: lỡ xoá thừa cả từ tệ hơn nhiều so với việc Ctrl+Backspace chỉ xoá một chữ.
+ */
+export type CtrlHMode = 'ctrl-backspace' | 'backspace';
+
+export function ctrlHMode(env: NodeJS.ProcessEnv, platform: NodeJS.Platform): CtrlHMode {
+  // Lối thoát cho terminal lạ: LOCAITH_CTRL_H=backspace (0x08 là Backspace thường) hoặc ctrl-backspace (0x08 xoá cả từ).
+  const forced = (env.LOCAITH_CTRL_H ?? '').trim().toLowerCase();
+  if (forced === 'backspace' || forced === 'ctrl-backspace') return forced;
+  if (platform !== 'win32') return 'ctrl-backspace';
+  if (env.WT_SESSION || env.TERM_PROGRAM === 'vscode' || env.ConEmuPID) return 'ctrl-backspace';
+  return 'backspace';
+}
+
+export interface KeyParserOptions {
+  /** Cách hiểu byte 0x08 (xem `CtrlHMode`). Mặc định 'ctrl-backspace' (giữ hành vi cũ cho test và terminal Unix). */
+  ctrlH?: CtrlHMode;
+}
+
 export class KeyParser {
   private buf = '';
   private paste: string[] | null = null;
   /** Đoán dán khi không có bracketed paste (mặc định bật). */
   heuristicPaste = true;
+
+  constructor(private readonly opts: KeyParserOptions = {}) {}
 
   /** Đưa dữ liệu thô vào; trả về các sự kiện phân tích được. */
   feed(data: string): KeyEvent[] {
@@ -143,7 +169,7 @@ export class KeyParser {
       case 13: return { events: [mk('enter', raw)], used: 1 };
       case 10: return { events: [mk('char', raw, { ctrl: true }, 'j')], used: 1 }; // Ctrl+J = xuống dòng
       case 9: return { events: [mk('tab', raw)], used: 1 };
-      case 8: return { events: [mk('backspace', raw, { ctrl: true })], used: 1 }; // Ctrl+H / Ctrl+Backspace (Windows)
+      case 8: return { events: [mk('backspace', raw, this.opts.ctrlH === 'backspace' ? {} : { ctrl: true })], used: 1 }; // Ctrl+H / Ctrl+Backspace — hay Backspace thường ở conhost: xem CtrlHMode
       case 127: return { events: [mk('backspace', raw)], used: 1 };
       case 0: return { events: [mk('char', raw, { ctrl: true }, ' ')], used: 1 };
     }

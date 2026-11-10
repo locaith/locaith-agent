@@ -1,0 +1,328 @@
+/* ── Bảng agent (0.7.7): hộp «Agents in this turn» + AgentBoard ──
+   Phẳng như dòng thời gian (không vạch dọc / đường nối): mỗi agent một dòng, chấm trạng thái, số liệu căn phải. Chữ dài (URL, mô tả không dấu cách) co lại bằng «…» chứ không tràn. */
+.agent-flow-head {
+  align-items: center;
+}
+.agent-pop-x {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 24px;
+  height: 24px;
+  margin-left: 6px;
+  border-radius: 6px;
+  color: var(--fg-faint);
+}
+.agent-pop-x:hover {
+  color: var(--fg);
+  background: color-mix(in srgb, var(--fg) 8%, transparent);
+}
+.agent-flow-main {
+  padding: 0 2px 8px;
+  font-size: var(--nd-fs-xs);
+  color: var(--fg-faint);
+  overflow-wrap: anywhere;
+}
+.agent-flow {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.ab {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+.ab-head {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  min-width: 0;
+}
+.ab-head-title {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--nd-fs-sm);
+  font-weight: 600;
+  color: var(--fg);
+}
+.ab-head-time {
+  flex: none;
+  font-size: var(--nd-fs-xs);
+  color: var(--fg-faint);
+  font-variant-numeric: tabular-nums;
+}
+.ab-sum {
+  font-size: var(--nd-fs-xs);
+  color: var(--fg-muted);
+  font-variant-numeric: tabular-nums;
+}
+.ab-meter {
+  display: flex;
+  height: 5px;
+  border-radius: 999px;
+  overflow: hidden;
+  background: color-mix(in srgb, var(--fg) 8%, transparent);
+}
+.ab-seg {
+  flex-basis: 0;
+  min-width: 2px;
+}
+.ab-seg.is-done {
+  background: var(--ok);
+}
+.ab-seg.is-running {
+  background: var(--nd-working);
+}
+.ab-seg.is-error {
+  background: var(--danger);
+}
+.ab-seg.is-queued {
+  background: color-mix(in srgb, var(--fg) 22%, transparent);
+}
+.ab-limits {
+  font-size: var(--nd-fs-xs);
+  color: var(--fg-faint);
+}
+.ab-limit {
+  padding: 6px 10px;
+  border-radius: 8px;
+  font-size: var(--nd-fs-xs);
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+.ab-limit.is-warn {
+  color: var(--warn);
+  background: color-mix(in srgb, var(--warn) 12%, transparent);
+}
+.ab-filter {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.ab-chip {
+  padding: 2px 9px;
+  border-radius: 999px;
+  font-size: var(--nd-fs-xs);
+  color: var(--fg-muted);
+  background: color-mix(in srgb, var(--fg) 6%, transparent);
+}
+.ab-chip:hover {
+  color: var(--fg);
+}
+.ab-chip.is-on {
+  color: var(--accent-text);
+  background: color-mix(in srgb, var(--lo-cyan) 16%, transparent);
+}
+.ab-body {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+}
+.ab-group {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.ab-group-head {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  width: 100%;
+  padding: 4px 2px;
+  text-align: left;
+  font-size: var(--nd-fs-xs);
+  font-weight: 600;
+  color: var(--fg-muted);
+  border-bottom: 1px solid var(--line-soft);
+}
+.ab-group-head:hover {
+  color: var(--fg);
+}
+.ab-group-count {
+  margin-left: auto;
+  font-weight: 400;
+  color: var(--fg-faint);
+  font-variant-numeric: tabular-nums;
+}
+.ab-group-count .is-err,
+.ab-detail .is-err {
+  color: var(--danger);
+}
+.ab-rows {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.ab-row {
+  min-width: 0;
+  border-radius: 8px;
+}
+.ab-row:hover {
+  background: color-mix(in srgb, var(--fg) 4%, transparent);
+}
+.ab-row-main {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  width: 100%;
+  min-width: 0;
+  padding: 5px 6px;
+  text-align: left;
+  color: inherit;
+}
+.ab-dot {
+  flex: none;
+  align-self: center;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--fg) 30%, transparent);
+}
+.ab-dot[data-state='running'] {
+  background: var(--nd-working);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--nd-working) 22%, transparent);
+  animation: nd-pulse 1.4s ease-out infinite;
+}
+.ab-dot[data-state='done'] {
+  background: var(--ok);
+}
+.ab-dot[data-state='error'],
+.ab-dot[data-state='stopped'] {
+  background: var(--danger);
+}
+.ab-name {
+  flex: 1 1 0;
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  min-width: 0;
+  font-size: var(--nd-fs-sm);
+}
+.ab-n {
+  flex: none;
+  min-width: 2.2ch;
+  font-size: var(--nd-fs-xs);
+  font-weight: 500;
+  color: var(--fg-faint);
+  font-variant-numeric: tabular-nums;
+}
+.ab-title {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 600;
+  color: var(--fg);
+}
+.ab-row.is-done .ab-title {
+  font-weight: 500;
+  color: var(--fg-muted);
+}
+.ab-sub {
+  flex: 0 100 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--nd-fs-xs);
+  color: var(--fg-faint);
+}
+.ab-num {
+  flex: none;
+  max-width: 55%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--nd-fs-xs);
+  color: var(--fg-faint);
+  font-variant-numeric: tabular-nums;
+}
+.ab-second {
+  margin: 0 6px 4px 28px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--nd-fs-xs);
+  color: var(--fg-faint);
+}
+.ab-second.is-act {
+  color: var(--accent-text);
+}
+.ab-second.is-err {
+  color: var(--danger);
+}
+.ab-detail {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 2px 10px;
+  margin: 0 6px 6px 28px;
+  font-size: var(--nd-fs-xs);
+}
+.ab-detail dt {
+  color: var(--fg-faint);
+}
+.ab-detail dd {
+  margin: 0;
+  min-width: 0;
+  color: var(--fg-muted);
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+.ab-more {
+  align-self: flex-start;
+  margin: 2px 6px 0 28px;
+  font-size: var(--nd-fs-xs);
+  color: var(--accent-text);
+}
+.ab-more:hover {
+  text-decoration: underline;
+}
+.ab-unlisted {
+  padding: 2px 6px;
+  font-size: var(--nd-fs-xs);
+  color: var(--fg-faint);
+}
+
+/* Khung hẹp (Chrome side panel, VS Code hẹp): số liệu xuống dòng thứ hai của hàng thay vì chen mất tên agent (như AgentRow ở ≤ 520 px). */
+@container app (max-width: 520px) {
+  .ab-row-main {
+    flex-wrap: wrap;
+    row-gap: 0;
+  }
+  .ab-name {
+    flex: 1 1 calc(100% - 20px);
+  }
+  .ab-num {
+    flex: 1 1 100%;
+    max-width: none;
+    padding-left: 26px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ab-dot[data-state='running'] {
+    animation: none;
+  }
+}
+body.vscode-high-contrast .ab-dot,
+body.vscode-high-contrast-light .ab-dot {
+  border: 1px solid currentColor;
+}
+body.vscode-high-contrast .ab-sub,
+body.vscode-high-contrast .ab-num,
+body.vscode-high-contrast .ab-second,
+body.vscode-high-contrast .ab-group-count,
+body.vscode-high-contrast-light .ab-sub,
+body.vscode-high-contrast-light .ab-num,
+body.vscode-high-contrast-light .ab-second,
+body.vscode-high-contrast-light .ab-group-count {
+  color: var(--fg-muted);
+}

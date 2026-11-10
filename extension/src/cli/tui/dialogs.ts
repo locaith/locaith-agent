@@ -392,7 +392,8 @@ export class InputDialog implements Dialog<string | null> {
     const th = this.th;
     const inner = width - 4;
     const rows: string[] = [];
-    if (this.req.detail) rows.push(...wrapAnsi(th.muted(this.req.detail), inner).slice(0, 4), '');
+    // Tối đa 7 hàng chữ hướng dẫn (trước là 4: câu «Esc: chọn cách khác» ở cuối hướng dẫn đăng nhập từ máy khác bị cắt mất).
+    if (this.req.detail) rows.push(...wrapAnsi(th.muted(this.req.detail), inner).slice(0, 7), '');
     let shown: string;
     if (this.req.secret) {
       const masked = new Editor();

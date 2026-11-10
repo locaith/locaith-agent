@@ -37,7 +37,8 @@ Quy tắc:
 - API trong script: `agent`, `parallel`, `pipeline`, `store`, `phase`, `log`, `args`. Không có `require`, `process`, `fetch`, `eval`.
 - `agent(...)` trả `{ ok, text, data?, tokens, model, ref }`. Luôn kiểm `ok` trước khi dùng `text`/`data`; với `json: true` thì dùng `data`.
 - Hạng model (`tier`): `top` cho lập kế hoạch/phán quyết, `balanced` mặc định, `fast` cho do thám rẻ. Chỉ có tác dụng khi người dùng bật chế độ điều phối nhiều AI; nếu không, mọi agent dùng model của bạn.
-- Đặt giới hạn hợp lý (`max_agents`, `max_tokens`, `timeout_minutes`). Bắt đầu nhỏ (thử trên 2–3 phần tử) trước khi chạy hàng loạt.
+- Mặc định rộng: tới 1.000 agent mỗi lần chạy, 16 chạy cùng lúc (còn lại xếp hàng), KHÔNG có ngân sách token. Chỉ đặt `max_tokens` khi người dùng yêu cầu một ngân sách; `max_agents`/`timeout_minutes` đặt khi bạn biết số lượng. Bắt đầu nhỏ (thử trên 2–3 phần tử) trước khi chạy hàng loạt.
+- Chạm giới hạn do bạn đặt thì `agent()` KHÔNG ném lỗi mà trả `{ ok: false, skipped: 'agents'|'tokens', error }` — script vẫn chạy tiếp: dùng kết quả đã có, đừng coi `text` rỗng là câu trả lời. Nếu workflow chết giữa chừng, báo cáo các agent đã xong được cứu vào scratchpad: đọc lại chúng thay vì chạy lại từ đầu.
 - Agent con mặc định CHỈ ĐỌC. Muốn sửa tệp thì làm ở luồng chính sau khi workflow trả kết quả (hoặc dùng `agent: "general"` có kiểm soát — mỗi thao tác ghi vẫn xin phép và chạy tuần tự).
 - Người dùng phải duyệt mỗi lần chạy workflow; nói rõ cho họ biết workflow sẽ làm gì và tốn cỡ nào (số agent × số token ước lượng).
 

@@ -107,6 +107,115 @@ async function assertCcCollapsed(p) {
   if (r.overflowX > 1) throw new Error(`tràn ngang ${r.overflowX}px ở bề ngang ${r.width}px`);
 }
 
+/**
+ * (0.7.7) Dòng công cụ có URL/chuỗi rất dài không dấu cách (Chrome: địa chỉ sau chuyển hướng ở chữ phụ bên phải, đối số `url` ở mô tả): chữ phụ KHÔNG được
+ * đè lên tên hành động hay tràn ra ngoài khung, mọi dòng giữ trong một hàng ngang, và không có thanh cuộn ngang. Lỗi người dùng báo 10/11.
+ */
+async function assertNoRowOverlap(p) {
+  // Mở hết các nhóm gập để dòng «Trang» hiện ra.
+  for (const b of await p.$$('.cc-head[aria-expanded="false"], button.tool-head[aria-expanded="false"].cc-head')) await b.click().catch(() => undefined);
+  await wait(250);
+  const r = await p.evaluate(() => {
+    const rect = (e) => (e ? e.getBoundingClientRect() : null);
+    const tl = document.querySelector('.timeline');
+    const app = document.querySelector('.app');
+    const rows = [...document.querySelectorAll('.cc-tool')];
+    const bad = [];
+    for (const row of rows) {
+      const line = row.querySelector('.tool-line');
+      const lr = rect(line);
+      const action = rect(row.querySelector('.cc-action'));
+      const desc = rect(row.querySelector('.cc-desc'));
+      const meta = rect(row.querySelector('.tool-meta-text'));
+      const name = (row.querySelector('.cc-action') || {}).textContent;
+      const hit = (a, b) => a && b && a.width > 0 && b.width > 0 && a.left < b.right - 0.5 && b.left < a.right - 0.5 && a.top < b.bottom - 0.5 && b.top < a.bottom - 0.5;
+      if (hit(action, meta)) bad.push(`${name}: chữ phụ đè lên tên hành động`);
+      if (hit(desc, meta)) bad.push(`${name}: chữ phụ đè lên mô tả`);
+      if (lr && meta && meta.right > lr.right + 1) bad.push(`${name}: chữ phụ tràn phải ${Math.round(meta.right - lr.right)}px`);
+      if (lr && meta && meta.left < lr.left - 1) bad.push(`${name}: chữ phụ tràn trái ${Math.round(lr.left - meta.left)}px`);
+      if (lr && desc && desc.right > lr.right + 1) bad.push(`${name}: mô tả tràn phải ${Math.round(desc.right - lr.right)}px`);
+    }
+    return { rows: rows.length, bad, overflowX: tl ? tl.scrollWidth - tl.clientWidth : -1, width: app ? app.clientWidth : 0 };
+  });
+  if (r.rows < 5) throw new Error(`thiếu dòng công cụ (thấy ${r.rows}) — nhóm gập chưa mở?`);
+  if (r.bad.length) throw new Error(`dòng công cụ đè/tràn ở bề ngang ${r.width}px: ${JSON.stringify(r.bad.slice(0, 6))}`);
+  if (r.overflowX > 1) throw new Error(`tràn ngang ${r.overflowX}px ở bề ngang ${r.width}px`);
+}
+
+/**
+ * (0.7.7) Bảng agent (hộp «Agents in this turn»): bấm chip → hộp mở GIỮA màn hình, nằm trọn trong khung nhìn và ĐỨNG YÊN (trước đây animation nd-rise ghi đè transform → hộp bay từ góc);
+ * không tràn ngang; mỗi dòng agent một hàng (chữ dài co «…»); tổng «chạy · chờ · xong · lỗi» khớp số đếm; nhiều agent thì gập «+N đã xong»; bộ lọc hoạt động; không vạch dọc;
+ * rời chuột KHÔNG tự đóng (đang đọc bảng cao), Esc mới đóng.
+ */
+function assertAgentBoard({ expectFold = true, expectLimit = false, small = false } = {}) {
+  return async (p) => {
+    await p.click('.agent-chip .picker-btn');
+    await wait(450);
+    const rectOf = () => p.evaluate(() => {
+      const e = document.querySelector('.agent-pop');
+      if (!e) return null;
+      const r = e.getBoundingClientRect();
+      return { l: Math.round(r.left), t: Math.round(r.top), r: Math.round(r.right), b: Math.round(r.bottom), w: window.innerWidth, h: window.innerHeight, sw: e.scrollWidth, cw: e.clientWidth };
+    });
+    const a = await rectOf();
+    if (!a) throw new Error('hộp agent không mở');
+    await wait(400);
+    const b = await rectOf();
+    if (a.l !== b.l || a.t !== b.t) throw new Error(`hộp agent không đứng yên: ${JSON.stringify(a)} → ${JSON.stringify(b)}`);
+    if (b.l < 0 || b.t < 0 || b.r > b.w + 1 || b.b > b.h + 1) throw new Error(`hộp agent tràn khỏi khung nhìn: ${JSON.stringify(b)}`);
+    if (b.sw > b.cw + 1) throw new Error(`hộp agent tràn ngang: scrollWidth ${b.sw} > ${b.cw}`);
+    const info = await p.evaluate(() => {
+      const q = (s) => [...document.querySelectorAll(s)];
+      const rows = q('.ab-row-main');
+      return {
+        rows: rows.length,
+        // khung hẹp (≤ 540 px): số liệu xuống dòng thứ hai nên một dòng agent cao tới hai hàng chữ; khung rộng: đúng một hàng
+        tall: rows.filter((e) => e.getBoundingClientRect().height > (window.innerWidth <= 540 ? 72 : 40)).length,
+        wide: rows.filter((e) => e.scrollWidth > e.clientWidth + 1).length,
+        sum: (document.querySelector('.ab-sum') || {}).textContent || '',
+        more: q('.ab-more').map((e) => e.textContent.trim()),
+        limit: (document.querySelector('.ab-limit') || {}).textContent || '',
+        chips: q('.ab-chip').map((e) => e.textContent.trim()),
+        phases: q('.ab-group-head').map((e) => e.textContent.trim()),
+        meter: q('.ab-seg').length,
+        dots: q('.ab-dot').map((e) => e.getAttribute('data-state')),
+        rails: q('.agent-pop *').filter((e) => { const c = getComputedStyle(e); return parseFloat(c.borderLeftWidth) > 0 && c.borderLeftStyle !== 'none' && parseFloat(c.borderTopWidth) === 0 && parseFloat(c.borderBottomWidth) === 0; }).map((e) => String(e.className)),
+        hardcoded: /Locaith-v5-flash · điều phối/.test((document.querySelector('.agent-pop') || {}).textContent || ''),
+      };
+    });
+    if (info.rows < 1) throw new Error('bảng agent không có dòng nào');
+    if (info.tall > 0) throw new Error(`${info.tall} dòng agent cao hơn một hàng (chữ dài không co lại)`);
+    if (info.wide > 0) throw new Error(`${info.wide} dòng agent tràn ngang`);
+    if (!/(chạy|running)/.test(info.sum) && !small) throw new Error(`dòng tổng thiếu «chạy»: ${info.sum}`);
+    if (info.chips.length !== 4) throw new Error(`cần 4 nút lọc: ${JSON.stringify(info.chips)}`);
+    if (info.meter < 1) throw new Error('thiếu thanh tiến độ');
+    if (info.rails.length) throw new Error(`còn vạch dọc trong bảng agent: ${JSON.stringify(info.rails)}`);
+    if (expectFold && !info.more.some((m) => /\+\d+/.test(m))) throw new Error(`nhiều agent mà không gập «+N đã xong»: ${JSON.stringify(info.more)}`);
+    if (expectLimit && !/(500|5M|5\.000|5,0)/.test(info.limit) && !/(bỏ qua|skipped)/.test(info.limit)) throw new Error(`thiếu dải «chạm giới hạn»: ${info.limit}`);
+    if (!expectLimit && info.limit) throw new Error(`không chạm giới hạn mà vẫn hiện dải cảnh báo: ${info.limit}`);
+    // Bộ lọc «Lỗi»: chỉ còn dòng lỗi (nếu có).
+    if (!small) {
+      const filt = await p.$$('.ab-chip');
+      await filt[2].click();
+      await wait(120);
+      const errOnly = await p.evaluate(() => [...document.querySelectorAll('.ab-dot')].map((e) => e.getAttribute('data-state')));
+      if (errOnly.some((s) => s !== 'error' && s !== 'stopped')) throw new Error(`bộ lọc «Lỗi» còn dòng khác: ${JSON.stringify(errOnly)}`);
+      await filt[0].click();
+      await wait(120);
+    }
+    // Rời chuột KHÔNG làm hộp đóng; Esc đóng.
+    await p.mouse.move(2, 2);
+    await wait(600);
+    if (!(await rectOf())) throw new Error('hộp agent tự đóng khi rời chuột');
+    await p.keyboard.press('Escape');
+    await wait(150);
+    if (await rectOf()) throw new Error('Esc không đóng hộp agent');
+    // Mở lại để ảnh chụp thấy bảng.
+    await p.click('.agent-chip .picker-btn');
+    await wait(400);
+  };
+}
+
 /** Nhãn đang chạy cuối lượt: từ khoá đậm + logo Lo, không dấu «…». */
 async function assertCcWorking(p) {
   const r = await p.evaluate(() => {
@@ -515,8 +624,23 @@ const SHOTS = [
   { name: 'cc-1-collapsed-en-dark-420', q: { scenario: 'cc-timeline', theme: 'dark', expand: '1', lang: 'en' }, w: 420, h: 900, full: true, act: assertCcCollapsed },
   { name: 'cc-1-collapsed-dark-300', q: { scenario: 'cc-timeline', theme: 'dark', expand: '1' }, w: 300, h: 900, full: true, act: assertCcCollapsed },
   { name: 'cc-1-collapsed-browser-dark-420', q: { scenario: 'cc-timeline', theme: 'dark', expand: '1', platform: 'browser' }, w: 420, h: 900, full: true, act: assertCcCollapsed },
+  // ── (0.7.7) bảng agent kiểu Claude Code ──
+  { name: 'agents-board-dark-900', q: { scenario: 'agents-board', theme: 'dark' }, w: 900, h: 900, act: assertAgentBoard() },
+  { name: 'agents-board-dark-536', q: { scenario: 'agents-board', theme: 'dark', platform: 'browser' }, w: 536, h: 900, act: assertAgentBoard() },
+  { name: 'agents-board-light-420', q: { scenario: 'agents-board', theme: 'light' }, w: 420, h: 800, act: assertAgentBoard() },
+  { name: 'agents-board-hc-700', q: { scenario: 'agents-board', theme: 'hc' }, w: 700, h: 800, act: assertAgentBoard() },
+  { name: 'agents-board-en-dark-700', q: { scenario: 'agents-board', theme: 'dark', lang: 'en' }, w: 700, h: 900, act: assertAgentBoard() },
+  { name: 'agents-board-hit-dark-700', q: { scenario: 'agents-board-hit', theme: 'dark' }, w: 700, h: 900, act: assertAgentBoard({ expectLimit: true }) },
+  { name: 'agents-board-big-dark-700', q: { scenario: 'agents-board-big', theme: 'dark' }, w: 700, h: 900, act: assertAgentBoard() },
+  { name: 'agents-board-small-dark-420', q: { scenario: 'agents-board-small', theme: 'dark' }, w: 420, h: 700, act: assertAgentBoard({ expectFold: false, small: true }) },
+  { name: 'agents-board-claude-model-dark-700', q: { scenario: 'agents-board', theme: 'dark', model: 'claude-opus-5-5' }, w: 700, h: 800, act: assertAgentBoard() },
+  // ── (0.7.7) URL rất dài ở dòng công cụ Chrome không được đè chữ ──
+  { name: 'chrome-long-browser-dark-536', q: { scenario: 'chrome-long', theme: 'dark', expand: '1', platform: 'browser' }, w: 536, h: 900, full: true, act: assertNoRowOverlap },
+  { name: 'chrome-long-browser-dark-420', q: { scenario: 'chrome-long', theme: 'dark', expand: '1', platform: 'browser' }, w: 420, h: 900, full: true, act: assertNoRowOverlap },
+  { name: 'chrome-long-browser-light-320', q: { scenario: 'chrome-long', theme: 'light', expand: '1', platform: 'browser' }, w: 320, h: 900, full: true, act: assertNoRowOverlap },
+  { name: 'chrome-long-vscode-dark-420', q: { scenario: 'chrome-long', theme: 'dark', expand: '1' }, w: 420, h: 900, full: true, act: assertNoRowOverlap },
   // ── (0.7.2) nhân vật chờ ──
-  { name: 'actor-dog-frames-dark-420', q: { scenario: 'cc-working', theme: 'dark', actor: 'dog:char' }, w: 420, h: 360, act: actorSheet('frames') },
+  { name: 'actor-dog-frames-dark-420',q: { scenario: 'cc-working', theme: 'dark', actor: 'dog:char' }, w: 420, h: 360, act: actorSheet('frames') },
   { name: 'actor-dog-frames-light-420', q: { scenario: 'cc-working', theme: 'light', actor: 'dog:char' }, w: 420, h: 360, act: actorSheet('frames') },
   { name: 'actor-dog-frames-hc-420', q: { scenario: 'cc-working', theme: 'hc', actor: 'dog:char' }, w: 420, h: 360, act: actorSheet('frames') },
   { name: 'actor-dog-real-dark-300', q: { scenario: 'cc-working', theme: 'dark', actor: 'dog:char' }, w: 300, h: 420, act: assertActor(1) },
@@ -1094,6 +1218,46 @@ async function runHistoryTests(browser) {
   return results.filter((ok) => !ok).length;
 }
 
+/**
+ * (0.7.7) Hủy một tin đang chờ (nút ×) phải TRẢ chữ về ô nhập — trước đây xoá mất hẳn, người dùng gõ lại từ đầu. Cả tin có tệp đính kèm; ô nhập đang có chữ thì NỐI
+ * thêm chứ không ghi đè; bấm vào chữ của tin (sửa) cũng trả về như cũ.
+ */
+async function runQueueTests(browser) {
+  const { page, problems } = await newPage(browser, 420, 900);
+  await openPage(page, 'harness.html', { scenario: 'queue', theme: 'dark', speed: '0' });
+  const results = [];
+  const check = (name, ok, extra = '') => {
+    results.push(ok);
+    console.log(`${ok ? '✔' : '✘'} ${name}${extra ? ` — ${extra}` : ''}`);
+  };
+  const val = () => page.$eval('.composer-input', (el) => el.value);
+  const items = () => page.$$eval('.queue-item', (els) => els.map((e) => e.querySelector('.queue-text').textContent.trim()));
+  const attLabels = () => page.$$eval('.composer .attach-chip, .composer .chip-att, .attachments .att', (els) => els.map((e) => e.textContent.trim())).catch(() => []);
+
+  check('Hàng chờ có 2 tin', (await items()).length === 2, JSON.stringify(await items()));
+  // 1) × trên tin thứ nhất → ô nhập (đang trống) nhận đúng chữ, tin biến khỏi hàng chờ.
+  await page.click('.queue-item:nth-child(1) .queue-x');
+  await wait(200);
+  check('× trả chữ của tin về ô nhập', (await val()).includes('Sau đó viết thêm test cho phần điều phối'), JSON.stringify(await val()));
+  check('Tin đã rời hàng chờ', (await items()).length === 1);
+  // 2) Ô nhập đang có chữ → × tin thứ hai NỐI thêm, không ghi đè.
+  const before = await val();
+  await page.click('.queue-item:nth-child(1) .queue-x');
+  await wait(200);
+  const after = await val();
+  check('× khi ô nhập đang có chữ: giữ chữ cũ và nối thêm', after.startsWith(before.trim()) && after.includes('cập nhật CHANGELOG'), JSON.stringify(after));
+  check('Hàng chờ trống', (await items()).length === 0);
+  // 3) Tin gửi đi KHÔNG bị gửi: không có lệnh send nào trong nhật ký host giả.
+  const sent = await page.evaluate(() => (window.__ND_LOG__ ?? []).filter((m) => m.type === 'send').length);
+  check('Hủy tin chờ không gửi gì đi', sent === 0, String(sent));
+  // 4) Lệnh gửi lên host mang edit:true (host thật mới trả chữ về).
+  const removes = await page.evaluate(() => (window.__ND_LOG__ ?? []).filter((m) => m.type === 'queue_remove').map((m) => !!m.edit));
+  check('Nút × gửi queue_remove có edit:true', removes.length === 2 && removes.every(Boolean), JSON.stringify(removes));
+  problems.forEach((p) => console.log(`    ${p}`));
+  await page.close();
+  return results.filter((ok) => !ok).length;
+}
+
 const browser = await puppeteer.launch({
   executablePath: CHROME,
   headless: true,
@@ -1101,7 +1265,7 @@ const browser = await puppeteer.launch({
 });
 let failures = 0;
 try {
-  failures = historyMode ? await runHistoryTests(browser) : imeMode ? await runImeTests(browser) : await runShots(browser);
+  failures = args.includes('--queue') ? await runQueueTests(browser) : historyMode ? await runHistoryTests(browser) : imeMode ? await runImeTests(browser) : await runShots(browser);
 } finally {
   await browser.close();
 }

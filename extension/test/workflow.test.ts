@@ -31,13 +31,22 @@ describe('extractJson', () => {
 });
 
 describe('clampLimits', () => {
-  it('kẹp theo trần cứng: ≤16 agent đồng thời, ≤1000 agent', () => {
+  it('kẹp theo trần cứng: ≤16 agent đồng thời, ≤1000 agent, ≤8 giờ; ngân sách token KHÔNG có trần trên (chỉ có khi người dùng đặt)', () => {
     const l = clampLimits({ maxAgents: 99999, maxConcurrent: 500, maxTotalTokens: 1e12, timeoutMs: 1e12 }, LIMITS);
     expect(l.maxAgents).toBe(1000);
     expect(l.maxConcurrent).toBe(16);
-    expect(l.maxTotalTokens).toBe(20_000_000);
-    expect(l.timeoutMs).toBe(3_600_000);
+    expect(l.maxTotalTokens).toBe(1e12); // người dùng/lệnh tự đặt → tôn trọng (trước đây bị kẹp 20M)
+    expect(l.timeoutMs).toBe(8 * 3_600_000);
     expect(clampLimits({}, LIMITS)).toEqual(LIMITS);
+  });
+
+  it('mặc định null = KHÔNG ngân sách token; không đặt thì giữ null; đặt thấp hơn tối thiểu thì nâng lên 10.000', () => {
+    const none: WorkflowLimits = { ...LIMITS, maxTotalTokens: null };
+    expect(clampLimits({}, none).maxTotalTokens).toBeNull();
+    expect(clampLimits({ maxTotalTokens: undefined }, none).maxTotalTokens).toBeNull();
+    expect(clampLimits({ maxTotalTokens: Number.NaN }, none).maxTotalTokens).toBeNull();
+    expect(clampLimits({ maxTotalTokens: 50 }, none).maxTotalTokens).toBe(10_000);
+    expect(clampLimits({ maxTotalTokens: 2_500_000 }, none).maxTotalTokens).toBe(2_500_000);
   });
 });
 
@@ -90,14 +99,60 @@ describe('runWorkflow — worker + vm', () => {
     expect(peak).toBeGreaterThan(1);
   });
 
-  it('vượt số agent tối đa: agent() từ chối, script bắt được lỗi', async () => {
-    const { promise } = run('const out = []; for (let i = 0; i < 4; i++) { try { await agent("t" + i); out.push("ok"); } catch (e) { out.push(e.message); } } return out;', { limits: { maxAgents: 2 } });
+  it('vượt số agent tối đa: agent() KHÔNG ném — trả {ok:false, skipped:"agents"} và script chạy tiếp; kết quả báo `skipped`/`hit`', async () => {
+    const { promise } = run('const out = []; for (let i = 0; i < 4; i++) { const r = await agent("t" + i); out.push(r.ok ? "ok" : r.skipped + ":" + r.error); } return out;', { limits: { maxAgents: 2 } });
     const r = await promise;
     expect(r.ok).toBe(true);
     const v = r.value as string[];
     expect(v.slice(0, 2)).toEqual(['ok', 'ok']);
+    expect(v[2]).toContain('agents:');
     expect(v[2]).toContain('giới hạn 2 agent');
+    expect(r.agents).toBe(2); // agent bị bỏ qua không được tính là đã chạy
+    expect(r.skipped).toBe(2);
+    expect(r.hit).toEqual({ kind: 'agents', limit: 2 });
   });
+
+  it('hết ngân sách token do người dùng đặt: các agent đã xong GIỮ NGUYÊN, agent kế tiếp bị bỏ qua (không còn «Workflow thất bại … hết ngân sách» mất cả báo cáo)', async () => {
+    const { promise } = run(
+      'const res = []; for (let i = 0; i < 5; i++) { const r = await agent("t" + i); res.push(r.ok ? r.text : "BỎ:" + r.skipped); } return { res };',
+      { limits: { maxTotalTokens: 250 }, agent: () => ({ ok: true, text: 'xong', tokens: 100, model: 'm' }) },
+    );
+    const r = await promise;
+    expect(r.ok).toBe(true);
+    expect((r.value as { res: string[] }).res).toEqual(['xong', 'xong', 'xong', 'BỎ:tokens', 'BỎ:tokens']); // 100+100+100 ≥ 250 sau agent thứ 3
+    expect(r.hit).toEqual({ kind: 'tokens', limit: 250 });
+    expect(r.skipped).toBe(2);
+  });
+
+  it('KHÔNG đặt ngân sách (null): chạy 40 agent × 5M token mỗi agent vẫn không bị chặn', async () => {
+    const { promise } = run('const rs = await pipeline(Array.from({ length: 40 }, (_, i) => i), (i) => agent("x" + i)); return rs.filter((r) => r.ok).length;', {
+      limits: { maxAgents: 1000, maxTotalTokens: null },
+      agent: () => ({ ok: true, text: 't', tokens: 5_000_000, model: 'm' }),
+    });
+    const r = await promise;
+    expect(r.ok).toBe(true);
+    expect(r.value).toBe(40);
+    expect(r.tokens).toBe(200_000_000);
+    expect(r.skipped).toBeUndefined();
+  });
+
+  it('script cứ gọi agent() mãi sau khi chạm giới hạn → dừng script (không quay CPU tới hết hạn giờ)', async () => {
+    const { promise } = run('for (;;) { await agent("x"); }', { limits: { maxAgents: 1 } });
+    const r = await promise;
+    expect(r.ok).toBe(false);
+    expect(r.error).toContain('dừng script');
+  });
+
+  it('kho artifact đầy: KHÔNG ném (trước đây chết sau khi agent đã chạy), cắt giá trị mới', async () => {
+    const big = 'x'.repeat(400_000);
+    const { promise, artifacts } = run('for (let i = 0; i < 90; i++) { await store.put("k" + i, "y".repeat(400000)); } return { n: (await store.list()).length };', { agent: () => ({ ok: true, text: big, tokens: 1, model: 'm' }) });
+    const r = await promise;
+    expect(r.ok).toBe(true);
+    expect((r.value as { n: number }).n).toBe(90);
+    // 90 × 400k = 36M > 32M: các giá trị sau cùng bị cắt còn ~2k thay vì ném
+    const lens = Object.values(artifacts).map((v) => v.length);
+    expect(lens.some((n) => n < 5000)).toBe(true);
+  }, 60_000);
 
   it('cache:true dùng lại kết quả; store.put/get/list hoạt động', async () => {
     let calls = 0;
@@ -169,5 +224,96 @@ describe('runWorkflow — worker + vm', () => {
     const r = await run('/*' + 'x'.repeat(31_000) + '*/ return 1;').promise;
     expect(r.ok).toBe(false);
     expect(r.error).toContain('dài quá');
+  });
+});
+
+describe('runWorkflow — sự kiện vòng đời từng agent cho bảng agent (0.7.7)', () => {
+  type Ev = import('../src/core/agents/workflow').WfAgentEvent;
+  const trace = (script: string, o: { limits?: Partial<WorkflowLimits>; agent?: (p: string, opts: WfAgentOpts, n: number) => Promise<WfAgentResult> | WfAgentResult } = {}) => {
+    const events: Ev[] = [];
+    const phases: string[] = [];
+    const limits: Array<{ kind: string; limit: number; skipped: number }> = [];
+    const promise = runWorkflow({
+      script,
+      limits: { ...LIMITS, ...o.limits },
+      signal: new AbortController().signal,
+      hooks: {
+        progress: () => undefined,
+        onAgent: (e) => void events.push(e),
+        onPhase: (n) => void phases.push(n),
+        onLimit: (h) => void limits.push(h),
+        runAgent: async (p, opts, _s, meta) => (o.agent ? o.agent(p, opts, meta.n) : { ok: true, text: `trả lời: ${p}`, tokens: 100, model: 'm' }),
+      },
+    });
+    return { promise, events, phases, limits };
+  };
+
+  it('mỗi agent đi qua queued → running → done, mang nhãn/loại/pha; kết quả có trích báo cáo gọn một dòng', async () => {
+    const t = trace('phase("Trace"); await agent("điều tra A", { label: "Nguyên nhân A", agent: "researcher" }); return 1;', { agent: () => ({ ok: true, text: 'Kết luận:' + String.fromCharCode(10) + '  lỗi ở  hàm x', tokens: 321, model: 'deepseek-v4-pro' }) });
+    const r = await t.promise;
+    expect(r.ok).toBe(true);
+    expect(t.phases).toEqual(['Trace']);
+    expect(t.events.map((e) => e.state)).toEqual(['queued', 'running', 'done']);
+    expect(t.events[0]).toMatchObject({ n: 1, label: 'Nguyên nhân A', type: 'researcher', phase: 'Trace' });
+    expect(t.events[2]).toMatchObject({ n: 1, state: 'done', tokens: 321, model: 'deepseek-v4-pro', preview: 'Kết luận: lỗi ở hàm x' });
+  });
+
+  it('hết chỗ cùng lúc: agent thứ hai ĐỨNG HÀNG (queued) trong khi agent đầu đang chạy, rồi mới chạy', async () => {
+    const order: string[] = [];
+    const t = trace('await Promise.all([agent("a", { label: "A" }), agent("b", { label: "B" })]); return 1;', {
+      limits: { maxConcurrent: 1 },
+      agent: async (p) => {
+        order.push(`start:${p}`);
+        await sleep(60);
+        order.push(`end:${p}`);
+        return { ok: true, text: 't', tokens: 1, model: 'm' };
+      },
+    });
+    await t.promise;
+    const states = t.events.map((e) => `${e.n}:${e.state}`);
+    // cả hai vào hàng đợi trước; agent 2 chỉ chạy sau khi agent 1 xong
+    expect(states.indexOf('1:queued')).toBeLessThan(states.indexOf('1:running'));
+    expect(states.indexOf('2:queued')).toBeLessThan(states.indexOf('1:done'));
+    expect(states.indexOf('1:done')).toBeLessThan(states.indexOf('2:running'));
+    expect(order).toEqual(['start:a', 'end:a', 'start:b', 'end:b']);
+  });
+
+  it('agent lỗi → state error kèm lý do; thử lại cộng dồn token; agent bị bỏ qua vì chạm giới hạn KHÔNG sinh dòng và báo onLimit', async () => {
+    let calls = 0;
+    const t = trace('const a = await agent("x", { retries: 0 }); const b = await agent("y"); return [a.ok, b.skipped];', {
+      limits: { maxAgents: 1 },
+      agent: () => (calls++, { ok: false, text: '', tokens: 40, model: 'm', error: 'Hết thời gian chờ' }),
+    });
+    const r = await t.promise;
+    expect(r.value).toEqual([false, 'agents']);
+    expect(t.events.map((e) => e.state)).toEqual(['queued', 'running', 'error']);
+    expect(t.events[2]).toMatchObject({ state: 'error', error: 'Hết thời gian chờ', tokens: 40 });
+    expect(t.limits).toEqual([{ kind: 'agents', limit: 1, skipped: 1 }]);
+    expect(calls).toBe(1);
+  });
+
+  it('bị Dừng khi còn xếp hàng: dòng chuyển sang error («Đã dừng.»), không treo ở queued', async () => {
+    const ctl = new AbortController();
+    const events: Ev[] = [];
+    const p = runWorkflow({
+      script: 'await Promise.all([agent("a"), agent("b")]); return 1;',
+      limits: { ...LIMITS, maxConcurrent: 1 },
+      signal: ctl.signal,
+      hooks: {
+        progress: () => undefined,
+        onAgent: (e) => void events.push(e),
+        runAgent: async () => {
+          await sleep(300);
+          return { ok: true, text: 't', tokens: 1, model: 'm' };
+        },
+      },
+    });
+    setTimeout(() => ctl.abort(), 80);
+    const r = await p;
+    expect(r.ok).toBe(false);
+    await sleep(50);
+    const last = (n: number) => [...events].reverse().find((e) => e.n === n)!;
+    expect(last(2).state).toBe('error'); // đang xếp hàng lúc bị dừng
+    expect(last(2).state).not.toBe('queued');
   });
 });

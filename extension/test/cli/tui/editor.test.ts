@@ -27,6 +27,38 @@ describe('Editor — chỉnh sửa', () => {
     d.del();
     expect(d.text).toBe('x');
   });
+  it('bộ gõ «Unicode tổ hợp»: dấu kết hợp gõ RỜI sau chữ gốc được ghép thành chữ dựng sẵn (e + ̂ → ê, + ́ → ế); một Backspace xoá đúng một chữ', () => {
+    const e = ed('vi');
+    e.insert('e');
+    e.insert('̂'); // U+0302 (mũ)
+    expect(e.text).toBe('viê');
+    e.insert('́'); // U+0301 (sắc)
+    expect(e.text).toBe('viế');
+    expect(e.cursor).toBe(3);
+    expect([...e.text].length).toBe(3); // không còn dấu rời
+    e.insert('t');
+    e.backspace();
+    e.backspace();
+    expect(e.text).toBe('vi');
+  });
+  it('gõ nhanh cả cụm dạng NFD một lần (tie + ̂ + ́ + ng) → NFC; chữ không có dấu kết hợp giữ NGUYÊN (không đụng nội dung dán)', () => {
+    const e = ed('');
+    e.insert('tiếng'); // t i e ̂ ́ n g (NFD)
+    expect(e.text).toBe('tiếng'.normalize('NFC'));
+    expect(e.text.length).toBe(5);
+    const p = ed('');
+    const raw = 'e‍́x'; // có ZWJ + dấu: không phải việc của ô nhập; chỉ kiểm không ném và không mất chữ
+    p.insert(raw);
+    expect(p.text.includes('x')).toBe(true);
+    const plain = ed('');
+    plain.insert('hello wörld ✓');
+    expect(plain.text).toBe('hello wörld ✓');
+  });
+  it('dấu kết hợp đứng ĐẦU ô trống (không có chữ gốc) vẫn được chèn, không ném lỗi', () => {
+    const e = ed('');
+    e.insert('̂');
+    expect(e.text).toBe('̂');
+  });
   it('emoji ZWJ là một cụm', () => {
     const e = ed('a👨‍👩‍👧b', 'a👨‍👩‍👧'.length);
     e.backspace();

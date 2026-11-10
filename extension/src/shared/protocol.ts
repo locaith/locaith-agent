@@ -130,6 +130,55 @@ export interface AgentProgress {
   failed?: number;
   /** Việc đang làm, một dòng ngắn đã Việt/Anh hoá ở host: «Đang đọc src/a.ts», «Đang suy nghĩ…». */
   activity?: string;
+  /** Chỉ có ở `workflow_run`: bảng từng agent của workflow (xem WfProgress). Thiếu → chỉ có số liệu gộp như trước. */
+  wf?: WfProgress;
+}
+
+/** Trạng thái của MỘT agent trong workflow. `queued` = đã được script gọi nhưng chưa có chỗ chạy (xếp hàng sau giới hạn đồng thời). */
+export type AgentRunState = 'queued' | 'running' | 'done' | 'error' | 'stopped';
+
+/** Một dòng trong bảng agent của workflow. */
+export interface AgentRunRow {
+  /** Số thứ tự agent trong lần chạy (1…). */
+  n: number;
+  /** Mô tả ngắn (nhãn `label` do script đặt, hoặc loại agent). */
+  label: string;
+  /** Loại agent (researcher / reviewer / general…). */
+  type?: string;
+  /** Model thực sự đã chạy (có khi xong). */
+  model?: string;
+  /** Pha của workflow mà agent này thuộc về (phase("Trace")…). */
+  phase?: string;
+  state: AgentRunState;
+  startedAt?: number;
+  endedAt?: number;
+  tokens: number;
+  tools: number;
+  failed?: number;
+  /** Việc đang làm (khi chạy). */
+  activity?: string;
+  /** Lý do lỗi (khi error), đã cắt. */
+  error?: string;
+  /** Trích đầu báo cáo (khi xong), đã cắt. */
+  preview?: string;
+}
+
+/** Ảnh chụp tiến độ cả workflow, gửi kèm `agent_progress` (≤ 2 lần/giây). */
+export interface WfProgress {
+  /** Tăng mỗi khi có gì đổi — để so sánh nhanh mà không duyệt hết dòng. */
+  rev: number;
+  /** Pha hiện tại. */
+  phase?: string;
+  /** Đếm trên TOÀN BỘ agent (không chỉ các dòng gửi kèm). */
+  counts: { queued: number; running: number; done: number; error: number; stopped: number; total: number };
+  /** Từng pha: tổng / xong / lỗi (có khi script dùng phase()). */
+  phases?: Array<{ name: string; total: number; done: number; error: number }>;
+  /** Giới hạn của lần chạy này (để hiện «n / tối đa»). `tokenBudget: null` = không ngân sách. */
+  limits?: { maxAgents: number; concurrent: number; tokenBudget: number | null };
+  /** Đã chạm giới hạn do người dùng/lệnh đặt: `skipped` lời gọi agent() bị bỏ qua (script vẫn chạy tiếp). */
+  hit?: { kind: 'agents' | 'tokens'; limit: number; skipped: number };
+  /** Các dòng hiển thị (≤ 80): đang chạy + lỗi + xếp hàng + các agent xong gần nhất; còn lại chỉ nằm trong `counts`. */
+  rows: AgentRunRow[];
 }
 
 export interface ToolBlock {
@@ -558,11 +607,13 @@ export interface CatalogItem {
   category: string;
   description: string;
   transport: 'http' | 'stdio';
-  auth: 'none' | 'oauth' | 'github' | 'local';
+  auth: 'none' | 'oauth' | 'github' | 'local' | 'key';
   own?: boolean;
   unsupported?: string;
   note?: string;
   needs?: 'node' | 'python';
+  /** (0.7.7) Thứ người dùng sẽ được hỏi khi bấm Kết nối (khoá API, ID khách hàng…) — chỉ nhãn, không có giá trị. */
+  inputs?: { label: string; secret?: boolean; optional?: boolean }[];
   connected: boolean;
   status?: 'stopped' | 'starting' | 'running' | 'error';
   error?: string;
@@ -611,6 +662,17 @@ export interface PluginMarketItem {
   reason?: string;
   /** "anthropics" hoặc "chủ/repo". */
   origin: string;
+  /** (0.7.7) Nguồn chợ chứa plugin (`PluginMarketSource.id`) và độ tin cậy của nguồn đó. */
+  market?: string;
+  trust?: 'official' | 'vendor' | 'community';
+}
+
+/** (0.7.7) Một nguồn chợ plugin còn dùng được và số plugin của nó — để giao diện lọc theo nguồn. */
+export interface PluginMarketSource {
+  id: string;
+  label: string;
+  trust: 'official' | 'vendor' | 'community';
+  count: number;
 }
 
 export interface PluginMarketState {
@@ -619,6 +681,7 @@ export interface PluginMarketState {
   error?: string;
   fetchedAt?: number;
   source: string;
+  sources?: PluginMarketSource[];
 }
 
 /** Trạng thái cầu nối với extension Locaith trên Chrome. */

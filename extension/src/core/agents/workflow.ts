@@ -37,14 +37,40 @@ export interface WfAgentResult {
 export interface WorkflowLimits {
   maxAgents: number;
   maxConcurrent: number;
-  maxTotalTokens: number;
+  /**
+   * Ngân sách token cho CẢ workflow. `null` = KHÔNG có ngân sách (mặc định — như Claude Code, nơi ngân sách chỉ có khi người dùng đặt «+500k»): trước đây mặc định 2M/5M token
+   * (đếm cả token ngữ cảnh đọc lại mỗi vòng: ~1M mỗi agent) nên Swarm chết sau ~5 agent với «Đã hết ngân sách token của workflow».
+   */
+  maxTotalTokens: number | null;
   timeoutMs: number;
 }
 
+/** Vòng đời của MỘT agent trong workflow, để giao diện hiện bảng từng agent (xem WfProgress). */
+export interface WfAgentEvent {
+  /** Số thứ tự agent (1…), ổn định qua các lần thử lại. */
+  n: number;
+  label: string;
+  type?: string;
+  phase?: string;
+  state: 'queued' | 'running' | 'done' | 'error';
+  /** Chỉ khi done/error. */
+  tokens?: number;
+  model?: string;
+  error?: string;
+  preview?: string;
+}
+
 export interface WorkflowHooks {
-  runAgent(prompt: string, opts: WfAgentOpts, signal: AbortSignal): Promise<WfAgentResult>;
+  /** `meta.n` = số thứ tự của agent (cùng `n` ở onAgent); thử lại thì gọi lại với cùng n. */
+  runAgent(prompt: string, opts: WfAgentOpts, signal: AbortSignal, meta: { n: number }): Promise<WfAgentResult>;
   progress(line: string): void;
   onArtifact?(key: string, value: string): void;
+  /** Agent xếp hàng / bắt đầu chạy / xong. */
+  onAgent?(e: WfAgentEvent): void;
+  /** Script gọi phase(name). */
+  onPhase?(name: string): void;
+  /** Chạm giới hạn do người dùng/lệnh đặt: `skipped` = số lời gọi agent() đã bị bỏ qua tới giờ. */
+  onLimit?(h: { kind: 'agents' | 'tokens'; limit: number; skipped: number }): void;
 }
 
 export interface WorkflowResult {
@@ -56,12 +82,22 @@ export interface WorkflowResult {
   phases: string[];
   artifacts: string[];
   durationMs: number;
+  /** Số lời gọi `agent()` bị BỎ QUA vì chạm giới hạn (số agent hoặc ngân sách token do người dùng/lệnh đặt). Script vẫn chạy tiếp (kết quả cục bộ không mất). */
+  skipped?: number;
+  /** Giới hạn đã chạm đầu tiên (nếu có). */
+  hit?: { kind: 'agents' | 'tokens'; limit: number };
 }
 
-export const HARD_LIMITS = { maxAgents: 1000, maxConcurrent: 16, maxTotalTokens: 20_000_000, timeoutMs: 60 * 60_000 } as const;
+/** Lưới an toàn: 1.000 agent mỗi lần chạy (như Claude Code), 16 cùng lúc, tối đa 8 giờ. KHÔNG có trần token (xem WorkflowLimits.maxTotalTokens). */
+export const HARD_LIMITS = { maxAgents: 1000, maxConcurrent: 16, timeoutMs: 8 * 60 * 60_000 } as const;
+/** Ngân sách token tối thiểu khi người dùng/lệnh tự đặt. */
+export const MIN_TOKEN_BUDGET = 10_000;
 export const MAX_SCRIPT_CHARS = 30_000;
 const MAX_ARTIFACT_CHARS = 400_000;
-const MAX_STORE_CHARS = 4_000_000;
+/** Kho artifact: 1.000 báo cáo agent × tới 50k ký tự không còn làm đầy kho giữa chừng (trước đây 4M ký tự → ném lỗi sau khi agent đã chạy xong). Đầy thì CẮT giá trị mới, không ném. */
+const MAX_STORE_CHARS = 32_000_000;
+/** Quá ngần này lời gọi agent() liên tiếp bị bỏ qua (script lặp vô hạn dù đã báo chạm giới hạn) → dừng script thay vì quay CPU tới hết hạn giờ. */
+const MAX_SKIPPED_CALLS = 200;
 
 /** Chạy BÊN TRONG ngữ cảnh vm (không có `require`); `b` là cầu nối do worker cấp, bị xoá khỏi global ngay sau khi dựng API. */
 const PRELUDE = String.raw`(function (b, argsJson) {
@@ -177,10 +213,13 @@ export function extractJson(text: string): unknown | undefined {
 
 export function clampLimits(want: Partial<WorkflowLimits>, defaults: WorkflowLimits): WorkflowLimits {
   const c = (v: number | undefined, d: number, hi: number) => Math.max(1, Math.min(hi, Math.floor(Number.isFinite(v as number) ? (v as number) : d)));
+  // Ngân sách token: chỉ có khi người dùng/lệnh ĐẶT (không có trần trên); không đặt thì theo mặc định (null = không ngân sách).
+  const wantTokens = want.maxTotalTokens;
+  const tokens = typeof wantTokens === 'number' && Number.isFinite(wantTokens) ? Math.max(MIN_TOKEN_BUDGET, Math.floor(wantTokens)) : defaults.maxTotalTokens;
   return {
     maxAgents: c(want.maxAgents, defaults.maxAgents, HARD_LIMITS.maxAgents),
     maxConcurrent: c(want.maxConcurrent, defaults.maxConcurrent, HARD_LIMITS.maxConcurrent),
-    maxTotalTokens: c(want.maxTotalTokens, defaults.maxTotalTokens, HARD_LIMITS.maxTotalTokens),
+    maxTotalTokens: tokens,
     timeoutMs: c(want.timeoutMs, defaults.timeoutMs, HARD_LIMITS.timeoutMs),
   };
 }
@@ -196,7 +235,8 @@ export async function runWorkflow(input: {
   const started = Date.now();
   const { hooks, limits } = input;
   const runId = input.runId ?? `wf${started.toString(36)}`;
-  const stats = { started: 0, done: 0, tokens: 0 };
+  const stats = { started: 0, done: 0, tokens: 0, skipped: 0 };
+  let hit: WorkflowResult['hit'];
   const phases: string[] = [];
   const store = new Map<string, string>();
   let storeChars = 0;
@@ -213,7 +253,9 @@ export async function runWorkflow(input: {
   };
 
   const result = (r: Partial<WorkflowResult> & { ok: boolean }): WorkflowResult => ({
-    agents: stats.started, tokens: stats.tokens, phases, artifacts: [...store.keys()], durationMs: Date.now() - started, ...r,
+    agents: stats.started, tokens: stats.tokens, phases, artifacts: [...store.keys()], durationMs: Date.now() - started,
+    ...(stats.skipped > 0 ? { skipped: stats.skipped, ...(hit ? { hit } : {}) } : {}),
+    ...r,
   });
 
   if (input.script.length > MAX_SCRIPT_CHARS) return result({ ok: false, error: `Script dài quá ${MAX_SCRIPT_CHARS} ký tự.` });
@@ -234,9 +276,13 @@ export async function runWorkflow(input: {
 
   const putArtifact = (key: string, text: string): string => {
     const k = key.replace(/[^\w.-]+/g, '_').slice(0, 80) || 'artifact';
-    const v = text.length > MAX_ARTIFACT_CHARS ? text.slice(0, MAX_ARTIFACT_CHARS) : text;
-    storeChars += v.length - (store.get(k)?.length ?? 0);
-    if (storeChars > MAX_STORE_CHARS) throw new Error('Kho artifact của workflow đã đầy.');
+    let v = text.length > MAX_ARTIFACT_CHARS ? text.slice(0, MAX_ARTIFACT_CHARS) : text;
+    const before = store.get(k)?.length ?? 0;
+    if (storeChars + v.length - before > MAX_STORE_CHARS) {
+      // Kho đầy: KHÔNG ném (trước đây một workflow đã chạy hàng trăm agent chết ở đúng lúc ghi báo cáo cuối) — giữ phần đầu của giá trị mới.
+      v = `${v.slice(0, 2000)}\n… [kho artifact của workflow đã đầy — phần còn lại của giá trị này đã bỏ]`;
+    }
+    storeChars += v.length - before;
     store.set(k, v);
     hooks.onArtifact?.(k, v);
     return `artifact://${runId}/${k}`;
@@ -248,21 +294,45 @@ export async function runWorkflow(input: {
     if (!prompt.trim()) throw new Error('agent(): prompt rỗng.');
     const key = opts.cache ? createHash('sha1').update(`${opts.agent ?? ''}|${opts.tier ?? ''}|${prompt}`).digest('hex') : '';
     if (key && cache.has(key)) return cache.get(key);
-    if (stats.started >= limits.maxAgents) throw new Error(`Đã đạt giới hạn ${limits.maxAgents} agent cho lần chạy này.`);
-    if (stats.tokens >= limits.maxTotalTokens) throw new Error('Đã hết ngân sách token của workflow.');
+    // Chạm giới hạn do người dùng/lệnh đặt: agent này KHÔNG chạy nhưng script KHÔNG chết — trả `{ok:false, skipped}` để script gom kết quả đã có
+    // (trước đây `throw` làm mất cả báo cáo của các agent đã xong: «Workflow thất bại … Đã hết ngân sách token» sau 263 giây và 6 báo cáo).
+    const skip = (kind: 'agents' | 'tokens', limit: number, why: string): unknown => {
+      stats.skipped++;
+      hit ??= { kind, limit };
+      if (stats.skipped > MAX_SKIPPED_CALLS) throw new Error(`${why} Script vẫn gọi agent() sau khi đã chạm giới hạn (${stats.skipped} lời gọi bị bỏ qua) — dừng script.`);
+      hooks.onLimit?.({ kind, limit, skipped: stats.skipped });
+      progress(true);
+      return { ok: false, text: '', tokens: 0, model: '', ref: '', skipped: kind, error: why };
+    };
+    if (stats.started >= limits.maxAgents) return skip('agents', limits.maxAgents, `Đã đạt giới hạn ${limits.maxAgents} agent cho lần chạy này; agent này KHÔNG chạy.`);
+    if (limits.maxTotalTokens !== null && stats.tokens >= limits.maxTotalTokens) return skip('tokens', limits.maxTotalTokens, `Đã hết ngân sách ${limits.maxTotalTokens.toLocaleString('en-US')} token mà bạn đặt cho workflow; agent này KHÔNG chạy.`);
     stats.started++;
     const n = stats.started;
-    const release = await sem.acquire(input.signal);
+    const label = String(opts.label ?? '').slice(0, 120);
+    const phase = phases[phases.length - 1];
+    hooks.onAgent?.({ n, label, ...(opts.agent ? { type: opts.agent } : {}), ...(phase ? { phase } : {}), state: 'queued' });
+    let release: () => void;
     try {
+      release = await sem.acquire(input.signal);
+    } catch (err) {
+      // Bị dừng khi còn xếp hàng: không còn «chờ» nữa (giao diện không để dòng treo ở trạng thái xếp hàng).
+      hooks.onAgent?.({ n, label, state: 'error', error: 'Đã dừng.' });
+      throw err;
+    }
+    let finalEvent: WfAgentEvent | undefined;
+    try {
+      hooks.onAgent?.({ n, label, state: 'running' });
       progress();
       const wantJson = opts.json === true;
       const retries = Math.max(0, Math.min(2, Number(opts.retries ?? (wantJson ? 1 : 0))));
       let r: WfAgentResult = { ok: false, text: '', tokens: 0, model: '' };
       let data: unknown;
       let ask = wantJson ? `${prompt}\n\nTrả về DUY NHẤT một JSON hợp lệ (không giải thích ngoài JSON).` : prompt;
+      let spent = 0; // token của MỌI lần thử (kể cả thử lại) cho dòng của agent này
       for (let attempt = 0; attempt <= retries; attempt++) {
-        r = await hooks.runAgent(ask, opts, input.signal);
+        r = await hooks.runAgent(ask, opts, input.signal, { n });
         stats.tokens += r.tokens;
+        spent += r.tokens;
         if (!r.ok) continue;
         if (!wantJson) break;
         data = extractJson(r.text);
@@ -270,12 +340,16 @@ export async function runWorkflow(input: {
         ask = `${prompt}\n\nPhản hồi trước KHÔNG phải JSON hợp lệ. Trả về DUY NHẤT một JSON hợp lệ.`;
       }
       const ref = putArtifact(`agent-${n}`, r.text);
-      const out = { ok: r.ok && (!wantJson || data !== undefined), text: r.text, data, tokens: r.tokens, model: r.model, ref, error: r.ok ? (wantJson && data === undefined ? 'Phản hồi không phải JSON hợp lệ.' : undefined) : r.error };
+      const ok = r.ok && (!wantJson || data !== undefined);
+      const error = r.ok ? (wantJson && data === undefined ? 'Phản hồi không phải JSON hợp lệ.' : undefined) : r.error;
+      const out = { ok, text: r.text, data, tokens: r.tokens, model: r.model, ref, error };
+      finalEvent = { n, label, state: ok ? 'done' : 'error', tokens: spent, model: r.model, ...(error ? { error: error.slice(0, 200) } : {}), ...(ok && r.text ? { preview: r.text.replace(/\s+/g, ' ').trim().slice(0, 160) } : {}) };
       if (key) cache.set(key, out);
       return out;
     } finally {
       stats.done++;
       release();
+      hooks.onAgent?.(finalEvent ?? { n, label, state: 'error', error: 'Đã dừng.' });
       progress();
     }
   };
@@ -306,6 +380,7 @@ export async function runWorkflow(input: {
       case 'phase': {
         const name = String((payload as { name: string }).name).slice(0, 80);
         phases.push(name);
+        hooks.onPhase?.(name);
         progress(true);
         return null;
       }

@@ -1,4 +1,4 @@
-# Locaith CLI — hướng dẫn sử dụng (0.4.8)
+# Locaith CLI — hướng dẫn sử dụng (0.4.9)
 
 Trợ lý lập trình Locaith ngay trong terminal. **Cùng lõi** với extension VS Code: cùng engine, công cụ, kỹ năng, hooks, checkpoints/rewind,
 tác vụ nền, MCP, luật quyền, nén ngữ cảnh. Model chạy ở cổng Locaith (`locaith-v5-flash`, `locaith-v5-si`) hoặc khoá hãng khác của bạn
@@ -32,7 +32,7 @@ cat build.log | locaith -p "vì sao lỗi?" # nhận cả stdin
 
 **Lần chạy đầu** (hoặc chưa đăng nhập / chưa tin cậy thư mục): màn hình hướng dẫn hỏi lần lượt
 1. ngôn ngữ (Tiếng Việt / English — đổi lại bằng cài đặt `language`, cờ `--lang`, hoặc biến `LOCAITH_LANG`);
-2. đăng nhập: trình duyệt (khuyến nghị) · dán token `lat_…` · dùng khoá hãng khác · bỏ qua (đăng nhập sau bằng `/login`);
+2. đăng nhập: trình duyệt (khuyến nghị) · dán token `lat_…` · dùng khoá hãng khác · bỏ qua (đăng nhập sau bằng `/login`). Từ 0.4.9 chọn «trình duyệt» luôn **in đường dẫn đăng nhập** (copy được) rồi mới mở trình duyệt. Ở máy khác (SSH, máy ảo, container…) trình duyệt không gọi ngược về CLI được nên CLI hiện thêm **ô dán** ngay dưới đường dẫn: mở đường dẫn ở máy nào cũng được, đăng nhập xong trang hiện một *mã* (hoặc địa chỉ `http://127.0.0.1…/callback?code=…` mà trình duyệt báo không mở được) — dán vào ô là xong; nếu đăng nhập xong ngay ở trình duyệt thì ô tự đóng. Trong phiên đang chạy, `/login` có thêm lựa chọn «trình duyệt ở máy khác» (không tự mở trình duyệt, chỉ in đường dẫn + ô dán). Không treo vô hạn: hết 3 phút thì báo hết hạn, `Esc` huỷ, hoặc chọn «dán token»;
 3. thông báo dữ liệu của Locaith (bản ghi lưu theo TÀI KHOẢN ở cổng, dùng chung với bản VS Code; đã đồng ý ở nơi khác thì khỏi hỏi lại);
 4. **tin cậy thư mục**: hooks, MCP, lệnh và luật «cho phép» của dự án chỉ chạy khi bạn tin cậy; chọn «Không» thì Locaith thoát.
 
@@ -204,7 +204,7 @@ Nhiều máy chủ OpenAI-compatible không có `/models`: khai `models` để d
   Trên hộp xin quyền chọn «Không hỏi lại…» sẽ ghi luật; `/permissions` để xem/sửa/thử.
 - **Tin cậy thư mục** (`~/.locaith/trusted.json`): chưa tin cậy thì cài đặt dự án chỉ được thêm luật `ask`/`deny`; hooks, MCP, lệnh tuỳ chỉnh và luật «cho phép» của dự án không chạy.
 - Biến môi trường: `LOCAITH_API_KEY` · `LOCAITH_LANG=vi|en` · `LOCAITH_MODEL` · `LOCAITH_PERMISSION_MODE` · `LOCAITH_SETTINGS` (JSON) · `LOCAITH_HOME` (đổi thư mục «nhà»: dữ liệu nằm ở `$LOCAITH_HOME/.locaith`) ·
-  `NO_COLOR` · `LOCAITH_ASCII=1` · khoá hãng khác: `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `GEMINI_API_KEY`, `DEEPSEEK_API_KEY`, `XAI_API_KEY`.
+  `NO_COLOR` · `LOCAITH_ASCII=1` · `LOCAITH_NO_BROWSER=1` (không tự mở trình duyệt khi đăng nhập, chỉ in đường dẫn + ô dán) · `LOCAITH_CTRL_H=backspace|ctrl-backspace` (ép cách hiểu mã điều khiển `0x08`, xem «Sự cố thường gặp») · khoá hãng khác: `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `GEMINI_API_KEY`, `DEEPSEEK_API_KEY`, `XAI_API_KEY`.
 
 ## Đồng bộ với extension VS Code
 
@@ -216,7 +216,7 @@ Nhiều máy chủ OpenAI-compatible không có `/models`: khai `models` để d
 | MCP | `.mcp.json`, `~/.locaith/mcp.json`, `mcpServers`, `--mcp-config`; `/mcp` |
 | Kỹ năng, agent, plugin, lệnh tuỳ chỉnh | `/skills`, `/agents`, `/plugins`, `.locaith/commands` |
 | Kiểm tra độc lập | agent «reviewer mù» chạy trước khi báo xong khi lượt có sửa tệp; `/verify`; `agent.verify` = `off` · `auto` · `always` |
-| Nén ngữ cảnh | tự động ở 80% cửa sổ (`agent.compactAtPercent`), `/compact [giữ gì]`, `/context` |
+| Nén ngữ cảnh | tự động ở 80% cửa sổ (`agent.compactAtPercent`); cửa sổ > 400k (Locaith-v5, Gemini 1M…) bị trần 400k token (0.4.9; trước đó 300k) và khi chạm trần thì kết quả công cụ cũ được lược xuống ~93% trần chứ không sát trần — đỡ phá bộ nhớ đệm prompt mỗi lượt; `/compact [giữ gì]`, `/context` |
 | Ký ức và chỉ dẫn | `LOCAITH.md` / `AGENTS.md` / `CLAUDE.md` ở gốc dự án và `~/.locaith/LOCAITH.md`; `/init`, `/memory`; ký ức bền `.locaith/memory/MEMORY.md` |
 | Phiên | `~/.locaith/sessions` (đọc được phiên của CLI 0.3.x); `-c`, `-r` (hộp chọn / số / từ khoá / mã), `/resume`, `/sessions`, `/fork`, `/export` — xem «Mở lại một phiên đã lưu» |
 | Ảnh | `@ảnh.png`, `Alt+V` / `/paste` (ảnh trong clipboard), dán hoặc kéo-thả đường dẫn ảnh vào terminal. Có thể gửi ảnh không kèm chữ (Enter). Trên Windows, ảnh lớn được thu nhỏ trước khi gửi (cạnh dài ≤ 2000 px, ≤ 3,5 MB) vì các hãng từ chối ảnh > 5 MB |
@@ -226,6 +226,8 @@ Nhiều máy chủ OpenAI-compatible không có `/models`: khai `models` để d
 | Triệu chứng | Cách xử lý |
 |---|---|
 | 401 / token hết hạn | `locaith login` lại (token sống 90 ngày không dùng) |
+| đăng nhập «đơ» ở máy khác / SSH / không thấy trình duyệt mở | từ 0.4.9 CLI in đường dẫn đăng nhập (copy được) và hiện ô dán: mở đường dẫn ở máy có trình duyệt, đăng nhập, rồi dán *mã* hoặc địa chỉ `http://127.0.0.1…/callback?code=…` vào ô. Muốn bỏ hẳn bước tự mở trình duyệt: `LOCAITH_NO_BROWSER=1` hoặc `locaith login --no-browser`; trong phiên: `/login` → «trình duyệt ở máy khác» |
+| gõ tiếng Việt, **có dấu là mất chữ** (một số laptop) | nguyên nhân thường gặp là cửa sổ console Windows cũ (conhost: cmd/PowerShell mở bằng `conhost.exe`) gửi phím Backspace là mã `0x08` — trước 0.4.9 CLI hiểu nhầm là Ctrl+Backspace và xoá cả từ vừa gõ (trình gõ như Unikey/EVKey gửi «xoá chữ cũ rồi gõ lại có dấu» nên mất cả chữ). 0.4.9 nhận ra console cũ và coi `0x08` là Backspace; ép tay bằng `LOCAITH_CTRL_H=backspace` (hoặc `ctrl-backspace` để Ctrl+Backspace xoá từ). Windows Terminal / VS Code terminal không bị. Vẫn lỗi: gửi kết quả `locaith doctor` |
 | «Chưa đồng ý thông báo dữ liệu» | `locaith consent --yes` (hoặc đồng ý ở lần chạy đầu) |
 | màu/khung bị vỡ | `NO_COLOR=1` hoặc `LOCAITH_ASCII=1`; dùng Windows Terminal / PowerShell 7 để có đủ màu |
 | trợ lý treo | `Esc` để dừng; với `-p` đặt `--timeout <giây>`; `locaith doctor` để kiểm mạng |

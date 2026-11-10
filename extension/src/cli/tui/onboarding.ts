@@ -4,7 +4,7 @@
  * Đăng nhập dùng đúng hàm có sẵn ở `cli/account.ts` (`loginCmd`) và `cli/browserLogin.ts` (do người gọi dựng `AccountDeps`).
  */
 
-import { loginCmd, type AccountDeps } from '../account';
+import { loginCmd, type AccountDeps, type BrowserLoginHooks } from '../account';
 import { setLang, t as tr, type Lang } from '../i18n';
 import { wizardIoFromUi, type WizardIO } from '../providerWizard';
 import type { PickItem } from '../runtime/contract';
@@ -72,8 +72,14 @@ export interface OnboardingResult {
 export interface OnboardingUi {
   pick(title: string, items: PickItem[], hint?: string): Promise<string | null>;
   confirm(title: string, detail: string, o?: { yes?: string; no?: string; danger?: boolean }): Promise<boolean | null>;
-  input(title: string, detail: string, secret?: boolean, o?: { initial?: string; placeholder?: string }): Promise<string | null>;
+  /** `signal` huỷ → hộp tự đóng và trả null (đăng nhập qua trình duyệt đã xong bằng đường khác trong lúc hộp «dán địa chỉ» còn mở). */
+  input(title: string, detail: string, secret?: boolean, o?: { initial?: string; placeholder?: string; signal?: AbortSignal }): Promise<string | null>;
   say(kind: 'info' | 'ok' | 'warn' | 'error' | 'text', text: string): void;
+  /**
+   * In NGUYÊN một chuỗi dài không có dấu cách (liên kết) để chép: ngắt cứng đúng bề rộng terminal, KHÔNG thụt lề/ký hiệu đầu dòng, để chép nhiều dòng rồi dán vào ô địa chỉ
+   * trình duyệt (xuống dòng bị bỏ) vẫn ra đúng liên kết. Thiếu = lùi về `say('text')`.
+   */
+  block?(text: string): void;
   /** Hiện dòng «đang chờ…» cho tới khi gọi hàm trả về; promise `cancelled` giải quyết khi người dùng nhấn Ctrl+C. */
   wait(text: string): { stop(): void; cancelled: Promise<void> };
   heading(version: string): void;
@@ -156,11 +162,30 @@ export async function runOnboardingFlow(o: OnboardingOptions, ui: OnboardingUi):
         ask: async (m) => (await ui.input(m, '', true)) ?? '',
       };
       const deps = o.accountDeps(io);
-      const w = how === 'browser' ? ui.wait(tr('tui.ob.login.opening')) : null;
+      // Đăng nhập qua trình duyệt: liên kết hiện NGAY TRONG màn hình này (trước đây đi qua console.error nên bị giao diện terminal che mất — người ở máy khác thấy mỗi vòng quay «đang mở
+      // trình duyệt» mà không có liên kết nào để mở: «cứ đơ ở đó») và có hộp «dán địa chỉ» cho trình duyệt ở máy khác (SSH, máy ảo). Hộp đóng tự động khi cổng loopback nhận được trước.
+      const hooks: BrowserLoginHooks = {
+        notify: (m, url) => {
+          if (!url) return; // câu hướng dẫn «máy khác» đã nằm sẵn trong hộp dán bên dưới
+          ui.say('info', m);
+          if (ui.block) ui.block(url);
+          else ui.say('text', url);
+        },
+        askPaste: async (signal) => {
+          for (;;) {
+            const v = await ui.input(tr('tui.ob.login.paste.title'), tr('tui.ob.login.paste.detail'), true, { placeholder: tr('tui.ob.login.paste.ph'), signal });
+            if (v === null || signal.aborted) return null; // Esc / Ctrl+C / đã đăng nhập xong bằng đường loopback
+            if (v.trim()) return v;
+            // Enter khi ô còn trống: giữ hộp (nếu đóng, màn hình sẽ trống trơn trong lúc CLI vẫn chờ trình duyệt)
+          }
+        },
+        onPasteInvalid: () => ui.say('warn', tr('tui.ob.login.paste.invalid')),
+      };
       let code = 1;
       try {
-        const run = loginCmd({
+        code = await loginCmd({
           ...deps,
+          ...(deps.browserLogin ? { browserLogin: () => deps.browserLogin!(hooks) } : {}),
           embedded: true,
           out: (l) => ui.say('ok', l),
           err: (l) => ui.say(/^\s*✘|không|Không|fail|could not|timed out|invalid|cancel/i.test(l) ? 'warn' : 'info', l),
@@ -168,13 +193,8 @@ export async function runOnboardingFlow(o: OnboardingOptions, ui: OnboardingUi):
           noBrowser: how === 'token',
           token,
         });
-        const first = await Promise.race([run, w ? w.cancelled.then(() => 'cancel' as const) : new Promise<never>(() => undefined)]);
-        if (first === 'cancel') return cancel('cancelled');
-        code = first;
       } catch (err) {
         ui.say('error', err instanceof Error ? err.message : String(err));
-      } finally {
-        w?.stop();
       }
       if (code === 0) {
         res.loggedIn = true;
@@ -303,9 +323,21 @@ export class TerminalUi implements OnboardingUi {
     return out;
   }
 
-  private run<T>(dlg: Dialog<T>): Promise<T | null> {
+  private run<T>(dlg: Dialog<T>, signal?: AbortSignal): Promise<T | null> {
     return new Promise((resolve) => {
-      this.cur = { dlg: dlg as Dialog<unknown>, resolve: resolve as (v: unknown) => void };
+      const entry = { dlg: dlg as Dialog<unknown>, resolve: resolve as (v: unknown) => void };
+      this.cur = entry;
+      // Huỷ từ bên ngoài (ví dụ đăng nhập xong bằng đường khác): đóng ĐÚNG hộp này — không đụng hộp khác đã thay vào.
+      if (signal) {
+        const close = (): void => {
+          if (this.cur !== entry) return;
+          this.cur = null;
+          resolve(null);
+          this.screen.schedule();
+        };
+        if (signal.aborted) close();
+        else signal.addEventListener('abort', close, { once: true });
+      }
       this.screen.schedule();
     });
   }
@@ -333,8 +365,16 @@ export class TerminalUi implements OnboardingUi {
     return this.run(new ConfirmDialog({ id: 'ob', kind: 'confirm', title, detail, yes: o?.yes, no: o?.no, danger: o?.danger, defaultYes: true }, this.theme)) as Promise<boolean | null>;
   }
 
-  input(title: string, detail: string, secret = false, o?: { initial?: string; placeholder?: string }): Promise<string | null> {
-    return this.run(new InputDialog({ id: 'ob', kind: 'input', title, detail, secret, ...(o?.initial ? { initial: o.initial } : {}), ...(o?.placeholder ? { placeholder: o.placeholder } : {}) }, this.theme)) as Promise<string | null>;
+  input(title: string, detail: string, secret = false, o?: { initial?: string; placeholder?: string; signal?: AbortSignal }): Promise<string | null> {
+    return this.run(new InputDialog({ id: 'ob', kind: 'input', title, detail, secret, ...(o?.initial ? { initial: o.initial } : {}), ...(o?.placeholder ? { placeholder: o.placeholder } : {}) }, this.theme), o?.signal) as Promise<string | null>;
+  }
+
+  block(text: string): void {
+    // Cắt đúng bề rộng (không thụt lề, không ký hiệu): Screen.print cắt dòng dài hơn cột bằng «…», nên tự ngắt cứng ở đây.
+    const w = Math.max(10, this.screen.cols - 1);
+    const lines: string[] = [];
+    for (let i = 0; i < text.length; i += w) lines.push(text.slice(i, i + w));
+    this.screen.print(['', ...lines, '']);
   }
 
   say(kind: 'info' | 'ok' | 'warn' | 'error' | 'text', text: string): void {

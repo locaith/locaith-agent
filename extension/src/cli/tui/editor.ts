@@ -103,6 +103,19 @@ export class Editor {
 
   insert(s: string): void {
     if (!s) return;
+    // Bộ gõ «Unicode tổ hợp» (UniKey/EVKey chọn bảng mã tổ hợp, bàn phím macOS…) gửi dấu như một ký tự RIÊNG đứng sau chữ gốc (e + U+0302 → ê). Ghép lại thành chữ dựng sẵn (NFC) để một
+    // Backspace xoá đúng một chữ, độ rộng/ngắt dòng không lệch, và dấu không bị rơi ra thành một ô riêng. Chữ không có dấu kết hợp thì giữ NGUYÊN (không đụng nội dung dán).
+    if (/\p{M}/u.test(s)) {
+      if (this.cursor > 0 && /^\p{M}/u.test(s)) {
+        const p = prevBoundary(this.text, this.cursor);
+        const merged = (this.text.slice(p, this.cursor) + s).normalize('NFC');
+        this.text = this.text.slice(0, p) + merged + this.text.slice(this.cursor);
+        this.cursor = p + merged.length;
+        this.desiredCol = null;
+        return;
+      }
+      s = s.normalize('NFC');
+    }
     this.text = this.text.slice(0, this.cursor) + s + this.text.slice(this.cursor);
     this.cursor += s.length;
     this.desiredCol = null;

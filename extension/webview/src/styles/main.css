@@ -12,6 +12,7 @@
 @import './parallel.css';
 @import './sessions-ux.css'; /* (lane:sessions-ux) */
 @import './extras.css';
+@import './agentboard.css'; /* (0.7.7) bảng agent kiểu Claude Code — sau extras.css (ghi đè khung hộp agent) */
 @import './media.css';
 @import './rewind.css'; /* (lane:checkpoints-rewind) */
 @import './bgtasks.css'; /* (lane:bg-tasks) */

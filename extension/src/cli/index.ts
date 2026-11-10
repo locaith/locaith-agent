@@ -19,7 +19,7 @@ import { gatewayDiagnosticHeaders } from '../core/providers/gatewayDiagnostics';
 import { LOCAITH_GATEWAY_URL, LOCAITH_MODEL_FLASH, LOCAITH_PROVIDER_ID, LocaithGatewayClient } from '../core/providers/locaithGateway';
 import { loginCmd, whoamiCmd, type AccountDeps } from './account';
 import { UsageError, parseArgs, wantsSessionPicker, type ParsedArgs } from './args';
-import { deviceLabel, loginWithBrowser } from './browserLogin';
+import { deviceLabel, loginWithBrowser, type BrowserLoginOptions } from './browserLogin';
 import { configFile, hasByokKey, homeDir, readApiKey, removeApiKey, writeApiKey } from './credentials';
 import { doctor } from './doctor';
 import { HELP_TOPICS, helpTopicText, topicList, usageText } from './help';
@@ -33,7 +33,7 @@ import { SessionRepo } from './runtime/sessions';
 import { runOnboarding, runTui, withTerminalUi } from './tui';
 import { compareVersions, latestKnown, runUpdate, updateAvailable } from './update';
 
-export const VERSION = '0.4.8';
+export const VERSION = '0.4.9';
 
 // ── nhỏ gọn: ngôn ngữ, tin cậy, tiện ích ─────────────────────────────────────────────────────────
 
@@ -89,6 +89,27 @@ function readStdin(firstByteMs?: number): Promise<string | null> {
   });
 }
 
+/**
+ * `locaith login` ở dòng lệnh thường: ngay dưới liên kết, hỏi DÁN địa chỉ trang đích (cho trình duyệt ở máy khác — SSH, máy ảo) song song với việc chờ trình duyệt.
+ * Chỉ khi stdin + stderr là terminal thật (chạy qua ống / CI thì không hỏi, chỉ chờ cổng loopback như trước).
+ */
+function stdinPaste(): Pick<BrowserLoginOptions, 'askPaste' | 'onPasteInvalid'> {
+  if (!process.stdin.isTTY || !process.stderr.isTTY) return {};
+  return {
+    onPasteInvalid: () => console.error(t('cli.acct.pasteInvalid')),
+    askPaste: async (signal) => {
+      const rl = createInterface({ input: process.stdin, output: process.stderr });
+      const closed = new Promise<null>((resolve) => rl.once('close', () => resolve(null))); // Ctrl+D
+      try {
+        return await Promise.race([rl.question(t('cli.acct.pastePrompt'), { signal }).catch(() => null), closed]);
+      } finally {
+        rl.close();
+        if (signal.aborted) process.stderr.write('\n'); // đã đăng nhập bằng đường loopback: xuống dòng khỏi chữ nhắc dang dở
+      }
+    },
+  };
+}
+
 function accountDeps(a: ParsedArgs, env: NodeJS.ProcessEnv): AccountDeps {
   const baseUrl = a.baseUrl ?? LOCAITH_GATEWAY_URL;
   return {
@@ -121,16 +142,22 @@ function accountDeps(a: ParsedArgs, env: NodeJS.ProcessEnv): AccountDeps {
     out: (l) => console.log(l),
     err: (l) => console.error(l),
     noBrowser: a.noBrowser,
-    browserLogin: () =>
+    // `h` do giao diện onboarding truyền vào (hiện liên kết + hộp «dán địa chỉ» TRONG màn hình TUI). Không có `h` = dòng lệnh thường: in ra stderr, hỏi dán bằng readline.
+    // Liên kết in NGUYÊN, không thụt lề (chép nhiều dòng terminal rồi dán vào ô địa chỉ trình duyệt không bị dính dấu cách).
+    browserLogin: (h) =>
       loginWithBrowser({
         webUrl: DEFAULT_ACCOUNT_CONFIG.webUrl,
         supabaseUrl: DEFAULT_ACCOUNT_CONFIG.supabaseUrl,
         anonKey: DEFAULT_ACCOUNT_CONFIG.anonKey,
         label: deviceLabel(),
-        notify: (m, url) => {
-          console.error(m);
-          if (url) console.error('  ' + url);
-        },
+        notify:
+          h?.notify ??
+          ((m, url) => {
+            console.error(m);
+            if (url) console.error(url);
+          }),
+        ...(h?.open === false ? { open: false } : {}),
+        ...(h ? { ...(h.askPaste ? { askPaste: h.askPaste } : {}), ...(h.onPasteInvalid ? { onPasteInvalid: h.onPasteInvalid } : {}) } : stdinPaste()),
       }),
   };
 }

@@ -149,6 +149,116 @@ describe('createWorkflowProgress — cộng số liệu nhiều agent vào MỘT
   });
 });
 
+describe('createWorkflowProgress — bảng TỪNG agent (0.7.7)', () => {
+  type Ev = Extract<UiEvent, { t: 'agent_progress' }>;
+  const rig = () => {
+    const clock = fakeClock();
+    const events: UiEvent[] = [];
+    const w = createWorkflowProgress({ emit: (e) => events.push(e), assistantId: 'A', callId: 'wf', lang: 'vi', ...clock });
+    const wf = (): NonNullable<Ev['wf']> => {
+      w.flush();
+      return (events[events.length - 1] as Ev).wf!;
+    };
+    return { w, wf, clock, events };
+  };
+
+  it('xếp hàng → chạy → xong: đếm đúng, dòng mang nhãn/loại/pha/model/trích báo cáo, thứ tự theo số thứ tự', () => {
+    const { w, wf } = rig();
+    w.setLimits({ maxAgents: 1000, concurrent: 8, tokenBudget: null });
+    w.setPhase('Trace');
+    w.agent({ n: 1, label: 'Tìm nguyên nhân A', type: 'researcher', phase: 'Trace', state: 'queued' });
+    w.agent({ n: 2, label: 'Tìm nguyên nhân B', type: 'researcher', phase: 'Trace', state: 'queued' });
+    let s = wf();
+    expect(s.counts).toEqual({ queued: 2, running: 0, done: 0, error: 0, stopped: 0, total: 2 });
+    expect(s.limits).toEqual({ maxAgents: 1000, concurrent: 8, tokenBudget: null });
+    w.agent({ n: 1, label: '', state: 'running' });
+    w.update(1, P(1200, 3, { activity: 'Đang đọc a.ts' }));
+    s = wf();
+    expect(s.counts).toMatchObject({ queued: 1, running: 1 });
+    expect(s.rows.map((r) => [r.n, r.state])).toEqual([[1, 'running'], [2, 'queued']]);
+    expect(s.rows[0]).toMatchObject({ label: 'Tìm nguyên nhân A', type: 'researcher', phase: 'Trace', tokens: 1200, tools: 3, activity: 'Đang đọc a.ts' });
+    w.agent({ n: 1, label: '', state: 'done', tokens: 1500, model: 'deepseek-v4-pro', preview: 'Kết luận: lỗi ở hàm x' });
+    s = wf();
+    expect(s.counts).toMatchObject({ done: 1, running: 0 });
+    expect(s.rows[0]).toMatchObject({ state: 'done', tokens: 1500, model: 'deepseek-v4-pro', preview: 'Kết luận: lỗi ở hàm x' });
+    expect(s.rows[0].activity).toBeUndefined();
+    expect(s.rows[0].endedAt).toBeGreaterThan(0);
+    expect(s.phases).toEqual([{ name: 'Trace', total: 2, done: 1, error: 0 }]);
+  });
+
+  it('lỗi giữ lý do; gom theo pha theo thứ tự xuất hiện; rev tăng và sameProgress thấy thay đổi chỉ ở wf', () => {
+    const { w, wf, events } = rig();
+    w.setPhase('Trace');
+    w.agent({ n: 1, label: 'a', phase: 'Trace', state: 'queued' });
+    w.agent({ n: 1, label: 'a', state: 'running' });
+    w.agent({ n: 1, label: 'a', state: 'error', error: 'Hết thời gian chờ' });
+    w.setPhase('Verify');
+    w.agent({ n: 2, label: 'b', phase: 'Verify', state: 'queued' });
+    const s = wf();
+    expect(s.counts).toMatchObject({ error: 1, queued: 1 });
+    expect(s.rows.find((r) => r.n === 1)).toMatchObject({ state: 'error', error: 'Hết thời gian chờ' });
+    expect(s.phases).toEqual([
+      { name: 'Trace', total: 1, done: 0, error: 1 },
+      { name: 'Verify', total: 1, done: 0, error: 0 },
+    ]);
+    expect(s.phase).toBe('Verify');
+    const e1 = events[events.length - 1] as Ev;
+    w.agent({ n: 2, label: 'b', state: 'running' });
+    w.flush();
+    const e2 = events[events.length - 1] as Ev;
+    expect(e2.wf!.rev).toBeGreaterThan(e1.wf!.rev);
+    expect(sameProgress({ tokens: e2.tokens, tools: e2.tools, wf: e1.wf }, { tokens: e2.tokens, tools: e2.tools, wf: e2.wf })).toBe(false); // chỉ khác ở wf.rev
+  });
+
+  it('thử lại: token/lệnh của các lần thử trước được CỘNG DỒN (agent con đếm lại từ 0), dòng không tụt', () => {
+    const { w, wf } = rig();
+    w.agent({ n: 1, label: 'x', state: 'queued' });
+    w.agent({ n: 1, label: 'x', state: 'running' });
+    w.update(1, P(900, 4));
+    w.update(1, P(300, 1)); // lần thử thứ hai bắt đầu đếm lại
+    let s = wf();
+    expect(s.rows[0]).toMatchObject({ tokens: 1200, tools: 5 });
+    w.update(1, P(500, 2));
+    s = wf();
+    expect(s.rows[0]).toMatchObject({ tokens: 1400, tools: 6 });
+  });
+
+  it('1000 agent: chỉ ≤ 80 dòng gửi đi nhưng counts đếm đủ; ưu tiên đang chạy > lỗi > hàng đợi > xong gần nhất; không dòng nào bị trùng', () => {
+    const { w, wf } = rig();
+    for (let n = 1; n <= 1000; n++) w.agent({ n, label: `a${n}`, state: 'queued' });
+    for (let n = 1; n <= 700; n++) w.agent({ n, label: '', state: 'running' });
+    for (let n = 1; n <= 600; n++) w.agent({ n, label: '', state: n % 50 === 0 ? 'error' : 'done', error: n % 50 === 0 ? 'x' : undefined });
+    const s = wf();
+    expect(s.counts).toEqual({ queued: 300, running: 100, done: 588, error: 12, stopped: 0, total: 1000 });
+    expect(s.rows.length).toBeLessThanOrEqual(80);
+    expect(new Set(s.rows.map((r) => r.n)).size).toBe(s.rows.length);
+    expect(s.rows.filter((r) => r.state === 'running').length).toBe(40); // trần đang chạy
+    expect(s.rows.filter((r) => r.state === 'error').length).toBe(12); // đủ cả 12 lỗi
+    expect(s.rows.filter((r) => r.state === 'queued').length).toBeLessThanOrEqual(12);
+    // agent xong được chọn là các cái KẾT THÚC gần nhất (n lớn trong 1..600)
+    const doneN = s.rows.filter((r) => r.state === 'done').map((r) => r.n);
+    expect(Math.min(...doneN)).toBeGreaterThan(500);
+  });
+
+  it('chạm giới hạn: hit đi kèm, counts không tính agent bị bỏ qua', () => {
+    const { w, wf } = rig();
+    w.agent({ n: 1, label: 'a', state: 'queued' });
+    w.limit({ kind: 'tokens', limit: 250_000, skipped: 3 });
+    const s = wf();
+    expect(s.hit).toEqual({ kind: 'tokens', limit: 250_000, skipped: 3 });
+    expect(s.counts.total).toBe(1);
+  });
+
+  it('API cũ vẫn chạy: update/finish không cần agent(): tạo dòng ngầm', () => {
+    const { w, wf } = rig();
+    w.update(7, P(10, 1, { activity: 'x' }));
+    w.finish(7);
+    const s = wf();
+    expect(s.rows).toHaveLength(1);
+    expect(s.rows[0]).toMatchObject({ n: 7, state: 'done', tokens: 10 });
+  });
+});
+
 describe('agentActivity / agentPhase', () => {
   it('mô tả từng công cụ bằng tiếng Việt và tiếng Anh', () => {
     expect(agentActivity('vi', 'read_file', { path: 'src/a.ts' })).toBe('Đang đọc src/a.ts');

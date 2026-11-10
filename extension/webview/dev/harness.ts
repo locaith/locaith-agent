@@ -8,11 +8,14 @@
  */
 import type { ABlock, HostMessage, MediaItem, ToolBlock, UiEvent, ViewState, WebviewMessage } from '../../src/shared/protocol';
 import { mediaKindOf } from '../../src/shared/mediaKinds';
+import { BIO_SERVER_NAME, CATALOG } from '../../src/core/mcp/catalog'; // (0.7.7) kho kết nối thật
 import { reduceView } from '../../src/shared/transcript';
 import {
   PROVIDERS,
   baseState,
+  agentBoardState, // (0.7.7) bảng agent của workflow
   ccTimelineState,
+  chromeLongUrlState, // (0.7.7) URL dài ở dòng công cụ Chrome
   cutContinueState, // (lane:output-timeouts)
   optionsDirectionsState, // (0.7.2)
   errorState,
@@ -321,9 +324,13 @@ class MockHost {
       case 'cleanup_run':
         this.toast(`Dọn (${m.action}${m.days ? `, ${m.days} ngày` : ''}) — host thật sẽ hỏi xác nhận có ghi dung lượng`);
         break;
-      case 'queue_remove':
+      case 'queue_remove': {
+        // Như host thật (removeQueued): bỏ khỏi hàng đợi và, khi `edit`, TRẢ chữ + tệp đính kèm về ô nhập (qua `insert`).
+        const item = (this.view.queued ?? []).find((q) => q.id === m.id);
         this.patch({ queued: (this.view.queued ?? []).filter((q) => q.id !== m.id) });
+        if (item && m.edit) this.post({ type: 'insert', text: item.text, attachments: item.attachments });
         break;
+      }
       case 'get_image':
         // Host thật tìm ảnh gốc trong lịch sử; harness trả bản lớn để kiểm hộp xem ảnh đổi từ bản thu nhỏ sang bản đẹp.
         window.setTimeout(() => this.post({ type: 'image_data', key: m.key, mediaType: 'image/png', data: BIG_PNG }), 250);
@@ -511,6 +518,12 @@ function sampleMarket(): import('../../src/shared/protocol').MarketState {
     pluginMarket: {
       source: 'anthropics/claude-plugins-official',
       loading: false,
+      sources: [
+        { id: 'claude-plugins-official', label: 'Anthropic · chính thức', trust: 'official', count: 27 },
+        { id: 'knowledge-work-plugins', label: 'Anthropic · công việc tri thức', trust: 'official', count: 3 },
+        { id: 'azure-skills', label: 'Microsoft · Azure', trust: 'vendor', count: 1 },
+        { id: 'wshobson-agents', label: 'wshobson/agents (cộng đồng)', trust: 'community', count: 2 },
+      ],
       items: [
         { id: "agent-sdk-dev", name: "agent-sdk-dev", description: "Công cụ phát triển ứng dụng với Claude Agent SDK: lệnh tạo dự án và agent kiểm tra.", category: "development", installed: true, installable: true, origin: "anthropics" },
         { id: "github", name: "github", description: "MCP chính thức của GitHub: issue, pull request, Actions.", category: "productivity", installed: false, installable: true, origin: "anthropics" },
@@ -540,50 +553,28 @@ function sampleMarket(): import('../../src/shared/protocol').MarketState {
         { id: "datadog", name: "datadog", description: "Nhật ký, chỉ số và cảnh báo Datadog.", category: "monitoring", installed: false, installable: true, origin: "datadog-labs/claude-code-plugin" },
         { id: 'postgres-tools', name: 'postgres-tools', description: 'Kỹ năng và MCP cho PostgreSQL: tối ưu truy vấn, đọc cấu trúc bảng.', category: 'database', installed: false, installable: true, origin: 'acme/postgres-tools' },
         { id: 'sec-scan', name: 'sec-scan', description: 'Quét bảo mật mã nguồn và phụ thuộc.', category: 'security', installed: false, installable: true, origin: 'sec-co/claude-plugins' },
+        { id: 'sales', name: 'sales', description: 'Chuẩn bị cuộc gọi, theo dõi cơ hội, dự báo doanh thu và soạn email bán hàng.', category: 'sales', installed: false, installable: true, origin: 'anthropics/knowledge-work-plugins', market: 'knowledge-work-plugins', trust: 'official' },
+        { id: 'azure-cost-azure-skills', name: 'azure-cost', description: 'Phân tích và tối ưu chi phí Azure.', category: 'deployment', installed: false, installable: true, origin: 'microsoft/azure-skills', market: 'azure-skills', trust: 'vendor' },
+        { id: 'seo-content-writer', name: 'seo-content-writer', description: 'Viết bài chuẩn SEO theo cụm từ khoá, có kiểm tra độ dài và cấu trúc tiêu đề.', category: 'content', installed: false, installable: true, origin: 'wshobson/agents', market: 'wshobson-agents', trust: 'community' },
+        { id: 'kubernetes-operations', name: 'kubernetes-operations', description: 'Vận hành Kubernetes: manifest, Helm, GitOps và khắc phục sự cố.', category: 'devops', installed: false, installable: true, origin: 'wshobson/agents', market: 'wshobson-agents', trust: 'community' },
         { id: 'gl-plugin', name: 'gl-plugin', description: 'Nguồn nằm ngoài GitHub.', category: 'other', installed: false, installable: false, reason: 'Nguồn nằm ngoài GitHub (gitlab.com) — dùng "Cài từ Git…" nếu bạn tin tưởng.', origin: 'gitlab.com' },
       ],
     },
-    // Toàn bộ kho kết nối thật (src/core/mcp/catalog.ts) để xem logo của mọi dịch vụ.
-    catalog: (
-      [
-        ["memory", "Memory (Anthropic)", "Anthropic", "memory", "Đồ thị tri thức đơn giản (server tham chiếu của Anthropic). KHÔNG phải Bio-Memory của Locaith.", "stdio", "local", ""],
-        ["github", "GitHub", "GitHub", "dev", "Repo, issue, pull request, Actions, quét mã… bằng chính tài khoản GitHub của bạn (đăng nhập bằng tài khoản đã đăng nhập trong VS Code).", "http", "github", ""],
-        ["sentry", "Sentry", "Sentry", "dev", "Xem lỗi, sự cố và dự án trên Sentry ngay trong cuộc trò chuyện.", "http", "oauth", ""],
-        ["vercel", "Vercel", "Vercel", "dev", "Quản lý dự án, triển khai và nhật ký trên Vercel.", "http", "oauth", ""],
-        ["cloudflare-bindings", "Cloudflare (Workers & bindings)", "Cloudflare", "dev", "Quản lý Workers, KV, R2, D1 trên Cloudflare.", "http", "oauth", ""],
-        ["huggingface", "Hugging Face", "Hugging Face", "dev", "Tìm model, dataset, Space và bài báo trên Hugging Face.", "http", "none", ""],
-        ["sequential-thinking", "Sequential Thinking", "Anthropic", "dev", "Suy luận từng bước có thể sửa/rẽ nhánh cho bài toán phức tạp.", "stdio", "local", ""],
-        ["notion", "Notion", "Notion", "pm", "Đọc, tìm và ghi trang, cơ sở dữ liệu trong Notion.", "http", "oauth", ""],
-        ["linear", "Linear", "Linear", "pm", "Issue, dự án và chu kỳ trên Linear.", "http", "oauth", ""],
-        ["clickup", "ClickUp", "ClickUp", "pm", "Công việc, tài liệu và không gian ClickUp.", "http", "oauth", ""],
-        ["monday", "monday.com", "monday.com", "pm", "Bảng, mục và cập nhật trên monday.com.", "http", "oauth", ""],
-        ["asana", "Asana", "Asana", "pm", "Dự án và công việc trên Asana.", "http", "oauth", "Asana yêu cầu ứng dụng OAuth riêng của bạn (không cho đăng ký tự động) — chưa hỗ trợ."],
-        ["slack", "Slack", "Slack", "comm", "Tìm và đọc kênh, gửi tin trên Slack.", "http", "oauth", "Slack yêu cầu ứng dụng OAuth riêng của bạn (không cho đăng ký tự động) — chưa hỗ trợ."],
-        ["intercom", "Intercom", "Intercom", "comm", "Hội thoại và khách hàng trên Intercom.", "http", "oauth", ""],
-        ["supabase", "Supabase", "Supabase", "data", "Quản lý dự án, bảng và truy vấn Supabase.", "http", "oauth", ""],
-        ["neon", "Neon", "Neon", "data", "Quản lý cơ sở dữ liệu Postgres trên Neon.", "http", "oauth", ""],
-        ["prisma", "Prisma Postgres", "Prisma", "data", "Tạo và quản lý cơ sở dữ liệu Prisma Postgres.", "http", "oauth", ""],
-        ["airtable", "Airtable", "Airtable", "data", "Đọc và ghi bản ghi, cấu trúc bảng trên Airtable.", "http", "oauth", ""],
-        ["honeycomb", "Honeycomb", "Honeycomb", "data", "Truy vấn dữ liệu quan sát (trace, sự kiện) trên Honeycomb.", "http", "oauth", ""],
-        ["datadog", "Datadog", "Datadog", "data", "Nhật ký, chỉ số và cảnh báo trên Datadog.", "http", "oauth", ""],
-        ["stripe", "Stripe", "Stripe", "pay", "Khách hàng, thanh toán, hoá đơn trên Stripe.", "http", "oauth", ""],
-        ["paypal", "PayPal", "PayPal", "pay", "Giao dịch và hoá đơn PayPal.", "http", "oauth", ""],
-        ["square", "Square", "Square", "pay", "Cửa hàng, đơn hàng và thanh toán Square.", "http", "oauth", "Square dùng giao thức SSE cũ — chưa hỗ trợ."],
-        ["figma", "Figma", "Figma", "design", "Đọc thiết kế, thành phần và biến từ Figma.", "http", "oauth", ""],
-        ["canva", "Canva", "Canva", "design", "Tạo và chỉnh thiết kế trên Canva.", "http", "oauth", ""],
-        ["webflow", "Webflow", "Webflow", "design", "Quản lý site và CMS trên Webflow.", "http", "oauth", ""],
-        ["wix", "Wix", "Wix", "design", "Quản lý site Wix.", "http", "oauth", ""],
-        ["context7", "Context7", "Upstash", "docs", "Tài liệu mới nhất của thư viện/framework, ngay trong cuộc trò chuyện.", "http", "none", ""],
-        ["deepwiki", "DeepWiki", "Cognition", "docs", "Hỏi đáp về mọi kho GitHub công khai.", "http", "none", ""],
-        ["microsoft-learn", "Microsoft Learn", "Microsoft", "docs", "Tra cứu tài liệu Microsoft, Azure, .NET chính thức.", "http", "none", ""],
-        ["cloudflare-docs", "Cloudflare Docs", "Cloudflare", "docs", "Tra cứu tài liệu Cloudflare.", "http", "none", ""],
-        ["exa", "Exa Search", "Exa", "search", "Tìm kiếm web theo ngữ nghĩa.", "http", "none", ""],
-        ["playwright", "Playwright", "Microsoft", "browser", "Điều khiển một trình duyệt riêng bằng Playwright (mở trang, bấm, chụp ảnh, kiểm thử web).", "stdio", "local", ""],
-        ["chrome-devtools", "Chrome DevTools", "Google", "browser", "Điều khiển và kiểm tra một trình duyệt Chrome đang chạy (hiệu năng, mạng, console).", "stdio", "local", ""],
-        ["filesystem", "Filesystem", "Anthropic", "files", "Đọc/ghi tệp trong thư mục workspace qua MCP.", "stdio", "local", ""],
-      ] as const
-    ).map(([id, name, vendor, category, description, transport, auth, unsupported]) => ({
-      id, name, vendor, category, description, transport, auth, connected: id === 'notion' || id === 'context7', ...(id === 'notion' ? { status: 'running' as const } : {}), ...(unsupported ? { unsupported } : {}), ...(transport === 'stdio' ? { needs: 'node' as const } : {}),
+    // Toàn bộ kho kết nối THẬT (src/core/mcp/catalog.ts, kể cả `inputs`) để xem logo/nhãn/ô nhập của mọi dịch vụ.
+    catalog: CATALOG.filter((e) => e.id !== BIO_SERVER_NAME).map((e) => ({
+      id: e.id,
+      name: e.name,
+      vendor: e.vendor,
+      category: e.category,
+      description: e.description,
+      transport: e.transport,
+      auth: e.auth,
+      connected: e.id === 'notion' || e.id === 'context7',
+      ...(e.id === 'notion' ? { status: 'running' as const } : {}),
+      ...(e.unsupported ? { unsupported: e.unsupported } : {}),
+      ...(e.note ? { note: e.note } : {}),
+      ...(e.needs ? { needs: e.needs } : {}),
+      ...(e.inputs?.length ? { inputs: e.inputs.map((x) => ({ label: x.label, ...(x.secret ? { secret: true } : {}), ...(x.optional ? { optional: true } : {}) })) } : {}),
     })),
     bio: { state: 'ready', enabled: true, dataDir: 'C:\\Users\\anh\\.locaith\\bio-memory\\data' },
     presets: [
@@ -1083,6 +1074,15 @@ function initialView(): ViewState {
       break;
     case 'parallel-narrow':
       v = parallelAgentsState({ narrow: true });
+      break;
+    case 'chrome-long':
+      v = chromeLongUrlState();
+      break;
+    case 'agents-board':
+    case 'agents-board-big':
+    case 'agents-board-hit':
+    case 'agents-board-small':
+      v = agentBoardState({ n: scenario === 'agents-board-big' ? 1000 : scenario === 'agents-board-small' ? 3 : Number(params.get('n') ?? 40), hit: scenario === 'agents-board-hit', model: params.get('model') ?? undefined });
       break;
     case 'thinking':
       v = thinkingState();

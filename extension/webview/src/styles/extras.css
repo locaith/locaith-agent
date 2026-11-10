@@ -99,7 +99,10 @@
   top: 50%;
   right: auto;
   bottom: auto;
-  transform: translate(-50%, -50%);
+  /* translate (không phải transform): animation nd-rise của .popover ghi đè transform nên hộp từng bay từ góc vào giữa và chớp 120 ms */
+  translate: -50% -50%;
+  transform: none;
+  animation: none;
   width: min(760px, calc(100vw - 24px));
   max-width: min(760px, calc(100vw - 24px));
   max-height: min(76vh, 620px);
@@ -193,37 +196,6 @@
   font-size: var(--nd-fs-xs);
   color: var(--danger);
   overflow-wrap: anywhere;
-}
-/* Danh sách agent con: rail dọc nối từ node chính, mỗi con một nhánh ngang. */
-.agent-flow-kids {
-  list-style: none;
-  margin: 0;
-  padding: 0 0 0 18px;
-  position: relative;
-}
-.agent-flow-kids::before {
-  content: '';
-  position: absolute;
-  left: 6px;
-  top: 0;
-  bottom: 14px;
-  width: 1px;
-  background: var(--line);
-}
-.agent-flow-kids > .agent-node {
-  position: relative;
-}
-.agent-flow-kids > .agent-node::before {
-  content: '';
-  position: absolute;
-  left: -12px;
-  top: 19px;
-  width: 12px;
-  height: 1px;
-  background: var(--line);
-}
-.agent-flow-kids > .agent-node:hover {
-  background: color-mix(in srgb, var(--fg) 5%, transparent);
 }
 .agent-row-act {
   color: var(--accent-text);

@@ -286,19 +286,36 @@ export function registerBuiltinSlash(rt: Runtime): void {
       title: tr('loginMethodTitle'),
       items: [
         { id: 'browser', label: tr('loginBrowser'), detail: DEFAULT_ACCOUNT_CONFIG.webUrl },
+        // (0.4.9) Trình duyệt ở MÁY KHÁC (SSH, máy ảo): cổng loopback không tới được CLI → mở liên kết ở đâu cũng được rồi DÁN địa chỉ trang đích về.
+        { id: 'browser-other', label: tr('loginBrowserOther') },
         { id: 'token', label: tr('loginToken'), detail: 'lat_…' },
       ],
       allowCancel: true,
     });
     if (method === null) return;
-    if (method === 'browser') {
-      ctx.output(tr('loginOpening'), 'plain');
+    if (method === 'browser' || method === 'browser-other') {
+      const other = method === 'browser-other';
+      if (!other) ctx.output(tr('loginOpening'), 'plain');
       const r = await loginWithBrowser({
         webUrl: DEFAULT_ACCOUNT_CONFIG.webUrl,
         supabaseUrl: DEFAULT_ACCOUNT_CONFIG.supabaseUrl,
         anonKey: DEFAULT_ACCOUNT_CONFIG.anonKey,
         label: deviceLabel(),
         notify: (m, url) => ctx.output(url ? `${m}\n${url}` : m, 'plain'),
+        ...(other
+          ? {
+              open: false,
+              // Hộp nhập của TUI không đóng từ ngoài được: chỉ dùng ở lựa chọn «máy khác» (người dùng chủ định dán). Esc = huỷ.
+              askPaste: async () => {
+                for (;;) {
+                  const v = await ctx.ask({ kind: 'input', title: tr('loginPasteAddrTitle'), placeholder: 'http://127.0.0.1:…/callback?code=…', secret: true });
+                  if (typeof v !== 'string') return null; // Esc
+                  if (v.trim()) return v; // Enter khi ô còn trống: hỏi lại (đóng hộp thì màn hình trống trơn trong lúc vẫn chờ)
+                }
+              },
+              onPasteInvalid: () => ctx.output(tr('loginPasteInvalid'), 'error'),
+            }
+          : {}),
       });
       if (!r.ok) return ctx.output(tr('loginFailed', { reason: tr(`loginErr_${r.error}`) }), 'error');
       token = r.token;

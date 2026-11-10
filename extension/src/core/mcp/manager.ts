@@ -30,6 +30,8 @@ export interface McpServerEntry {
   autoAllow?: string[];
   /** Đổi giá trị này (ví dụ khi đăng nhập lại) để buộc khởi động lại server dù cấu hình giữ nguyên. */
   rev?: string;
+  /** (0.7.7) Tên biến môi trường mang giá trị BÍ MẬT do người dùng nhập khi kết nối: giao diện hiện «•••» dù tên biến không có chữ KEY/TOKEN/SECRET. */
+  maskEnv?: string[];
 }
 
 export interface McpServerStatus {
@@ -352,7 +354,7 @@ export class McpManager {
         error: c?.error,
         approved,
         ...(() => {
-          const v = describeServerForApproval(e.cfg);
+          const v = describeServerForApproval(e.cfg, undefined, e.maskEnv);
           return { summary: v.command, ...(v.extra.length ? { detail: v.extra.join('\n') } : {}), ...(v.truncated ? { truncated: true } : {}) };
         })(),
         ...(() => {

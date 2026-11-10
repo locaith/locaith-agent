@@ -3,9 +3,10 @@
  * `workflow_run` (chương trình JS điều phối hàng loạt agent con; ẩn cho tới khi kỹ năng `multi-agent` được nạp).
  */
 
+import { availableParallelism, cpus } from 'node:os';
 import type { ToolDef } from '../engine/types';
 import { isTier } from '../orchestration/tiers';
-import { clampLimits, runWorkflow, type WfAgentOpts } from './workflow';
+import { clampLimits, runWorkflow, type WfAgentOpts, type WorkflowLimits } from './workflow';
 import { createWorkflowProgress } from './progress';
 import { resultHeader, runSubAgent, type AgentServices } from './runner';
 import type { AgentTier } from './definitions';
@@ -29,11 +30,21 @@ interface WorkflowInput {
 }
 
 const WF_RESULT_CHARS = 12_000;
-const BASE_LIMITS = { maxAgents: 60, maxConcurrent: 8, maxTotalTokens: 2_000_000, timeoutMs: 20 * 60_000 };
-/** Chế độ Swarm: ngân sách mặc định lớn hơn (vẫn nằm dưới trần cứng 1.000 agent / 16 cùng lúc / 20M token). */
-const SWARM_LIMITS = { maxAgents: 300, maxConcurrent: 16, maxTotalTokens: 5_000_000, timeoutMs: 45 * 60_000 };
-const limitDefaults = (s: { thinkingLevel: string; swarm?: boolean }) => (s.swarm || s.thinkingLevel === 'swarm' ? SWARM_LIMITS : BASE_LIMITS);
+/** Cùng lúc: theo máy (như Claude Code: min(16, CPU − 2)), tối thiểu 4 — còn lại xếp hàng; bị giới hạn thêm bởi bộ giới hạn chung của hội thoại và của nhà cung cấp. */
+export function autoConcurrency(cpuCount: number = typeof availableParallelism === 'function' ? availableParallelism() : cpus().length): number {
+  return Math.max(4, Math.min(16, Math.floor(cpuCount) - 2));
+}
+/**
+ * Mặc định của workflow_run: tới 1.000 agent mỗi lần chạy, KHÔNG ngân sách token (ngân sách chỉ có khi người dùng/lệnh đặt `max_tokens`), hạn giờ dài — như Claude Code.
+ * Trước 0.7.7: 60 agent / 2M token (Swarm: 300 / 5M) và token đếm cả ngữ cảnh đọc lại mỗi vòng (~1M mỗi agent) nên Swarm chết sau ~5 agent.
+ * Người dùng vẫn duyệt từng lần chạy (thẻ xin phép nêu số agent, cùng lúc, hạn giờ) và có nút Dừng.
+ */
+const BASE_LIMITS = (): WorkflowLimits => ({ maxAgents: 1000, maxConcurrent: autoConcurrency(), maxTotalTokens: null, timeoutMs: 2 * 60 * 60_000 });
+const SWARM_LIMITS = (): WorkflowLimits => ({ maxAgents: 1000, maxConcurrent: 16, maxTotalTokens: null, timeoutMs: 4 * 60 * 60_000 });
+const limitDefaults = (s: { thinkingLevel: string; swarm?: boolean }): WorkflowLimits => (s.swarm || s.thinkingLevel === 'swarm' ? SWARM_LIMITS() : BASE_LIMITS());
 const MAX_MIRROR_KEYS = 20;
+/** Số báo cáo agent giữ lại trong RAM để cứu khi script lỗi/quá hạn giữa chừng (không để mất công của các agent đã xong). */
+const MAX_RESCUE_REPORTS = 60;
 
 function kfmt(n: number): string {
   return n >= 1000 ? `${(n / 1000).toFixed(1).replace('.', ',')}k` : String(n);
@@ -65,6 +76,7 @@ export function createAgentTools(svc: AgentServices): ToolDef[] {
     },
     risk: 'meta',
     concurrencySafe: true,
+    timeoutMs: null, // một agent con có thể chạy lâu hơn 10 phút (tự giới hạn bằng số vòng, người dùng có nút Dừng)
     async validate(input) {
       if (input.agent_type && !svc.agents.get(input.agent_type)) return `Không có agent "${input.agent_type}". Các loại hiện có:\n${svc.agents.catalog()}`;
       return null;
@@ -97,32 +109,35 @@ export function createAgentTools(svc: AgentServices): ToolDef[] {
       'Typical shape: phase("Trace"); const traces = await pipeline(hypotheses, h => agent(`Investigate: ${h}`, {tier:"balanced", json:true})); ' +
       'phase("Experiment"); const checks = await pipeline(traces, t => agent(`Try to falsify: ${t.text}`, {agent:"reviewer"})); ' +
       'phase("Adjudicate"); const v = await agent(`Weigh the evidence: ${JSON.stringify(checks.map(c => c.ref))}`, {tier:"top", json:true}); return v.data;\n' +
-      'Limits: ≤16 agents at once, ≤1000 agents per run, a token budget and a time limit (set them with max_*). The user must approve the run.',
+      'Limits: up to 1000 agents per run (≤16 run at once, the rest queue) and NO token budget unless you set max_tokens — set it ONLY when the user asked for a budget. ' +
+      'A time limit applies (default 2 hours; Swarm 4). If a limit that was set is hit, agent() does not throw: it resolves {ok:false, skipped, error} and the script keeps running — always check `ok` and use the results you already have. The user must approve the run.',
     inputSchema: {
       type: 'object',
       properties: {
         description: { type: 'string', description: 'What the workflow does, in a few words (shown to the user).' },
         script: { type: 'string', description: 'JavaScript: the body of an async function. Use `return` for the final compact result.' },
         args: { description: 'Any JSON value, available to the script as `args`.' },
-        max_agents: { type: 'integer', minimum: 1, maximum: 1000, description: 'Default 60 (300 in Swarm mode).' },
-        max_concurrent: { type: 'integer', minimum: 1, maximum: 16, description: 'Default 8 (16 in Swarm mode).' },
-        max_tokens: { type: 'integer', minimum: 10000, description: 'Total token budget over all agents. Default 2,000,000 (5,000,000 in Swarm mode).' },
-        timeout_minutes: { type: 'integer', minimum: 1, maximum: 60, description: 'Default 20.' },
+        max_agents: { type: 'integer', minimum: 1, maximum: 1000, description: 'Default 1000.' },
+        max_concurrent: { type: 'integer', minimum: 1, maximum: 16, description: 'Default: by CPU count (up to 16); the rest queue.' },
+        max_tokens: { type: 'integer', minimum: 10000, description: 'Optional total token budget over all agents (counts every round-trip, including re-read context). NO default — omit it unless the user asked for a budget.' },
+        timeout_minutes: { type: 'integer', minimum: 1, maximum: 480, description: 'Default 120 (240 in Swarm mode).' },
       },
       required: ['description', 'script'],
     },
     risk: 'exec',
     concurrencySafe: false,
     hidden: true,
+    timeoutMs: null, // workflow có hạn giờ riêng (timeout_minutes) và nút Dừng; cắt ở 10 phút làm lệnh báo lỗi trong khi workflow vẫn chạy mồ côi
     async validate(input) {
       if (!input.script.trim()) return 'Script rỗng.';
       return null;
     },
     async permission(input, ctx) {
-      const lim = clampLimits({ maxAgents: input.max_agents, maxConcurrent: input.max_concurrent, maxTotalTokens: input.max_tokens }, limitDefaults(ctx.session));
+      const lim = clampLimits({ maxAgents: input.max_agents, maxConcurrent: input.max_concurrent, maxTotalTokens: input.max_tokens, timeoutMs: input.timeout_minutes ? input.timeout_minutes * 60_000 : undefined }, limitDefaults(ctx.session));
+      const budget = lim.maxTotalTokens === null ? 'không giới hạn token' : `ngân sách ${kfmt(lim.maxTotalTokens)} token`;
       return {
         kind: 'other',
-        title: `Chạy workflow đa agent: ${input.description} (tối đa ${lim.maxAgents} agent, ${lim.maxConcurrent} chạy cùng lúc, ngân sách ${kfmt(lim.maxTotalTokens)} token)?`,
+        title: `Chạy workflow đa agent: ${input.description} (tối đa ${lim.maxAgents} agent, ${lim.maxConcurrent} chạy cùng lúc, ${budget}, hạn ${Math.round(lim.timeoutMs / 60_000)} phút)?`,
         detail: input.script.length > 3000 ? `${input.script.slice(0, 3000)}\n…` : input.script,
         sessionKey: 'workflow:run',
         sessionLabel: 'Luôn cho phép chạy workflow trong phiên này',
@@ -135,9 +150,11 @@ export function createAgentTools(svc: AgentServices): ToolDef[] {
       );
       const runId = `wf${(ctx.session.scratchpad ? Object.keys(ctx.session.scratchpad).filter((k) => /^wf\d+:/.test(k)).length : 0) + 1}`;
       const mirrored: string[] = [];
+      /** Báo cáo của các agent ĐÃ XONG (giữ ≤ MAX_RESCUE_REPORTS cái gần nhất): nếu script lỗi/quá hạn giữa chừng thì cứu vào scratchpad thay vì mất. */
+      const rescue = new Map<string, string>();
       // Một workflow chạy nhiều agent con cùng lúc nhưng giao diện chỉ có MỘT dòng cho lệnh này: cộng số liệu của mọi agent vào đó.
       const wfProgress = createWorkflowProgress({ emit: ctx.emit, assistantId: ctx.assistantId, callId: ctx.callId, lang: svc.engineSettings().language });
-      let agentSeq = 0;
+      wfProgress.setLimits({ maxAgents: limits.maxAgents, concurrent: limits.maxConcurrent, tokenBudget: limits.maxTotalTokens });
       const res = await runWorkflow({
         script: input.script,
         args: input.args,
@@ -147,14 +164,23 @@ export function createAgentTools(svc: AgentServices): ToolDef[] {
         hooks: {
           progress: (line) => ctx.progress(line),
           onArtifact: (key, value) => {
-            if (key.startsWith('agent-')) return; // báo cáo từng agent: quá nhiều, chỉ để trong script
+            if (key.startsWith('agent-')) {
+              // báo cáo từng agent: quá nhiều để đưa hết vào scratchpad, chỉ để trong script — nhưng giữ bản sao nhỏ để CỨU khi workflow chết giữa chừng
+              if (rescue.size >= MAX_RESCUE_REPORTS) rescue.delete(rescue.keys().next().value as string);
+              rescue.set(key, value.slice(0, 20_000));
+              return;
+            }
             if (mirrored.length >= MAX_MIRROR_KEYS) return;
             ctx.session.scratchpad[`${runId}:${key}`] = value.slice(0, 20_000);
             mirrored.push(`${runId}:${key}`);
           },
-          runAgent: async (prompt, opts: WfAgentOpts, signal) => {
+          // Bảng từng agent (0.7.7): xếp hàng → chạy → xong/lỗi, pha, giới hạn — xem WfProgress.
+          onAgent: (e) => wfProgress.agent(e),
+          onPhase: (name) => wfProgress.setPhase(name),
+          onLimit: (h) => wfProgress.limit(h),
+          runAgent: async (prompt, opts: WfAgentOpts, signal, meta) => {
             const def = svc.agents.get(opts.agent || 'researcher') ?? svc.agents.get('researcher')!;
-            const key = ++agentSeq;
+            const key = meta.n; // số thứ tự agent: cùng `n` với sự kiện onAgent (thử lại dùng lại đúng dòng)
             const r = await runSubAgent(svc, { ...ctx, signal }, {
               def,
               prompt,
@@ -164,7 +190,6 @@ export function createAgentTools(svc: AgentServices): ToolDef[] {
               maxChars: 50_000,
               onProgress: (p) => wfProgress.update(key, p),
             });
-            wfProgress.finish(key);
             return { ok: r.ok, text: r.text, tokens: r.inputTokens + r.outputTokens, model: r.model, error: r.error };
           },
         },
@@ -172,8 +197,18 @@ export function createAgentTools(svc: AgentServices): ToolDef[] {
 
       wfProgress.flush(); // số cuối cùng tới giao diện trước tool_end
       wfProgress.dispose();
-      const stat = `${res.agents} agent · ${kfmt(res.tokens)} token · ${Math.max(1, Math.round(res.durationMs / 1000))} giây${res.phases.length ? ` · pha: ${res.phases.join(' → ')}` : ''}`;
-      if (!res.ok) return { content: `Workflow thất bại (${stat}): ${res.error}`, isError: true, summary: `${res.agents} agent · lỗi` };
+      const skippedNote = res.skipped ? ` · BỎ QUA ${res.skipped} lời gọi agent() vì chạm giới hạn ${res.hit?.kind === 'tokens' ? `ngân sách ${kfmt(res.hit.limit)} token` : `${res.hit?.limit ?? limits.maxAgents} agent`}` : '';
+      const stat = `${res.agents} agent · ${kfmt(res.tokens)} token · ${Math.max(1, Math.round(res.durationMs / 1000))} giây${res.phases.length ? ` · pha: ${res.phases.join(' → ')}` : ''}${skippedNote}`;
+      if (!res.ok) {
+        // Workflow chết giữa chừng (script lỗi / quá hạn / Dừng): CỨU báo cáo các agent đã xong vào scratchpad để model đọc tiếp thay vì chạy lại từ đầu.
+        const saved: string[] = [];
+        for (const [k, v] of [...rescue.entries()].slice(-MAX_MIRROR_KEYS)) {
+          ctx.session.scratchpad[`${runId}:${k}`] = v;
+          saved.push(`${runId}:${k}`);
+        }
+        const rescued = saved.length ? `\nBáo cáo của ${rescue.size} agent đã xong (${saved.length} cái gần nhất) vẫn đọc được bằng scratchpad (action read): ${saved.join(', ')} — DÙNG LẠI chúng, đừng chạy lại cả workflow.` : '';
+        return { content: `Workflow thất bại (${stat}): ${res.error}${rescued}`, isError: true, summary: `${res.agents} agent · lỗi` };
+      }
 
       let body = JSON.stringify(res.value ?? null, null, 2);
       if (body.length > WF_RESULT_CHARS) {

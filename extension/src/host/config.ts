@@ -137,7 +137,7 @@ export class ConfigService {
     };
   }
 
-  /** (lane:ctx-compaction) Tham số giữ ngữ cảnh gọn; `compactAtUserSet` = người dùng tự đặt compactAtPercent ở cấp nào đó (tắt trần tự động 300k). */
+  /** (lane:ctx-compaction) Tham số giữ ngữ cảnh gọn; `compactAtUserSet` = người dùng tự đặt compactAtPercent ở cấp nào đó (tắt trần tự động 400k). */
   private compactTuningSettings(): Pick<EngineSettings, 'clearToolResultsAtPercent' | 'keepRecentMessages' | 'compactAtTokens' | 'compactAtUserSet'> {
     const c = this.cfg();
     const d = DEFAULT_ENGINE_SETTINGS;

@@ -101,7 +101,7 @@ describe('kho kết nối (catalog)', () => {
       if (e.transport === 'http') expect(e.url).toMatch(/^https:\/\//);
       else expect(e.command).toBeTruthy();
     }
-    expect(CATALOG.filter((e) => e.unsupported).map((e) => e.id).sort()).toEqual(['asana', 'slack', 'square']);
+    expect(CATALOG.filter((e) => e.unsupported).map((e) => e.id).sort()).toEqual(['asana', 'slack']);
     expect(catalogEntry('github')?.auth).toBe('github'); // GitHub không cho đăng ký ứng dụng tự động
     expect(catalogEntry('bio-memory-locaith')?.own).toBe(true);
   });

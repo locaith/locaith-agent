@@ -21,7 +21,7 @@ import { Conversation } from './conversation';
 import { PermissionDialog, makeAskDialog, type Dialog } from './dialogs';
 import { Editor } from './editor';
 import { History, defaultHistoryFile } from './history';
-import { isPrintable, type Key, type KeyEvent } from './keys';
+import { isPrintable, type CtrlHMode, type Key, type KeyEvent } from './keys';
 import { Screen, type OutStream } from './screen';
 import { renderSprite } from './sprite';
 import './strings';
@@ -53,6 +53,8 @@ export interface TuiOptions {
   initialInput?: string;
   /** Câu mở đầu GỬI NGAY khi giao diện sẵn sàng (`locaith "việc cần làm"`), khác `initialInput` chỉ điền sẵn. */
   initialPrompt?: string;
+  /** Cách hiểu byte 0x08 (Backspace thường ở conhost của Windows hay Ctrl+Backspace) — mặc định đoán theo môi trường; chủ yếu để kiểm thử. */
+  ctrlH?: CtrlHMode;
   /** Thay thế đọc ảnh clipboard (kiểm thử). */
   readImage?: () => Promise<Attachment | null>;
   /** Như `readImage` nhưng trả cả lý do thất bại (kiểm thử các thông báo lỗi); ưu tiên hơn `readImage`. */
@@ -69,6 +71,8 @@ interface DialogEntry {
 
 type Toast = { level: 'info' | 'warn' | 'error'; text: string; until: number };
 
+/** Có ký tự ngoài ASCII (chữ có dấu tiếng Việt…). */
+const NON_ASCII_RE = /[^\x00-\x7f]/;
 const SLASH_LOCAL_THEME = /^\/theme(?:\s+(\S+))?\s*$/i;
 /** `/paste` (alias `/image`): đính kèm ảnh trong clipboard. Do giao diện xử lý — không đi qua runtime, để ảnh đã đính kèm không bị gửi đi cùng dòng lệnh. */
 const SLASH_LOCAL_PASTE = /^\/(?:paste|image)\s*$/i;
@@ -156,6 +160,7 @@ export class TuiApp {
       stdout: this.stdout,
       onEvent: (e) => this.onKeyEvent(e),
       processHandlers: real,
+      ...(o.ctrlH ? { ctrlH: o.ctrlH } : {}),
       onSignal: (sig) => this.onSignal(sig),
       onCrash: () => undefined,
     });
@@ -716,10 +721,13 @@ export class TuiApp {
         case 'f': ed.wordRight(); return this.afterMove();
         case 'd': ed.deleteWordForward(); return this.afterEdit();
         case 'p': return void this.rt.cycleMode();
-        default: return;
+        default:
+          // Alt + chữ KHÔNG phải ASCII (ESC + «ê») không thể là phím tắt: một số bộ gõ / bàn phím gửi chữ có dấu kèm tiền tố ESC (Alt còn dính sau phím đổi ngôn ngữ Alt+Shift) → chèn
+          // như chữ thường thay vì nuốt mất («gõ có dấu là mất chữ»).
+          if (!NON_ASCII_RE.test(k.text)) return;
       }
     }
-    if (!isPrintable(k)) return;
+    if (!isPrintable(k) && !(k.alt && !k.ctrl && k.name === 'char' && !!k.text && NON_ASCII_RE.test(k.text))) return;
     const text = k.text ?? '';
     if (ed.empty) {
       if (text === '?' && !this.shell) {

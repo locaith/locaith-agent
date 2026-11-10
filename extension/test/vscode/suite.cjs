@@ -160,7 +160,7 @@ exports.run = async function run() {
   const market = await api.sidebar.d.marketService.state();
   assert.ok(market.skills.length > 500, `Chợ phải có hàng trăm kỹ năng, đang có ${market.skills.length}`);
   // 0.5.1: các mẫu MCP dựng sẵn của 0.5.0 được thay bằng kho kết nối (32 mục đã thăm dò thật) + thẻ Bio-Memory-Locaith.
-  assert.ok(market.catalog && market.catalog.length >= 25, `Kho kết nối MCP phải có từ 25 mục, đang có ${market.catalog && market.catalog.length}`);
+  assert.ok(market.catalog && market.catalog.length >= 100, `Kho kết nối MCP phải có từ 100 mục (0.7.7), đang có ${market.catalog && market.catalog.length}`);
   assert.ok(market.agents.some((a) => a.name === 'reviewer'), 'Thiếu agent reviewer trong Chợ');
   await sleep(1200);
   await shot('06-market');
@@ -553,9 +553,9 @@ async function test051(api) {
   // ── Chợ: plugin + kết nối + Chrome hiện trong trạng thái ──
   await sb.showScreen('market');
   const st = await api.marketService.state();
-  assert.ok(st.catalog && st.catalog.length >= 25, `Kho kết nối phải có từ 25 mục, đang có ${st.catalog && st.catalog.length}`);
+  assert.ok(st.catalog && st.catalog.length >= 100, `Kho kết nối phải có từ 100 mục (0.7.7), đang có ${st.catalog && st.catalog.length}`);
   assert.ok(st.catalog.some((e) => e.id === 'github' && e.auth === 'github'), 'GitHub phải có trong kho (đăng nhập bằng tài khoản VS Code)');
-  assert.ok(st.catalog.filter((e) => e.unsupported).map((e) => e.id).sort().join() === 'asana,slack,square', 'Mục chưa hỗ trợ phải đúng và kèm lý do');
+  assert.ok(st.catalog.filter((e) => e.unsupported).map((e) => e.id).sort().join() === 'asana,slack', 'Mục chưa hỗ trợ phải đúng và kèm lý do');
   assert.ok(st.bio && ['none', 'ready', 'error', 'installing'].includes(st.bio.state), 'Thẻ Bio-Memory-Locaith phải có');
   assert.ok(st.chrome && st.chrome.paired === false, 'Chrome mặc định CHƯA ghép đôi');
   assert.ok(st.pluginMarket && st.pluginMarket.source === 'anthropics/claude-plugins-official', 'Chợ plugin phải trỏ marketplace chính thức');

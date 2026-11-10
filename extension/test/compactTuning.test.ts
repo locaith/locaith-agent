@@ -14,10 +14,11 @@ describe('ngưỡng nén hiệu dụng (trần tuyệt đối cho cửa sổ l�
     expect(effectiveCompactThreshold(400_000, 0.95, T)).toBe(380_000); // 400k không phải "> 400k"
   });
 
-  it('cửa sổ > 400k và người dùng KHÔNG tự đặt compactAtPercent → trần 300k', () => {
+  it('cửa sổ > 400k và người dùng KHÔNG tự đặt compactAtPercent → trần 400k (0.7.7; trước đó 300k)', () => {
     expect(effectiveCompactThreshold(1_000_000, 0.8, T)).toBe(AUTO_CAP_TOKENS);
-    expect(effectiveCompactThreshold(1_000_000, 0.9, T)).toBe(300_000);
-    expect(effectiveCompactThreshold(2_000_000, undefined, T)).toBe(300_000);
+    expect(effectiveCompactThreshold(1_000_000, 0.9, T)).toBe(400_000);
+    expect(effectiveCompactThreshold(2_000_000, undefined, T)).toBe(400_000);
+    expect(AUTO_CAP_TOKENS).toBe(400_000);
   });
 
   it('người dùng tự đặt compactAtPercent → tôn trọng, không áp trần tự động', () => {

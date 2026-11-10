@@ -11,7 +11,7 @@ import { Icon } from './Icons';
 import { Badge, Button, Switch } from './ui';
 
 const BIO = 'bio-memory-locaith';
-const CATS = ['all', 'memory', 'dev', 'pm', 'comm', 'data', 'pay', 'design', 'docs', 'search', 'browser', 'files'] as const;
+const CATS = ['all', 'memory', 'dev', 'pm', 'office', 'comm', 'crm', 'data', 'cloud', 'auto', 'pay', 'design', 'docs', 'search', 'browser', 'files'] as const;
 
 const fold = (s: string): string => s.normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[đĐ]/g, 'd').toLowerCase();
 
@@ -173,11 +173,16 @@ function CatalogCard({ e }: { e: CatalogItem }) {
           <Badge tone={e.own ? 'accent' : 'neutral'}>{e.vendor}</Badge>
           <span class="mk-ver">
             <Icon name={e.auth === 'local' ? 'cpu' : e.auth === 'none' ? 'globe' : 'key'} size={11} /> {authLabel}
-            {e.needs === 'node' ? ` · ${t('mcp.needsNode')}` : ''}
+            {e.needs === 'node' ? ` · ${t('mcp.needsNode')}` : e.needs === 'python' ? ` · ${t('mcp.needsUv')}` : ''}
           </span>
         </div>
         <div class="mk-desc">{e.description}</div>
         {e.note && <div class="mk-meta">{e.note}</div>}
+        {e.inputs && !e.connected && !e.unsupported && (
+          <div class="mk-meta">
+            {t('mcp.needsInputs', { list: e.inputs.map((i) => i.label).join(' · ') })}
+          </div>
+        )}
         {e.unsupported && <div class="mk-warn">{e.unsupported}</div>}
         {e.connected && e.status === 'error' && e.error && <div class="mk-err">{e.error}</div>}
       </div>

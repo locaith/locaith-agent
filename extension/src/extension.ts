@@ -93,7 +93,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<TestAp
   const vi = () => config.language() === 'vi';
 
   // ── Điều phối nhiều AI: kho model (chỉ các khoá đã nhập) + nhà cung cấp ảo "Locaith Auto" ─────────────────────
-  const pool = new ModelPool(providers, { maxPerProvider: 4 });
+  const pool = new ModelPool(providers);
   const autoHooks: AutoHooks = {
     onPick: (t, tier, sessionKey) => all().forEach((c) => c.announcePick(sessionKey, `Locaith Auto → ${t.providerLabel} · ${t.modelLabel} (${vi() ? TIER_VI[tier] : tier})`)),
     onSwitch: (s) => all().forEach((c) => c.announceSwitch(s, true)),
@@ -128,7 +128,8 @@ export async function activate(context: vscode.ExtensionContext): Promise<TestAp
         return undefined;
       }
     },
-    prompt: (o) => Promise.resolve(vscode.window.showInputBox({ title: o.title, prompt: o.prompt, password: o.password, value: o.value, ignoreFocusOut: true })),
+    prompt: (o) => Promise.resolve(vscode.window.showInputBox({ title: o.title, prompt: o.prompt, password: o.password, value: o.value, placeHolder: o.placeholder, ignoreFocusOut: true })),
+    registerSecret: (v) => logger.registerSecret(v), // (0.7.7) khoá API người dùng nhập khi kết nối dịch vụ không bao giờ lọt vào nhật ký
     workspaceFolder: () => vscode.workspace.workspaceFolders?.[0]?.uri.fsPath,
     homedir: os.homedir(),
     log: (level, msg) => logger.log(level, msg),

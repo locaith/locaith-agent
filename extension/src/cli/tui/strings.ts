@@ -165,6 +165,11 @@ registerStrings('tui', {
     'ob.login.fail': 'Đăng nhập chưa thành công.',
     'ob.login.token.ask': 'Dán token (lat_…) rồi Enter',
     'ob.login.token.detail': 'Lấy token ở locaith.ai → Tài khoản → Thiết bị. Token không hiện ra màn hình.',
+    'ob.login.paste.title': 'Chờ bạn bấm «Cho phép» trong trình duyệt',
+    'ob.login.paste.detail':
+      'Cùng một máy: bấm «Cho phép» là CLI tự đăng nhập, không cần làm gì thêm. Trình duyệt ở MÁY KHÁC (SSH, máy ảo…)? Mở liên kết ở trên, bấm «Cho phép»; trang sẽ báo «không truy cập được 127.0.0.1» — bình thường: sao chép địa chỉ trên thanh địa chỉ, dán vào ô dưới (không hiện ra màn hình) rồi Enter. Esc: chọn cách đăng nhập khác.',
+    'ob.login.paste.ph': 'http://127.0.0.1:…/callback?code=…',
+    'ob.login.paste.invalid': 'Chưa đọc được địa chỉ vừa dán. Dán lại CẢ địa chỉ (bắt đầu bằng http://127.0.0.1) hoặc chỉ phần code=… của nó.',
     'ob.byok.title': 'Dùng khoá của hãng khác',
     'ob.byok.found': 'Đã có nhà cung cấp dùng được: {list}. Locaith sẽ dùng chúng.',
     'ob.byok.none': 'Chưa thấy khoá nào. Đặt biến môi trường (ANTHROPIC_API_KEY, OPENAI_API_KEY, GEMINI_API_KEY, DEEPSEEK_API_KEY, XAI_API_KEY…) rồi chạy lại locaith.',
@@ -343,6 +348,11 @@ registerStrings('tui', {
     'ob.login.fail': 'Sign-in did not complete.',
     'ob.login.token.ask': 'Paste the token (lat_…) and press Enter',
     'ob.login.token.detail': 'Get a token at locaith.ai → Account → Devices. It is not echoed.',
+    'ob.login.paste.title': 'Waiting for you to click “Allow” in the browser',
+    'ob.login.paste.detail':
+      'Same machine: click “Allow” and the CLI signs in by itself — nothing else to do. Browser on ANOTHER machine (SSH, VM…)? Open the link above and click “Allow”; the page will say it cannot reach 127.0.0.1 — that is expected: copy the address from the address bar, paste it below (it is not echoed) and press Enter. Esc: pick another way to sign in.',
+    'ob.login.paste.ph': 'http://127.0.0.1:…/callback?code=…',
+    'ob.login.paste.invalid': 'Could not read what you pasted. Paste the WHOLE address (it starts with http://127.0.0.1) or just its code=… part.',
     'ob.byok.title': 'Use another provider key',
     'ob.byok.found': 'Found a provider you can already use: {list}. Locaith will use it.',
     'ob.byok.none': 'No key found. Set an environment variable (ANTHROPIC_API_KEY, OPENAI_API_KEY, GEMINI_API_KEY, DEEPSEEK_API_KEY, XAI_API_KEY…) and run locaith again.',

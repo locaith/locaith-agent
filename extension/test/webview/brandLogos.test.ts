@@ -11,10 +11,14 @@ import { BRAND_ALIASES, LOGOS, brandFor, contrast, inkFor, monogram, THEME_INK }
 const REMOVED = ['oracle', 'salesforce', 'adobe', 'twilio', 'slack', 'canva', 'azure', 'playwright', 'zoho', 'sourcegraph', 'csharp'];
 
 /**
- * Mục kho MCP cố ý dùng monogram: (1) chưa tìm được logo SVG có giấy phép cho phép phân phối lại — monday, honeycomb, deepwiki;
+ * Mục kho MCP cố ý dùng monogram: (1) chưa tìm được logo SVG có giấy phép cho phép phân phối lại — monday, honeycomb, deepwiki (và các mục 0.7.7 liệt kê bên dưới);
  * (2) logo đã gỡ theo yêu cầu chủ thương hiệu — slack, canva, playwright (xem docs/BRAND-ASSETS.md).
  */
-const INTENTIONAL_MONOGRAM = new Set(['monday', 'honeycomb', 'deepwiki', 'slack', 'canva', 'playwright']);
+const INTENTIONAL_MONOGRAM = new Set([
+  'monday', 'honeycomb', 'deepwiki', 'slack', 'canva', 'playwright',
+  // 0.7.7: các mục thêm ở đợt mở rộng kho (10/11/2026) chưa có logo SVG có giấy phép phân phối lại trong bộ logo đóng gói — hiện monogram (azure-mcp, twilio-docs, slack-community: logo hãng đã gỡ theo yêu cầu chủ thương hiệu).
+  'excel-local', 'todoist', 'calendly', 'fireflies', 'granola', 'typeform', 'make', 'n8n-mcp', 'azure-mcp', 'kubernetes', 'pinecone', 'amplitude', 'mixpanel', 'ahrefs', 'semrush', 'klaviyo', 'apollo', 'attio', 'jina', 'apify', 'brightdata', 'duckduckgo', 'brave-search', 'perplexity', 'openai-docs', 'twilio-docs', 'bitrix24-docs', 'xero-local', 'slack-community',
+]);
 
 /** Plugin tiêu biểu trong chợ chính thức của Anthropic (tên, nguồn) → logo mong đợi. */
 const PLUGINS: [string, string, string][] = [

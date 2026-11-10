@@ -12,7 +12,7 @@ import type { CompactInfo } from '../../shared/protocol';
 import type { ChatMessage, ContentBlock, LLMProvider } from '../types';
 import { sliceSafe } from '../textSafe';
 import { assembleSummary, extractFacts, narrativePrompt, requestBudgetChars } from './compactSummary';
-import { DEFAULT_COMPACT_TUNING, effectiveCompactThreshold, formatTokens, type CompactTuning } from './compactTuning';
+import { autoClearTarget, DEFAULT_COMPACT_TUNING, effectiveCompactThreshold, formatTokens, type CompactTuning } from './compactTuning';
 import { estimateMessagesTokens } from './tokens';
 import { clearOldToolResults } from './toolResultClearing';
 import { t, type Lang } from './strings';
@@ -377,10 +377,13 @@ export async function compactIfNeeded(
   const lastMsg = session.messages[session.messages.length - 1];
   const midToolLoop = !!lastMsg && lastMsg.role === 'user' && lastMsg.content.some((b) => b.type === 'tool_result');
   const deferClear = !needCompact && midToolLoop && !!o.provider.capabilities?.thinkingBoundToPrefix;
+  // (0.7.7) Chạm ngưỡng nén bị TRẦN chặn (cửa sổ lớn): lược xuống ~93% ngưỡng chứ không sát ngưỡng — xem autoClearTarget. Các trường hợp còn lại: đích theo phần trăm cửa sổ như cũ.
+  const targetTokens = needCompact ? autoClearTarget({ contextWindow: o.contextWindow, compactAt: o.compactAt, threshold, estimated, before, force: !!o.force }) : undefined;
   const cleared = deferClear ? { cleared: 0, tokensBefore: estimated, tokensAfter: estimated } : clearOldToolResults(session, {
     contextWindow: o.contextWindow,
     clearAtPercent: tuning.clearAtPercent,
     targetPercent: tuning.clearTargetPercent,
+    ...(targetTokens !== undefined ? { targetTokens } : {}),
     keepRecentResults: tuning.keepRecentResults,
     lang: o.language,
     force: needCompact,

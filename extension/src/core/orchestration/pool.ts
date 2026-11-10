@@ -54,6 +54,12 @@ export type PoolDescription = OrchestrationPoolEntry;
 
 const DEFAULT_CONTEXT = 128_000;
 
+/**
+ * Số agent chạy CÙNG LÚC tối đa trên MỘT nhà cung cấp (cổng thứ hai, cạnh `agents.maxConcurrent` — tổng mọi hãng). 0.7.7 nâng 4 → 8: swarm thường chỉ có một hãng
+ * (Locaith hoặc một khoá), nên trần 4 làm «16 chạy cùng lúc» chỉ còn 4 thật. 429 của hãng vẫn được thử lại + nghỉ (cooldown) như cũ.
+ */
+export const DEFAULT_MAX_PER_PROVIDER = 8;
+
 export class ModelPool {
   private readonly cooldownUntil = new Map<string, number>();
   private readonly uses = new Map<string, number>();
@@ -66,7 +72,7 @@ export class ModelPool {
     opts: { now?: () => number; maxPerProvider?: number } = {},
   ) {
     this.now = opts.now ?? Date.now;
-    this.perProvider = Math.max(1, opts.maxPerProvider ?? 4);
+    this.perProvider = Math.max(1, opts.maxPerProvider ?? DEFAULT_MAX_PER_PROVIDER);
   }
 
   /** Nhà cung cấp đã có khoá (trừ demo/Auto). */
