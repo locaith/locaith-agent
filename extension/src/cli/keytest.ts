@@ -127,11 +127,6 @@ export async function keytest(o: KeytestOptions): Promise<number> {
   let resolveDone!: () => void;
   const done = new Promise<void>((r) => (resolveDone = r));
 
-  const emit = (line: string): void => {
-    say(line);
-    log.push(line);
-  };
-
   const apply = (e: KeyEvent): string => {
     if (e.type === 'paste') {
       f.sawPaste = true;
@@ -164,9 +159,11 @@ export async function keytest(o: KeytestOptions): Promise<number> {
     last = now;
     const acts = evs.map(apply);
     const shown = ed.text.replace(/\n/g, '⏎');
-    const cp = cps(chunk);
-    const raw = chunk === '' ? '(hết hạn chờ)'.padEnd(24) + ' '.repeat(15) + ' '.repeat(40) : `${hex(chunk).padEnd(24)} ${showChunk(chunk).padEnd(14)} ${cp.length <= 40 ? cp.padEnd(40) : cp.slice(0, 37) + '…'}`;
-    emit(`+${String(dt).padStart(4)}ms  ${raw}  → ${acts.length ? acts.join(', ') : '(chờ gói sau)'}   | ô nhập: ${shown}`);
+    // Dòng trên màn hình ngắn (cmd 80 cột vẫn đọc được); bản ghi lưu thêm các điểm mã.
+    const core = chunk === '' ? '(hết hạn chờ)' : `${hex(chunk).padEnd(14)} ${showChunk(chunk)}`;
+    const tail = `→ ${acts.length ? acts.join(', ') : '(chờ gói sau)'} | ô nhập: ${shown}`;
+    say(`+${dt}ms  ${core}  ${tail}`);
+    log.push(`+${dt}ms  ${core}  ${chunk === '' ? '' : cps(chunk) + '  '}${tail}`);
   };
 
   const onData = (d: string | Buffer): void => {
@@ -181,7 +178,7 @@ export async function keytest(o: KeytestOptions): Promise<number> {
       f.sawBs7f = true;
       if (chunk.length > 1) f.sawBsBurst = true;
     }
-    if (/^\p{M}/u.test(chunk)) f.sawStandaloneMark = true;
+    if (/\p{M}/u.test(chunk)) f.sawStandaloneMark = true;
     if (chunk.includes('�')) f.sawReplacementChar = true;
     if (/^\x1b[A-Za-z]$/.test(chunk)) f.escLetters++;
     if (flushTimer) clearTimeout(flushTimer);
