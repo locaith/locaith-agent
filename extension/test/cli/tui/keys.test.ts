@@ -95,6 +95,76 @@ describe('byte 0x08: Backspace thường (conhost của Windows) hay Ctrl+Backsp
     expect(ctrlHMode({ LOCAITH_CTRL_H: 'linh tinh' }, 'win32')).toBe('backspace'); // giá trị lạ: bỏ qua, dùng đoán theo môi trường
   });
 
+  // (0.4.10) Laptop cài Vietkey VẪN mất chữ sau 0.4.9: bộ gõ có thể đẩy Backspace thành 0x08 ngay cả khi terminal gửi 0x7f cho Backspace thường (Windows Terminal, VS Code),
+  // nên 'ctrl-backspace' nuốt cả từ. Chống bằng cách nhìn thứ ĐI SAU 0x08 (xem KeyParserOptions.deferCtrlH).
+  describe('chống bộ gõ tiếng Việt ở chế độ ctrl-backspace (deferCtrlH)', () => {
+    const defer = (...chunks: string[]): string[] => {
+      const p = new KeyParser({ ctrlH: 'ctrl-backspace', deferCtrlH: true });
+      const out: KeyEvent[] = [];
+      for (const c of chunks) out.push(...p.feed(c));
+      out.push(...p.flush());
+      return names(out);
+    };
+
+    it('0x08 liền trước chữ trong CÙNG gói → Backspace thường', () => {
+      expect(defer('vie\x08ê')).toEqual(['vie', 'backspace', 'ê']);
+      expect(defer('a\x08á\x08ấ')).toEqual(['a', 'backspace', 'á', 'backspace', 'ấ']);
+      expect(defer('\x08\x08ế')).toEqual(['backspace', 'backspace', 'ế']);
+    });
+
+    it('0x08 đứng một mình rồi chữ đến ở gói kế (bộ gõ tách gói) → Backspace thường', () => {
+      expect(defer('vie', '\x08', 'ê')).toEqual(['vie', 'backspace', 'ê']);
+      expect(defer('\x08', '\x08', 'ế')).toEqual(['backspace', 'backspace', 'ế']);
+    });
+
+    it('giữ Ctrl+Backspace (nhiều 0x08 liền nhau, KHÔNG có gì khác) → mọi cái đều là Ctrl+Backspace sau thời gian chờ', () => {
+      const p = new KeyParser({ ctrlH: 'ctrl-backspace', deferCtrlH: true });
+      expect(p.feed('\x08\x08')).toEqual([]);
+      expect(names(p.feed('\x08'))).toEqual([]);
+      expect(p.pending).toBe(true);
+      expect(names(p.flush())).toEqual(['ctrl+backspace', 'ctrl+backspace', 'ctrl+backspace']);
+    });
+
+    it('0x08 đứng một mình tới hết hạn chờ → vẫn là Ctrl+Backspace thật (xoá cả từ)', () => {
+      const p = new KeyParser({ ctrlH: 'ctrl-backspace', deferCtrlH: true });
+      expect(p.feed('\x08')).toEqual([]); // chưa quyết
+      expect(p.pending).toBe(true);
+      expect(names(p.flush())).toEqual(['ctrl+backspace']);
+    });
+
+    it('chế độ backspace (conhost) không chờ gì: 0x08 là Backspace thường ngay', () => {
+      const p = new KeyParser({ ctrlH: 'backspace', deferCtrlH: true });
+      expect(names(p.feed('\x08'))).toEqual(['backspace']);
+      expect(p.pending).toBe(false);
+    });
+
+    it('pendingMs: 0x08 đứng một mình chờ lâu hơn ESC đơn', () => {
+      const p = new KeyParser({ ctrlH: 'ctrl-backspace', deferCtrlH: true });
+      p.feed('\x1b');
+      expect(p.pendingMs(30)).toBe(30);
+      p.flush();
+      p.feed('\x08');
+      expect(p.pendingMs(30)).toBeGreaterThanOrEqual(60);
+    });
+
+    it('TerminalSession: 0x08 đơn độc thành Ctrl+Backspace sau thời gian chờ, còn "0x08 rồi chữ" không bao giờ', async () => {
+      const got: string[] = [];
+      const handlers: Array<(d: string) => void> = [];
+      const stdin = { isTTY: false, on: (_e: string, f: (d: string) => void) => void handlers.push(f), resume: () => undefined, setEncoding: () => undefined };
+      const s = new TerminalSession({ stdin: stdin as never, stdout: { write: () => true }, onEvent: (e) => void got.push(...names([e])), ctrlH: 'ctrl-backspace' });
+      s.start();
+      handlers[0]('\x08');
+      handlers[0]('ê');
+      expect(got).toEqual(['backspace', 'ê']);
+      got.length = 0;
+      handlers[0]('\x08');
+      expect(got).toEqual([]);
+      await new Promise((r) => setTimeout(r, 140));
+      expect(got).toEqual(['ctrl+backspace']);
+      s.stop();
+    });
+  });
+
   it('TerminalSession dùng tuỳ chọn ctrlH cho bộ phân tích phím của nó', () => {
     const got: string[] = [];
     const handlers: Array<(d: string) => void> = [];

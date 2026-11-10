@@ -41,6 +41,67 @@ describe('Editor — chỉnh sửa', () => {
     e.backspace();
     expect(e.text).toBe('vi');
   });
+  // (0.4.10) Bộ gõ «Unicode tổ hợp» đổi dấu bằng cách xoá ĐÚNG dấu cuối rồi gõ dấu mới; Backspace xoá cả chữ ở đây nuốt chữ đứng trước («Việt» → «Vị̂t»).
+  it('chữ vừa ghép từ dấu gõ RỜI: mỗi Backspace bỏ đúng MỘT dấu bộ gõ đã gửi (theo thứ tự gõ), rồi mới tới chữ gốc', () => {
+    const e = ed('vi');
+    e.insert('e');
+    e.insert('̂'); // mũ
+    e.insert('́'); // sắc → ế
+    expect(e.text).toBe('viế');
+    e.backspace(); // bỏ dấu sắc
+    expect(e.text).toBe('viê');
+    e.insert('̀'); // huyền → ề
+    expect(e.text).toBe('viề');
+    e.backspace();
+    e.backspace(); // bỏ mũ → e
+    expect(e.text).toBe('vie');
+    e.backspace(); // chữ gốc
+    expect(e.text).toBe('vi');
+  });
+  it('thứ tự gõ ≠ thứ tự NFD: e + mũ + chấm dưới (ệ) — Backspace bỏ CHẤM trước, không bỏ mũ', () => {
+    const e = ed('');
+    e.insert('Vie');
+    e.insert('̂'); // mũ
+    e.insert('̣'); // nặng (U+0323) — NFD sẽ xếp nó TRƯỚC mũ
+    expect(e.text).toBe('Việ');
+    e.backspace();
+    expect(e.text).toBe('Viê'); // mũ còn, chấm mất
+    e.insert('̣'); // gõ lại dấu nặng
+    expect(e.text).toBe('Việ');
+  });
+  it('dấu và chữ gõ cùng một gói: dấu ghép vào chữ trước, phần chữ còn lại chèn sau; Backspace chữ cuối vẫn xoá một chữ', () => {
+    const e = ed('vie');
+    e.insert('̂t'); // mũ + t trong một gói
+    expect(e.text).toBe('viêt');
+    e.backspace(); // t
+    expect(e.text).toBe('viê');
+    e.backspace(); // ê vừa ghép từ dấu cũ: tail đã mất hiệu lực vì có chữ chen vào → xoá cả chữ
+    expect(e.text).toBe('vi');
+  });
+  it('tail hết hiệu lực khi con trỏ rời đi / văn bản đổi: Backspace quay về xoá cả chữ (không bỏ dấu "ma")', () => {
+    const e = ed('');
+    e.insert('Vie');
+    e.insert('̂');
+    e.insert('́');
+    expect(e.text).toBe('Viế');
+    e.left();
+    e.right();
+    e.backspace();
+    expect(e.text).toBe('Vi');
+    const f = ed('');
+    f.insert('Vie');
+    f.insert('̂');
+    f.setText(f.text); // nạp lại (lịch sử): không còn biết thứ tự gõ
+    f.backspace();
+    expect(f.text).toBe('Vi');
+  });
+  it('chữ dựng sẵn (bộ gõ dựng sẵn, không dấu rời) vẫn xoá nguyên chữ mỗi Backspace', () => {
+    const e = ed('');
+    e.insert('Việt');
+    e.backspace();
+    e.backspace();
+    expect(e.text).toBe('Vi');
+  });
   it('gõ nhanh cả cụm dạng NFD một lần (tie + ̂ + ́ + ng) → NFC; chữ không có dấu kết hợp giữ NGUYÊN (không đụng nội dung dán)', () => {
     const e = ed('');
     e.insert('tiếng'); // t i e ̂ ́ n g (NFD)

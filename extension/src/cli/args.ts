@@ -5,12 +5,12 @@
  *   locaith "việc cần làm"        phiên tương tác, gửi sẵn câu này
  *   locaith -p "việc"             in một lần rồi thoát (cũng nhận từ stdin: `cat log | locaith -p "tóm tắt"`)
  *   locaith ask "việc"            như `-p` (tên cũ, giữ để không vỡ script)
- *   locaith doctor | login | logout | whoami | consent | update | sessions | config | help [chủ đề] | version
+ *   locaith doctor | login | logout | whoami | consent | update | sessions | config | keytest | help [chủ đề] | version
  */
 
 import path from 'node:path';
 
-export type CliCommand = 'chat' | 'print' | 'doctor' | 'login' | 'logout' | 'whoami' | 'consent' | 'update' | 'sessions' | 'config' | 'provider' | 'help' | 'version';
+export type CliCommand = 'chat' | 'print' | 'doctor' | 'login' | 'logout' | 'whoami' | 'consent' | 'update' | 'sessions' | 'config' | 'provider' | 'keytest' | 'help' | 'version';
 export type OutputFormat = 'text' | 'json' | 'stream-json';
 export type PermissionModeArg = 'default' | 'acceptEdits' | 'plan' | 'bypass';
 
@@ -80,7 +80,7 @@ export interface ProviderArgs {
 
 export class UsageError extends Error {}
 
-const SUBCOMMANDS = new Set(['doctor', 'login', 'logout', 'whoami', 'consent', 'update', 'sessions', 'config', 'provider', 'help', 'version', 'ask']);
+const SUBCOMMANDS = new Set(['doctor', 'login', 'logout', 'whoami', 'consent', 'update', 'sessions', 'config', 'provider', 'keytest', 'help', 'version', 'ask']);
 
 const PERMISSION_ALIASES: Record<string, PermissionModeArg> = {
   default: 'default',

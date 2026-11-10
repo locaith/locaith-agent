@@ -48,7 +48,7 @@ export class TerminalSession {
   private cleanups: Array<() => void> = [];
 
   constructor(private readonly o: SessionOptions) {
-    this.parser = new KeyParser({ ctrlH: o.ctrlH ?? (o.processHandlers ? ctrlHMode(process.env, process.platform) : 'ctrl-backspace') });
+    this.parser = new KeyParser({ ctrlH: o.ctrlH ?? (o.processHandlers ? ctrlHMode(process.env, process.platform) : 'ctrl-backspace'), deferCtrlH: true });
   }
 
   get isActive(): boolean {
@@ -129,7 +129,7 @@ export class TerminalSession {
       this.escTimer = setTimeout(() => {
         this.escTimer = null;
         for (const e of this.parser.flush()) this.safeEmit(e);
-      }, this.o.escTimeoutMs ?? 30);
+      }, this.parser.pendingMs(this.o.escTimeoutMs ?? 30));
     }
   }
 

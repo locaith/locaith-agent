@@ -55,6 +55,8 @@ export interface TuiOptions {
   initialPrompt?: string;
   /** Cách hiểu byte 0x08 (Backspace thường ở conhost của Windows hay Ctrl+Backspace) — mặc định đoán theo môi trường; chủ yếu để kiểm thử. */
   ctrlH?: CtrlHMode;
+  /** Thời gian chờ (ms) trước khi ESC đơn / 0x08 đơn độc được quyết định (mặc định 30 / 70) — chủ yếu để kiểm thử không phụ thuộc tốc độ máy. */
+  escTimeoutMs?: number;
   /** Thay thế đọc ảnh clipboard (kiểm thử). */
   readImage?: () => Promise<Attachment | null>;
   /** Như `readImage` nhưng trả cả lý do thất bại (kiểm thử các thông báo lỗi); ưu tiên hơn `readImage`. */
@@ -161,6 +163,7 @@ export class TuiApp {
       onEvent: (e) => this.onKeyEvent(e),
       processHandlers: real,
       ...(o.ctrlH ? { ctrlH: o.ctrlH } : {}),
+      ...(o.escTimeoutMs ? { escTimeoutMs: o.escTimeoutMs } : {}),
       onSignal: (sig) => this.onSignal(sig),
       onCrash: () => undefined,
     });

@@ -80,7 +80,19 @@ export function ctrlHMode(env: NodeJS.ProcessEnv, platform: NodeJS.Platform): Ct
 export interface KeyParserOptions {
   /** Cách hiểu byte 0x08 (xem `CtrlHMode`). Mặc định 'ctrl-backspace' (giữ hành vi cũ cho test và terminal Unix). */
   ctrlH?: CtrlHMode;
+  /**
+   * Chống bộ gõ tiếng Việt ở chế độ 'ctrl-backspace'. Bộ gõ kiểu «xoá chữ rồi gõ lại có dấu» (UniKey, EVKey, OpenKey, Vietkey…) đẩy Backspace vào console bằng cách của nó,
+   * và trên Windows có đường làm 0x08 đến CLI NGAY CẢ khi terminal đang gửi 0x7f cho Backspace thường (WM_CHAR(8) vào Windows Terminal / VS Code…). Hiểu 0x08 ấy là
+   * Ctrl+Backspace thì mỗi lần gõ dấu nuốt cả từ đứng trước — «gõ có dấu là mất chữ». Khi bật:
+   *  • 0x08 đứng liền trước dữ liệu khác (cùng gói) → Backspace THƯỜNG: Ctrl+Backspace thật luôn đến như một gói riêng;
+   *  • 0x08 đứng MỘT MÌNH ở cuối gói → chờ (xem `pendingMs`) xem có chữ theo sau không: có → Backspace thường, hết hạn → Ctrl+Backspace như cũ.
+   * Mặc định tắt cho bộ phân tích dùng trực tiếp (test); `TerminalSession` bật.
+   */
+  deferCtrlH?: boolean;
 }
+
+/** Thời gian chờ (ms) trước khi một 0x08 đứng một mình được coi là Ctrl+Backspace thật — đủ dài cho độ trễ giữa Backspace và chữ mới của bộ gõ chậm, đủ ngắn để không ai thấy trễ. */
+export const CTRL_H_DEFER_MS = 70;
 
 export class KeyParser {
   private buf = '';
@@ -99,6 +111,11 @@ export class KeyParser {
   /** Có dữ liệu chờ (ESC đơn hoặc chuỗi dở) — người gọi hẹn giờ rồi `flush()`. */
   get pending(): boolean {
     return this.buf.length > 0 && this.paste === null;
+  }
+
+  /** Bao lâu (ms) người gọi nên chờ trước khi `flush()` phần đang chờ: 0x08 đứng một mình chờ lâu hơn ESC đơn (ESC chỉ cần đủ để chuỗi thoát dở kịp đến nốt). */
+  pendingMs(escMs: number): number {
+    return /^\x08+$/.test(this.buf) ? Math.max(escMs, CTRL_H_DEFER_MS) : escMs;
   }
 
   /** Hết thời gian chờ: coi phần còn lại là phím hoàn chỉnh (ESC đơn → Esc). */
@@ -169,7 +186,18 @@ export class KeyParser {
       case 13: return { events: [mk('enter', raw)], used: 1 };
       case 10: return { events: [mk('char', raw, { ctrl: true }, 'j')], used: 1 }; // Ctrl+J = xuống dòng
       case 9: return { events: [mk('tab', raw)], used: 1 };
-      case 8: return { events: [mk('backspace', raw, this.opts.ctrlH === 'backspace' ? {} : { ctrl: true })], used: 1 }; // Ctrl+H / Ctrl+Backspace — hay Backspace thường ở conhost: xem CtrlHMode
+      case 8: {
+        // Ctrl+H / Ctrl+Backspace — hay Backspace thường ở conhost: xem CtrlHMode
+        if (this.opts.ctrlH === 'backspace') return { events: [mk('backspace', raw)], used: 1 };
+        if (this.opts.deferCtrlH) {
+          // Cả gói chỉ toàn 0x08 (một lần nhấn, hoặc giữ phím nên đến thành nhiều 0x08 liền nhau): chờ xem có chữ theo sau không (người gọi hẹn giờ rồi flush).
+          // Có bất kỳ gì khác theo sau → bộ gõ («xoá chữ rồi gõ lại có dấu»), không phải Ctrl+Backspace.
+          if (/^\x08+$/.test(b)) {
+            if (!force) return 'wait';
+          } else return { events: [mk('backspace', raw)], used: 1 };
+        }
+        return { events: [mk('backspace', raw, { ctrl: true })], used: 1 };
+      }
       case 127: return { events: [mk('backspace', raw)], used: 1 };
       case 0: return { events: [mk('char', raw, { ctrl: true }, ' ')], used: 1 };
     }

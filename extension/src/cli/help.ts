@@ -20,6 +20,7 @@ USAGE
 
 COMMANDS
   locaith doctor                check this machine: Node, git, ffmpeg, key, a real call to the gateway (add --json for scripts)
+  locaith keytest               record what your keyboard / Vietnamese input method sends to the CLI (to report lost-letter bugs)
   locaith login | logout        sign in (opens the browser, or --no-browser to paste a token) / delete the saved key
   locaith whoami                account, plan, usable models, whether the data notice is accepted
   locaith consent --yes         record acceptance of the data notice for the account (once, by the account owner)
@@ -57,6 +58,7 @@ CÁCH DÙNG
 
 LỆNH
   locaith doctor                kiểm tra máy: Node, git, ffmpeg, khoá, kết nối thật tới cổng (thêm --json cho script)
+  locaith keytest               ghi lại phím + bộ gõ tiếng Việt gửi gì tới CLI (để báo lỗi mất chữ khi gõ)
   locaith login | logout        đăng nhập (mở trình duyệt, hoặc --no-browser để dán token) / xoá khoá đã lưu
   locaith whoami                tài khoản, gói, model dùng được, đã đồng ý thông báo dữ liệu chưa
   locaith consent --yes         ghi nhận đồng ý thông báo dữ liệu cho tài khoản (một lần, bởi chủ tài khoản)
@@ -193,6 +195,7 @@ Ký ức bền (.locaith/memory/MEMORY.md và ~/.locaith/memory/MEMORY.md) đư�
   Chưa đồng ý thông báo dữ liệu   locaith consent --yes (hoặc làm ở lần chạy đầu)
   Màu/khung bị vỡ          đặt NO_COLOR=1 hoặc LOCAITH_ASCII=1; dùng Windows Terminal/PowerShell 7 để có đủ màu
   Trợ lý bị treo           Esc để dừng; --timeout <giây> với -p; locaith doctor để kiểm mạng
+  Gõ tiếng Việt mất chữ    locaith keytest rồi gõ vài từ có dấu, gửi tệp ~/.locaith/keytest.txt; tạm thời đặt LOCAITH_CTRL_H=backspace nếu Backspace xoá cả từ
   Cập nhật                 locaith update (hoặc pip install -U locaith-cli)
 Báo lỗi: https://locaith.ai (kèm kết quả locaith doctor --json, đã tự ẩn khoá).`,
 };
@@ -304,6 +307,7 @@ Persistent memory (.locaith/memory/MEMORY.md and ~/.locaith/memory/MEMORY.md) is
   Data notice not accepted locaith consent --yes (or do it on first run)
   Broken colors/boxes      set NO_COLOR=1 or LOCAITH_ASCII=1; use Windows Terminal/PowerShell 7 for full color
   Assistant seems stuck    Esc to stop; --timeout <s> with -p; locaith doctor to check the network
+  Letters vanish typing Vietnamese   run locaith keytest, type a few accented words and send ~/.locaith/keytest.txt; as a stopgap set LOCAITH_CTRL_H=backspace if Backspace deletes whole words
   Update                   locaith update (or pip install -U locaith-cli)
 Report bugs: https://locaith.ai (attach locaith doctor --json output; keys are masked).`,
 };

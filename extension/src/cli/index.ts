@@ -22,6 +22,7 @@ import { UsageError, parseArgs, wantsSessionPicker, type ParsedArgs } from './ar
 import { deviceLabel, loginWithBrowser, type BrowserLoginOptions } from './browserLogin';
 import { configFile, hasByokKey, homeDir, readApiKey, removeApiKey, writeApiKey } from './credentials';
 import { doctor } from './doctor';
+import { keytest } from './keytest';
 import { HELP_TOPICS, helpTopicText, topicList, usageText } from './help';
 import { detectLang, getLang, setLang, t, type Lang } from './i18n';
 import { runPrint, type PrintDeps } from './print';
@@ -33,7 +34,7 @@ import { SessionRepo } from './runtime/sessions';
 import { runOnboarding, runTui, withTerminalUi } from './tui';
 import { compareVersions, latestKnown, runUpdate, updateAvailable } from './update';
 
-export const VERSION = '0.4.9';
+export const VERSION = '0.4.10';
 
 // ── nhỏ gọn: ngôn ngữ, tin cậy, tiện ích ─────────────────────────────────────────────────────────
 
@@ -478,6 +479,8 @@ async function main(argv: string[]): Promise<number> {
       }
       case 'doctor':
         return await doctor({ cwd: a.cwd, baseUrl: a.baseUrl, model: a.model, json: a.json || a.outputFormat === 'json', version: VERSION, lang, env, out: (l) => console.log(l), isTrusted: (c) => isTrusted(c, env) });
+      case 'keytest':
+        return await keytest({ version: VERSION, lang, env, platform: process.platform, stdin: process.stdin, out: (l) => console.log(l) });
       case 'login':
         return await loginCmd(accountDeps(a, env));
       case 'whoami':

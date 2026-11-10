@@ -81,16 +81,29 @@ export function layoutRows(text: string, width: number): VRow[] {
   return rows;
 }
 
+/** Dấu kết hợp mà bộ gõ «Unicode tổ hợp» gõ RỜI: nhớ thứ tự điểm mã bộ gõ đã gửi cho chữ vừa ghép (xem `Editor.backspace`). */
+interface ComposedTail {
+  /** Văn bản và con trỏ ngay sau khi ghép — chỉ còn hiệu lực khi cả hai y nguyên. */
+  text: string;
+  cursor: number;
+  /** Chỉ số bắt đầu của chữ đó trong `text`. */
+  start: number;
+  /** Các điểm mã THEO THỨ TỰ BỘ GÕ GỬI (chữ gốc rồi từng dấu) — khác thứ tự chuẩn NFD khi dấu thanh gõ sau dấu mũ (ệ: e + ̂ + ̣, NFD là e + ̣ + ̂). */
+  seq: string[];
+}
+
 export class Editor {
   text = '';
   cursor = 0;
   killed = '';
   private desiredCol: number | null = null;
+  private tail: ComposedTail | null = null;
 
   setText(s: string, cursor: number = s.length): void {
     this.text = s;
     this.cursor = Math.max(0, Math.min(cursor, s.length));
     this.desiredCol = null;
+    this.tail = null;
   }
 
   clear(): void {
@@ -107,22 +120,51 @@ export class Editor {
     // Backspace xoá đúng một chữ, độ rộng/ngắt dòng không lệch, và dấu không bị rơi ra thành một ô riêng. Chữ không có dấu kết hợp thì giữ NGUYÊN (không đụng nội dung dán).
     if (/\p{M}/u.test(s)) {
       if (this.cursor > 0 && /^\p{M}/u.test(s)) {
+        const lead = /^\p{M}+/u.exec(s)![0];
         const p = prevBoundary(this.text, this.cursor);
-        const merged = (this.text.slice(p, this.cursor) + s).normalize('NFC');
+        const seq = [...this.typedSeq(p, this.text.slice(p, this.cursor)), ...lead];
+        const merged = seq.join('').normalize('NFC');
         this.text = this.text.slice(0, p) + merged + this.text.slice(this.cursor);
         this.cursor = p + merged.length;
         this.desiredCol = null;
+        this.tail = { text: this.text, cursor: this.cursor, start: p, seq };
+        const rest = s.slice(lead.length);
+        if (rest) this.insert(rest);
         return;
       }
       s = s.normalize('NFC');
     }
+    this.tail = null;
     this.text = this.text.slice(0, this.cursor) + s + this.text.slice(this.cursor);
     this.cursor += s.length;
     this.desiredCol = null;
   }
 
+  /** Các điểm mã của chữ `g` (bắt đầu ở `p`, ngay trước con trỏ) theo thứ tự bộ gõ đã gửi nếu biết, nếu không thì dạng NFD chuẩn. */
+  private typedSeq(p: number, g: string): string[] {
+    const t = this.tail;
+    if (t && t.start === p && t.cursor === this.cursor && t.text === this.text && t.seq.join('').normalize('NFC') === g) return [...t.seq];
+    return [...g.normalize('NFD')];
+  }
+
+  /**
+   * Xoá lùi. Thường là một CỤM chữ (ê, ế, emoji ZWJ…). Ngoại lệ: chữ vừa được ghép từ các dấu mà bộ gõ «Unicode tổ hợp» gõ RỜI thì mỗi Backspace bỏ ĐÚNG MỘT điểm mã bộ gõ đã
+   * gửi (dấu cuối cùng) — như Notepad/Word, và đúng cách bộ gõ đó tính số Backspace khi đổi dấu (ế → ề: «xoá dấu sắc, gõ dấu huyền»). Xoá cả chữ ở đây thì Backspace thừa nuốt chữ
+   * đứng trước, dấu mới rơi vào chữ sai («Việt» → «Vị̂t»: mất «e»).
+   */
   backspace(): void {
     if (this.cursor <= 0) return;
+    const t = this.tail;
+    if (t && t.seq.length > 1 && t.cursor === this.cursor && t.text === this.text) {
+      const seq = t.seq.slice(0, -1);
+      const rest = seq.join('').normalize('NFC');
+      this.text = this.text.slice(0, t.start) + rest + this.text.slice(this.cursor);
+      this.cursor = t.start + rest.length;
+      this.desiredCol = null;
+      this.tail = seq.length > 1 ? { text: this.text, cursor: this.cursor, start: t.start, seq } : null;
+      return;
+    }
+    this.tail = null;
     const p = prevBoundary(this.text, this.cursor);
     this.text = this.text.slice(0, p) + this.text.slice(this.cursor);
     this.cursor = p;
@@ -139,11 +181,13 @@ export class Editor {
   left(): void {
     this.cursor = prevBoundary(this.text, this.cursor);
     this.desiredCol = null;
+    this.tail = null;
   }
 
   right(): void {
     this.cursor = nextBoundary(this.text, this.cursor);
     this.desiredCol = null;
+    this.tail = null;
   }
 
   private wordLeftIndex(from: number): number {
@@ -173,11 +217,13 @@ export class Editor {
   wordLeft(): void {
     this.cursor = this.wordLeftIndex(this.cursor);
     this.desiredCol = null;
+    this.tail = null;
   }
 
   wordRight(): void {
     this.cursor = this.wordRightIndex(this.cursor);
     this.desiredCol = null;
+    this.tail = null;
   }
 
   /** Ctrl+W: xoá từ trước con trỏ. */
@@ -210,12 +256,14 @@ export class Editor {
   home(): void {
     this.cursor = this.lineBounds()[0];
     this.desiredCol = null;
+    this.tail = null;
   }
 
   /** Ctrl+E / End: cuối dòng logic. */
   end(): void {
     this.cursor = this.lineBounds()[1];
     this.desiredCol = null;
+    this.tail = null;
   }
 
   /** Ctrl+K: xoá tới cuối dòng (nếu đã ở cuối thì xoá dấu xuống dòng). */
@@ -283,6 +331,7 @@ export class Editor {
       i += g.length;
     }
     this.cursor = i;
+    this.tail = null;
     return true;
   }
 
