@@ -259,7 +259,7 @@ describe('TuiApp + MockRuntime + xterm headless', () => {
     await b.type('tiếng viet');
     await b.type('\x7f'); // Backspace thường: terminal đã chứng tỏ gửi 0x7f cho nó
     expect(b.app.editor.text).toBe('tiếng vie');
-    await b.type('\x08'); // Ctrl+Backspace
+    await b.type('\x08', 250); // Ctrl+Backspace (quyết sau 70 ms chờ xem có chữ theo sau không)
     expect(b.app.editor.text).toBe('tiếng ');
     await b.type(KEY.ctrl('c'));
   });
@@ -283,7 +283,7 @@ describe('TuiApp + MockRuntime + xterm headless', () => {
     await b.type('e');
     await b.type('\x08ê'); // …nhưng bộ gõ gửi 0x08 liền chữ có dấu
     expect(b.app.editor.text).toBe('tiếng viê');
-    await b.type('\x08');
+    await b.type('\x08', 250);
     expect(b.app.editor.text).toBe('tiếng vi');
     await b.type(KEY.ctrl('c'));
   });
