@@ -6,11 +6,12 @@ Locaith AI là trợ lý AI nằm ngay trong thanh bên của Chrome và Microso
 • Làm việc nhiều bước trên trang: bấm, gõ, chọn, cuộn, mở và chuyển tab. Mặc định tiện ích hỏi trước mỗi thao tác; chế độ «Toàn quyền» chỉ bật khi chính bạn yêu cầu. Dừng được bất cứ lúc nào.
 • Lưu lịch sử trò chuyện trên máy, tìm lại, rẽ nhánh, xuất ra tệp Markdown.
 
-Bạn dùng khoá API của riêng mình với nhà cung cấp mô hình AI mình chọn, hoặc đăng nhập bằng tài khoản nhà cung cấp hỗ trợ đăng nhập một chạm. Có chế độ demo để thử giao diện ngay, không cần khoá.
+Bạn dùng khoá API của riêng mình với nhà cung cấp mô hình AI mình chọn, hoặc đăng nhập bằng tài khoản nhà cung cấp hỗ trợ đăng nhập một chạm. Tuỳ chọn: kết nối tài khoản Locaith (dán «mã kết nối» lấy ở locaith.ai) để dùng mô hình Locaith-v5-flash và Locaith-v5-SI, cửa sổ ngữ cảnh 1 triệu token, không cần khoá API — tài khoản mới có ít token để thử, dùng tiếp cần gói tại locaith.ai. Có chế độ demo để thử giao diện ngay, không cần khoá.
 
 Quyền riêng tư:
 • Ở lần mở đầu tiên, tiện ích nêu rõ dữ liệu nào được gửi tới đâu và chỉ chạy sau khi bạn đồng ý.
 • Khoá API lưu trong bộ nhớ riêng của tiện ích trên máy này (không mã hoá), chỉ gửi tới đúng nhà cung cấp của khoá.
+• Nếu bạn tự kết nối tài khoản Locaith để dùng mô hình Locaith (tuỳ chọn, không bắt buộc), câu hỏi, tệp đính kèm và nội dung trang bạn cho trợ lý đọc được gửi tới dịch vụ của Locaith để xử lý và lưu nhằm tìm lỗi, cải thiện mô hình — chỉ sau khi bạn đồng ý riêng thông báo dữ liệu của Locaith trong khung chat. Mã kết nối cũng nằm trong bộ nhớ riêng của tiện ích (không mã hoá); thu hồi bất cứ lúc nào bằng «Đăng xuất» hoặc trên locaith.ai. Không dùng mô hình Locaith thì không có gì của bạn được gửi tới Locaith, ngoại trừ đánh giá sao dưới đây.
 • Chỉ khi bạn tự chạm một ngôi sao trong lời mời đánh giá, số sao (và nhận xét nếu bạn gõ) mới được gửi ẩn danh tới Locaith — không kèm nội dung trang, hội thoại hay khoá.
 • Tiện ích chỉ đọc trang khi bạn hỏi hoặc ra lệnh. Quyền đọc mọi trang là tuỳ chọn, chỉ xin khi bạn bấm nút trong Cài đặt, và thu hồi được bất cứ lúc nào.
 • Không tải mã từ internet, không quảng cáo, không theo dõi lịch sử duyệt web, không bán dữ liệu.

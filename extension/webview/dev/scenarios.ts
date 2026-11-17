@@ -1226,6 +1226,44 @@ export function planEndedScene(lang: 'vi' | 'en' = 'vi', kind: 'free' | 'session
   });
 }
 
+// ── (0.7.10) Bản Chrome / Edge: tài khoản Locaith TUỲ CHỌN (dán «mã kết nối»), nhóm Locaith trong bộ chọn model, màn chào khi chưa có khoá ──
+export type BrowserAccountKind = 'out' | 'waiting' | 'error' | 'expired' | 'in' | 'welcome' | 'welcome-keys' | 'consent';
+export function browserAccountState(kind: BrowserAccountKind): ViewState {
+  const signedIn = kind === 'in' || kind === 'consent';
+  const noKeys = kind !== 'in' && kind !== 'consent' && kind !== 'welcome-keys';
+  const providers: ProviderSummary[] = [
+    { ...LOCAITH_PROVIDER, hasKey: signedIn, needsConsent: kind === 'consent', modelSource: signedIn ? 'live' : 'fallback' },
+    ...(noKeys ? noKeyProviders() : PROVIDERS),
+  ];
+  const account: NonNullable<ViewState['account']> = {
+    status: kind === 'waiting' || kind === 'error' ? 'signingIn' : kind === 'expired' ? 'signedOut' : signedIn ? 'signedIn' : 'signedOut',
+    optional: true,
+    connectUrl: 'https://locaith.ai/#ext-browser',
+    webUrl: 'https://locaith.ai',
+    ...(signedIn ? { user: { name: 'Nguyễn Tuấn Anh', email: 'tuananh@locaith.ai' } } : {}),
+    ...(kind === 'error' ? { error: 'invalid_token' } : {}),
+    ...(kind === 'expired' ? { status: 'expired' as const, reason: 'revoked' as const, user: { name: 'Nguyễn Tuấn Anh', email: 'tuananh@locaith.ai' } } : {}),
+  };
+  const base = kind === 'consent' ? longConversation() : baseState();
+  return {
+    ...base,
+    platform: 'browser',
+    canQueue: false,
+    remote: undefined,
+    screen: kind === 'welcome' || kind === 'welcome-keys' || kind === 'consent' ? 'chat' : 'settings',
+    provider: kind === 'in' || kind === 'consent' ? 'locaith' : noKeys ? 'demo' : 'anthropic',
+    model: kind === 'in' || kind === 'consent' ? 'locaith-v5-flash' : noKeys ? 'demo' : 'claude-opus-5-5',
+    providers,
+    account,
+    locaith: {
+      noticeVersion: 1,
+      accepted: kind === 'in',
+      card: kind === 'consent',
+      ...(kind === 'in' ? { usage: { plan: 'plus', state: 'ok', session: { percent: 37.5, resetsInS: 7800 }, week: { percent: 12.4, resetsInS: 5 * 86400 + 3 * 3600 }, sessionHours: 5, weekHours: 168, canUpgrade: true, upgradeUrl: 'https://locaith.ai/#upgrade', at: Date.now() } } : {}),
+    },
+  };
+}
+
 // ── (lane:blind-verifier) Kiểm tra độc lập: lượt đã xong có dòng «Kiểm tra độc lập» (đạt / cần sửa / tồn đọng / đang chạy) ──
 export function verifyScene(kind: 'pass' | 'fail' | 'outstanding' | 'running' | 'skipped' = 'fail'): ViewState {
   const A = 'a_v1';

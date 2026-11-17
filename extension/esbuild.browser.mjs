@@ -35,7 +35,10 @@ const PROVIDER_HOSTS = [
   'https://www.bing.com/*',
 ];
 
-// Máy chủ của Locaith mà tiện ích gọi: CHỈ nhận đánh giá người dùng tự chạm sao (src/browser/rating.ts, RATING_ENDPOINT). Gói 0.4.4 đã được cửa hàng duyệt cũng khai báo máy chủ này.
+// Máy chủ của Locaith mà tiện ích gọi (một tên miền, hai việc — gói 0.4.4 đã được cửa hàng duyệt cũng khai báo máy chủ này):
+//  • đánh giá người dùng tự chạm sao (src/browser/rating.ts, RATING_ENDPOINT = /api/feedback);
+//  • từ 0.7.10: cổng mô hình Locaith (/api/llm/v1 — danh sách model, đồng ý thông báo dữ liệu, hạn mức, trò chuyện) — CHỈ khi người dùng tự kết nối tài khoản Locaith (src/browser/account.ts).
+// Máy chủ tài khoản (Supabase RPC ext_auth_whoami / ext_auth_logout) trả CORS cho mọi origin nên không cần thêm quyền máy chủ nào khác.
 const SERVICE_HOSTS = ['https://studio-api.locaith.com/*'];
 
 // Artifact HTML chạy trong trang "sandbox" (origin riêng, không có API extension).
@@ -64,7 +67,7 @@ function manifest() {
     side_panel: { default_path: 'sidepanel.html' },
     background: { service_worker: 'background.js' },
     permissions: ['sidePanel', 'storage', 'unlimitedStorage', 'scripting', 'activeTab', 'contextMenus', 'tabGroups'],
-    // PROVIDER_HOSTS: nhà cung cấp AI + tìm web. SERVICE_HOSTS: chỉ để gửi đánh giá một chạm (POST /api/feedback) — không gửi gì khác tới đó.
+    // PROVIDER_HOSTS: nhà cung cấp AI + tìm web. SERVICE_HOSTS: gửi đánh giá một chạm (POST /api/feedback) và — chỉ khi người dùng kết nối tài khoản Locaith — cổng mô hình Locaith (/api/llm/v1).
     host_permissions: [...PROVIDER_HOSTS, ...SERVICE_HOSTS],
     // Quyền đọc/điều khiển mọi trang xin lúc chạy, khi người dùng bấm nút trong Cài đặt (có thể rút lại bất cứ lúc nào).
     // identity: chỉ xin khi người dùng bấm "Đăng nhập" (OAuth) — cần để mở cửa sổ đăng nhập do trình duyệt quản lý.
@@ -95,7 +98,7 @@ const LOCALES = {
     extDescription: {
       // GIỚI HẠN CỨNG của Chrome Web Store: ≤ 132 ký tự (đếm theo code point). Vượt là cả gói bị từ chối khi tải lên.
       // KHÔNG liệt kê tên thương hiệu (Claude, ChatGPT, Gemini…): lần nộp đầu bị từ chối mã «Yellow Argon» vì danh sách tên hãng trong mô tả. Xem docs/CHROME-STORE.md.
-      message: 'Trợ lý AI trong thanh bên: đọc trang, tra cứu web, soạn báo cáo. Dùng khoá API của chính bạn.',
+      message: 'Trợ lý AI trong thanh bên: đọc trang, tra cứu web, soạn báo cáo. Dùng khoá API của bạn hoặc tài khoản Locaith.',
     },
     actionTitle: { message: 'Mở Locaith AI' },
     cmdOpen: { message: 'Mở/đóng khung Locaith AI' },
@@ -106,7 +109,7 @@ const LOCALES = {
   en: {
     extName: { message: 'Locaith AI — Browser agent' },
     extDescription: {
-      message: 'Side-panel AI assistant: reads the page, searches the web, drafts reports. Use your own API key.',
+      message: 'Side-panel AI assistant: reads the page, searches the web, drafts reports. Use your own API key or a Locaith account.',
     },
     actionTitle: { message: 'Open Locaith AI' },
     cmdOpen: { message: 'Open/close the Locaith AI panel' },

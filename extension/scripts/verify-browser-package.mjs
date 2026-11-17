@@ -78,6 +78,7 @@ export function verifyBrowserPackage(dir, opts = {}) {
   const panel = files.includes('panel.js') ? text('panel.js') : '';
   check(!!panel, 'có panel.js');
   check(!/__ndTest|ScriptedProvider/.test(panel), 'panel.js không chứa móc kiểm thử (__ndTest / ScriptedProvider)');
+  check(!/nd\.test\.account/.test(panel), 'panel.js không chứa móc đổi máy chủ tài khoản của bản kiểm thử (nd.test.account)', 'bản phát hành mà đọc được địa chỉ máy chủ tài khoản từ chrome.storage thì ai ghi được vào kho sẽ hứng được mã kết nối');
 
   // ── giấy phép của tiện ích + thông báo bản quyền bên thứ ba PHẢI nằm trong gói (bản 0.7.0–0.7.5 đã lên cửa hàng thiếu cả hai, dù README hứa «trong gói có sẵn»)
   const eol = (s) => s.replace(/\r\n/g, '\n').trim();
@@ -177,6 +178,23 @@ export function verifyBrowserPackage(dir, opts = {}) {
     check((manifest.host_permissions ?? []).includes(`${origin}/*`), `host_permissions có ${origin}/* (điểm gửi đánh giá một chạm)`, 'mã gửi đánh giá tới máy chủ này nhưng manifest không khai báo → trình duyệt chặn (CORS)');
   }
 
+  // ── (0.7.10) mô hình Locaith: mã gọi cổng `<máy chủ>/api/llm/v1` thì máy chủ đó PHẢI có trong host_permissions (backend không cho CORS với origin tiện ích),
+  //    và giao diện phải nói thật chuyện «mã kết nối» (token thiết bị) nằm ở đâu. Máy chủ tài khoản (Supabase) trả CORS cho mọi origin nên không cần quyền riêng.
+  const gatewayOrigins = [...new Set([...code.matchAll(/https:\/\/[a-z0-9.-]+(?=\/api\/llm\/v1)/gi)].map((m) => m[0]))];
+  for (const origin of gatewayOrigins) {
+    check((manifest.host_permissions ?? []).includes(`${origin}/*`), `host_permissions có ${origin}/* (cổng mô hình Locaith)`, 'mã gọi cổng mô hình Locaith nhưng manifest không khai báo máy chủ này → trình duyệt chặn (CORS)');
+  }
+  if (gatewayOrigins.length) {
+    for (const key of ['acct.b.title', 'acct.b.hint', 'locaith.notice.p1.browser']) {
+      const v = readBundledString(panel, key);
+      check(typeof v === 'string' && v.length > 0, `panel.js có chuỗi ${key} (mô hình Locaith trong bản trình duyệt)`, 'không thấy khoá — giao diện bản trình duyệt sẽ thiếu thẻ kết nối / thông báo dữ liệu riêng');
+    }
+    const hint = readBundledString(panel, 'acct.b.hint');
+    if (typeof hint === 'string') check(/không mã hoá|not encrypted/i.test(hint) && !/secret storage|kho bí mật/i.test(hint), 'acct.b.hint nói rõ mã kết nối nằm trong bộ nhớ tiện ích, không mã hoá, và không nói «kho bí mật»', hint);
+    const notice = readBundledString(panel, 'locaith.notice.p1.browser');
+    if (typeof notice === 'string') check(/web|trang web/i.test(notice) && /Locaith/.test(notice), 'thông báo dữ liệu của bản trình duyệt nói nội dung trang web được gửi tới Locaith', notice);
+  }
+
   // ── chuỗi giao diện bản trình duyệt nói đúng nơi lưu khoá API
   for (const key of ['set.providers.hint.browser', 'welcome.nokey.body.browser']) {
     const v = readBundledString(panel, key);
@@ -199,6 +217,7 @@ export function verifyBrowserPackage(dir, opts = {}) {
     const url = /const PRIVACY_URL = ["']([^"']*)["']/.exec(ui)?.[1] ?? '';
     check(/^https:\/\/[^\s/]+\/\S+/.test(url) && !url.includes('__PRIVACY_URL__'), 'store-consent.js có URL chính sách quyền riêng tư thật (không còn chỗ giữ chỗ)', url || 'không thấy PRIVACY_URL');
     if (feedbackOrigins.length) check(/chạm một ngôi sao/.test(ui) && /tap a star/i.test(ui) && /Locaith/.test(ui), 'thông báo đồng ý nói việc chấm sao được gửi tới Locaith', 'mã có gửi đánh giá về Locaith nhưng thông báo đồng ý không nhắc (cần nói trước khi dữ liệu rời máy)');
+    if (gatewayOrigins.length) check(/mô hình Locaith/.test(ui) && /Locaith models/i.test(ui) && /cải thiện mô hình/.test(ui) && /improve the models/i.test(ui) && /tuỳ chọn/.test(ui) && /optional/i.test(ui), 'thông báo đồng ý nói việc dùng mô hình Locaith (tuỳ chọn) gửi nội dung tới Locaith để lưu và cải thiện mô hình', 'mã gọi cổng mô hình Locaith nhưng thông báo đồng ý không nhắc (cần nói trước khi dữ liệu rời máy)');
     const key = /const KEY = ["']([^"']+)["']/.exec(ui)?.[1];
     const sw = files.includes('store-consent-sw.js') ? text('store-consent-sw.js') : '';
     check(!!key && sw.includes(`'${key}'`), 'giao diện và cổng nền dùng cùng khoá đồng ý', `giao diện: ${key}`);

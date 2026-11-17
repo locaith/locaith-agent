@@ -152,15 +152,21 @@ describe('nối dây (kiểm tĩnh)', () => {
     expect(bg).toContain('handleMenuClick(');
   });
 
-  it('thông báo trong tiện ích: nút đồng ý/không đồng ý, khoá khung chính, KHÔNG hứa tính năng không có và KHÔNG nhắc mô hình Locaith', () => {
+  it('thông báo trong tiện ích: nút đồng ý/không đồng ý, khoá khung chính, KHÔNG hứa tính năng không có, và (từ 0.7.10) nói thật việc dùng mô hình Locaith là TUỲ CHỌN', () => {
     const ui = read('src/browser/static/store-consent.js');
     expect(ui).toContain("const PRIVACY_URL = '__PRIVACY_URL__'");
     expect(ui).toContain("setAttribute('inert'");
     expect(ui).toContain('nd-consent-accept');
     expect(ui).toContain('nd-consent-decline');
-    expect(ui).not.toMatch(/Theo dõi tin nhắn|Watch messages|Locaith’s service|dịch vụ của Locaith|mô hình Locaith|Locaith model/);
+    expect(ui).not.toMatch(/Theo dõi tin nhắn|Watch messages|cầu nối VS Code|VS Code bridge/); // vẫn KHÔNG hứa các tính năng bản dùng chung giao diện chưa có
     expect(ui).toContain('nhà cung cấp AI do BẠN chọn');
     expect(ui).toContain('the AI provider YOU choose');
+    // (0.7.10) mô hình Locaith: tuỳ chọn, gửi tới dịch vụ của Locaith để lưu + cải thiện mô hình, chỉ sau khi đồng ý riêng ở khung chat; mã kết nối cũng không mã hoá
+    expect(ui).toMatch(/mô hình Locaith \(tuỳ chọn, không bắt buộc\)/);
+    expect(ui).toMatch(/Locaith models \(optional, never required\)/);
+    expect(ui).toMatch(/dịch vụ của Locaith — nơi lưu chúng để tìm lỗi và cải thiện mô hình/);
+    expect(ui).toMatch(/Locaith’s service — which stores it to find errors and improve the models/);
+    expect(ui).toMatch(/mã kết nối Locaith cũng nằm trong bộ nhớ riêng của tiện ích \(không mã hoá\)/);
   });
 
   it('esbuild: bản --test bỏ cổng (tệp + thẻ nạp); bản thường có và điền URL chính sách thật', () => {

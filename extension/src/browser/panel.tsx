@@ -9,6 +9,7 @@ import { render } from 'preact';
 import { App } from '../../webview/src/App';
 import { installBridge } from '../../webview/src/vscode';
 import { ChromeBrowserApi } from './api';
+import { BrowserAccount, kvMemento } from './account';
 import { BrowserConfig } from './config';
 import { BrowserController } from './controller';
 import { ChromeKv } from './kv';
@@ -20,7 +21,13 @@ import { BrowserSecrets } from './secrets';
 import { browserSkills } from './skills';
 import { idbStoreIO } from './storeIO';
 import { BaseSessionStore } from '../shared/sessionStore';
+import { AccountClient } from '../core/account/client';
+import { resolveAccountConfig, type AccountConfig } from '../core/account/config';
+import { openExternalOnce } from '../core/host/openOnce';
+import { gatewayDiagnosticHeaders } from '../core/providers/gatewayDiagnostics';
+import { LOCAITH_GATEWAY_URL, LOCAITH_PROVIDER_ID, LocaithGatewayClient } from '../core/providers/locaithGateway';
 import { ProviderService } from '../core/providers/service';
+import { LOCAITH_CONSENT_CACHE_KEY, LocaithBridge, LocaithConsent } from '../host/locaith';
 import { SkillRegistry } from '../core/skills/registry';
 import type { DocExtractor } from '../shared/docWrap';
 import type { HostMessage, WebviewMessage } from '../shared/protocol';
@@ -82,6 +89,10 @@ async function main(): Promise<void> {
   applyTheme();
   document.documentElement.lang = config.language();
 
+  const version = chrome.runtime.getManifest().version;
+  // (0.7.10) Mô hình Locaith: tài khoản locaith.ai TUỲ CHỌN (dán «mã kết nối» lấy ở locaith.ai/#ext-browser). Cầu nối gắn trễ: ProviderService cần móc token + tiêu đề + chốt chặn
+  // ngay khi dựng, còn tài khoản và bản ghi đồng ý được dựng ngay sau đó. Chưa đăng nhập / chưa đồng ý thì không có token và chốt chặn từ chối — không byte nào tới cổng Locaith.
+  const bridge = new LocaithBridge();
   const providers = new ProviderService({
     baseUrls: () => config.baseUrls(),
     customProviders: () => config.customProviders(),
@@ -100,6 +111,43 @@ async function main(): Promise<void> {
     env: {}, // không có biến môi trường trong trình duyệt
     // Gọi API trực tiếp từ trình duyệt: Anthropic yêu cầu cờ này (xem tài liệu "direct browser access").
     extraHeaders: { anthropic: { 'anthropic-dangerous-direct-browser-access': 'true' } },
+    account: bridge.hooks(version, 'browser'),
+  });
+
+  let accountCfg: AccountConfig = resolveAccountConfig({}); // trình duyệt không có biến môi trường: luôn là máy chủ thật
+  // Chỉ bản build kiểm thử (hằng số lúc build, nhánh bị loại khỏi bản phát hành): trỏ tài khoản sang máy chủ giả của e2e.
+  if (__ND_TEST__) {
+    const t = await kv.get<Partial<AccountConfig>>('nd.test.account');
+    if (t?.supabaseUrl && t.anonKey && t.webUrl) accountCfg = { supabaseUrl: t.supabaseUrl, anonKey: t.anonKey, webUrl: t.webUrl };
+  }
+  const account = new BrowserAccount({
+    kv,
+    client: new AccountClient(accountCfg),
+    cfg: accountCfg,
+    openUrl: (url) => openExternalOnce(url, (x) => api.openExternal(x)), // chống nảy đúp: hai lần bấm = hai tab
+    registerSecret: (v) => logger.registerSecret(v),
+    log: (l, m) => logger.log(l, m),
+  });
+  const consent = new LocaithConsent({
+    memento: await kvMemento(kv, [LOCAITH_CONSENT_CACHE_KEY]),
+    account,
+    client: new LocaithGatewayClient({
+      baseUrl: () => config.baseUrls()[LOCAITH_PROVIDER_ID] ?? LOCAITH_GATEWAY_URL,
+      timeoutMs: 6_000,
+      headers: () => gatewayDiagnosticHeaders({ family: 'browser', version, deviceId: account.deviceId() }),
+    }),
+    clientLabel: `browser/${version}`,
+    log: (l, m) => logger.log(l, m),
+  });
+  bridge.attach(account, consent);
+  await account.reload(); // nhanh, không gọi mạng: giao diện có đúng trạng thái đăng nhập ngay từ lần dựng đầu
+  void account.init().catch(() => undefined); // xác minh với máy chủ ở nền (mất mạng vẫn vào được trong thời gian ân hạn 7 ngày)
+  // Quay lại khung chat sau một lúc: kiểm lại (thu hồi từ trang locaith.ai có hiệu lực sớm), nhưng không hỏi máy chủ mỗi lần chuyển tab (tối đa 5 phút/lần).
+  let lastFocusVerify = 0;
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState !== 'visible' || Date.now() - lastFocusVerify < 5 * 60_000) return;
+    lastFocusVerify = Date.now();
+    void account.verify().catch(() => undefined);
   });
 
   const skills = new SkillRegistry(browserSkills());
@@ -128,7 +176,9 @@ async function main(): Promise<void> {
     api,
     artifacts,
     post: deliver,
-    version: chrome.runtime.getManifest().version,
+    version,
+    account,
+    locaith: consent,
     extractDocument,
     // Đánh giá một chạm gửi về Locaith (xem rating.ts); host_permissions của manifest cho phép máy chủ này.
     sendFeedback: (payload) => postRating(payload),
@@ -203,7 +253,7 @@ async function main(): Promise<void> {
   // Đóng khung chat = dừng tác vụ + lưu hội thoại (trang bị huỷ ngay sau đó).
   window.addEventListener('pagehide', () => controller.dispose());
 
-  (globalThis as unknown as { __nd?: unknown }).__nd = { controller, config, providers, store, api, logger };
+  (globalThis as unknown as { __nd?: unknown }).__nd = { controller, config, providers, store, api, logger, account, consent };
   // Chỉ bản build kiểm thử: cài nhà cung cấp theo kịch bản (cờ này là hằng số lúc build nên nhánh bị loại khỏi bản phát hành).
   if (__ND_TEST__) (await import('./testHooks')).installTestHooks({ providers, controller });
   render(<App />, document.getElementById('root')!);

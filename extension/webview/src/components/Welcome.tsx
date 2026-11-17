@@ -23,6 +23,7 @@ export function Welcome({ view, hasAnyKey }: { view: ViewState; hasAnyKey: boole
       {onLocaith && <p class="welcome-locaith">{t('welcome.locaith')}</p>}
 
       {!hasAnyKey ? (
+        <>
         <div class="callout">
           <div class="callout-title">
             <Icon name="key" size={16} />
@@ -42,6 +43,27 @@ export function Welcome({ view, hasAnyKey }: { view: ViewState; hasAnyKey: boole
             {t('welcome.nokey.cta')}
           </Button>
         </div>
+        {/* (0.7.10) Bản trình duyệt: mô hình Locaith dùng tài khoản thay cho API key — đăng nhập là tuỳ chọn. */}
+        {isBrowser && view.account?.optional && view.account.status !== 'signedIn' && (
+          <div class="callout callout-account" data-testid="welcome-account">
+            <div class="callout-title">
+              <LogoMark size={16} />
+              {t('welcome.account.title')}
+            </div>
+            <p class="callout-body">{t('welcome.account.body')}</p>
+            <Button
+              variant="secondary"
+              icon="external"
+              onClick={() => {
+                post({ type: 'account_sign_in' });
+                openSettings();
+              }}
+            >
+              {t('welcome.account.cta')}
+            </Button>
+          </div>
+        )}
+        </>
       ) : (
         <div class="suggest">
           <div class="suggest-title">{t('welcome.suggest')}</div>

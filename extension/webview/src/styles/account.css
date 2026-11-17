@@ -443,3 +443,37 @@ body.vscode-high-contrast-light .acct-signin::after {
   justify-content: flex-start;
   margin-top: 10px;
 }
+
+/* (0.7.10) Bản Chrome / Edge: thẻ kết nối «mã kết nối» (đăng nhập tuỳ chọn) trong Cài đặt */
+.acct-b .acct-banner {
+  margin: 8px 0 0;
+}
+.acct-b-steps {
+  margin: 6px 0 0;
+  padding: 0 0 0 22px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  list-style: decimal outside;
+  color: var(--fg-muted);
+  font-size: var(--nd-fs-sm);
+}
+.acct-b-steps li {
+  padding-left: 2px;
+}
+.acct-b-steps li::marker {
+  color: var(--accent-text);
+  font-weight: 700;
+}
+.acct-b .acct-b-actions {
+  margin-top: 8px;
+}
+.acct-b .field {
+  margin-top: 12px;
+}
+.acct-b .field-row .text-input {
+  min-width: 0;
+}
+.callout-account .callout-title .lo-mark {
+  flex: none;
+}

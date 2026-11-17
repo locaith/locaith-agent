@@ -1,4 +1,4 @@
-# Locaith-v5 models (AI Local) in VS Code
+# Locaith-v5 models (AI Local) in VS Code and in Chrome / Edge
 
 From **0.6.0** the extension has a model family of its own, **AI Local**: **Locaith-v5-flash** (fast) and **Locaith-v5-SI** (deep reasoning). They work with your Locaith
 account — **no API key** — and have a **1-million-token context window**. A new user with no API key starts on `Locaith-v5-flash`; if you already use another provider your
@@ -9,6 +9,8 @@ a window starts with your first message after the previous one ended, and when e
 wait). A **free account** has a small **one-time credit of free tokens** — enough for a couple of short requests — that never refills; after it, only a plan helps (or any other model with your
 own API key). Allowances follow the real use of the model (a long cached agent loop is cheap, one huge uncached prompt is not) and are shown as **percentages and renewal times, never as money**.
 The locaith.ai web chat has its own credits and is not affected. Your usage is in **Settings → Locaith model**; `locaith whoami` prints it in the CLI.
+
+**Chrome / Edge (from 0.7.10).** The browser edition has the same two models and the same rules (data notice, queue, allowances, Upgrade / Buy a plan button) — see [In the Chrome / Edge edition](#in-the-chrome--edge-edition) below. The difference: signing in is **optional** there; with your own API key nothing goes to Locaith.
 
 This page is what *you* see and what happens to your data. The service-side contract (headers, error codes, queue protocol, logging) is in
 `locaith-ai-v2/docs/LOCAITH-MODELS.md`; account sign-in is in [ACCOUNT.md](ACCOUNT.md).
@@ -100,7 +102,7 @@ other provider the system prompt stays byte-for-byte what it was, so their promp
 * The gateway address is `https://studio-api.locaith.com/api/llm/v1`; override it with the user setting `locaithAgent.baseUrls` → `{ "locaith": "http://127.0.0.1:8671/api/llm/v1" }`.
 * Headers on every request: `X-Locaith-Client: vscode/<version>` (or `browser/…`, `cli/…`), `X-Locaith-Device: <16-hex one-way hash of the device id>`, `X-Locaith-Session: <16-hex one-way hash of the chat session id>` (see docs/GATEWAY-LOGGING.md), `X-Locaith-Queue: ticket` (ask for the 429 + ticket protocol and a countdown instead of
   a held-open request), `X-Locaith-Ticket` while queued. There is **no** consent header: consent is the server-side per-account record (`GET/POST /consent`).
-* The browser edition (`src/browser`, shares `src/core`) does **not** register this provider: it has no account sign-in. The Chrome/Edge package integrates through data only (see the
+* The browser edition (`src/browser`, shares `src/core`) registers this provider from 0.7.10 — see [In the Chrome / Edge edition](#in-the-chrome--edge-edition). The separate 0.4.x browser package integrates through data only (see the
   service-side doc, section 8b).
 * Code: `src/core/providers/locaithGateway.ts` (constants, error classification, consent client), `src/host/locaith.ts` (consent cache + bridge), `src/core/providers/{http,openaiChat,registry,presets}.ts`
   (queue, headers, guard, account credential), `src/core/engine/engine.ts` (`onQueue`, `onConsentRequired`, `onAccountInvalid`), webview `ModelQueue.tsx`, `LocaithConsent.tsx`, `styles/locaith.css`.
@@ -108,3 +110,21 @@ other provider the system prompt stays byte-for-byte what it was, so their promp
   `test/skillsLocaith.test.ts`, `test/promptLocaith.test.ts`, `test/privacyCopy.test.ts`, `test/webview/locaithStyles.test.ts`; UI scenarios `locaith-*` in `webview/dev` (`node webview/dev/shoot.mjs locaith`).
 * **Changing the data notice?** Edit the `locaith.notice.*` strings, bump `LOCAITH_NOTICE_VERSION` (and the gateway's `LOCAITH_LLM_NOTICE_VERSION`), then add the new hash to `APPROVED` in
   `test/webview/locaithStyles.test.ts`. The test is red until you do.
+
+## In the Chrome / Edge edition
+
+From **0.7.10** the Chrome / Edge extension (`src/browser`) has the Locaith models too. It reuses the same core (provider, gateway client, queue, allowances, data-notice record) and adds what a browser needs:
+
+| | VS Code | Chrome / Edge |
+| --- | --- | --- |
+| Signing in | required for the whole extension (browser opens, **Allow**, back to VS Code) | **optional** — only to use the Locaith models; your own API keys never need it |
+| How | OAuth + PKCE, `vscode://` redirect | a **connection code**: Settings → *Locaith account (optional)* → **Get connection code** opens `https://locaith.ai/#ext-browser` (sign in, read the data notice, **Create connection code**) → paste the code → **Connect** |
+| Where the token lives | VS Code SecretStorage | `chrome.storage.local` of the extension — **not encrypted**, the same as API keys (the browser has no OS-bound secret store); revoked by **Sign out** or on locaith.ai → Devices |
+| Verification | `ext_auth_whoami` every 30 min | the same RPC when you paste the code, every 30 min, and when you return to the panel (at most every 5 min); 7 days offline grace |
+| Data notice | a card in the chat | the same card, worded for web pages ("the content of the web pages and files you let the assistant read or attach"); the server record is per account and notice version, so accepting on the locaith.ai page counts too |
+| Header | `X-Locaith-Client: vscode/<ver>` | `X-Locaith-Client: browser/<ver>` (+ the one-way device and session hashes, `X-Locaith-Queue: ticket`) |
+
+* **Nothing leaves the browser before consent.** Not signed in → no request to the gateway; signed in but the data notice not accepted → the provider's guard refuses before any byte is sent; a code pasted into the chat box is caught before it is sent to a model (it would be exposed to the provider).
+* **Host permission:** the existing `https://studio-api.locaith.com/*` (it also receives the one-tap rating). The account service (Supabase RPC) answers CORS for any origin, so no other host permission is added. `scripts/verify-browser-package.mjs` checks that the gateway host is in `host_permissions`, that the consent screen says the Locaith models are optional and what is stored, and that the connection-code hint says "not encrypted".
+* **Not in the browser edition:** Bio-Memory, the Locaith-only skills (ND30, memory, video) and the VS Code bridge / message Watcher of the 0.4.x package.
+* Code: `src/browser/account.ts` (`BrowserAccount`, `extractDeviceToken`, `kvMemento`), `src/browser/controller.ts` (account / consent / queue / usage), `src/browser/panel.tsx` (wiring), webview `AccountGate.tsx` (`AccountConnectCard`), `LocaithConsent.tsx`, `Pickers.tsx`, `Welcome.tsx`. Tests: `test/browser/account.test.ts`, `test/browser/locaith.test.ts` (real HTTP against the mock account server and gateway), `test/browser-e2e/locaith.e2e.test.ts` (real Chrome and Edge), UI scenes `browser-account-*` / `browser-welcome*` / `browser-consent` in `webview/dev`.

@@ -7,7 +7,7 @@ import { formatDecimal } from '../format';
 import type { I18nKey } from '../i18n';
 import { cx } from '../util';
 import { post } from '../vscode';
-import { AccountCard } from './AccountGate';
+import { AccountCard, AccountConnectCard } from './AccountGate';
 import { LocaithCard } from './LocaithConsent';
 import { RemoteCard } from './RemoteView';
 import { AddProviderForm, BrowserSettingsSections } from './BrowserSettings';
@@ -287,9 +287,16 @@ export function SettingsView({ view, onSetting }: { view: ViewState; onSetting: 
   const [adding, setAdding] = useState(false);
   const isBrowser = platform === 'browser';
   const s = view.settings;
+  // (0.7.10) Vừa mở Cài đặt: đọc lại mức đã dùng của hạn mức (host giãn cách tối đa 15 giây một lần). Chỉ có nghĩa khi đã đăng nhập tài khoản.
+  const signedIn = view.account?.status === 'signedIn';
+  useEffect(() => {
+    if (signedIn && view.locaith) post({ type: 'locaith_refresh' });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [signedIn]);
 
   return (
     <div class="screen screen-settings">
+      {view.account?.optional && view.account.status !== 'signedIn' && <AccountConnectCard account={view.account} />}
       {view.account?.status === 'signedIn' && <AccountCard account={view.account} />}
       {view.account?.status === 'signedIn' && view.locaith && <LocaithCard info={view.locaith} />}
       {view.account?.status === 'signedIn' && view.remote && <RemoteCard remote={view.remote} />}

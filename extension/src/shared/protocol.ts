@@ -817,11 +817,17 @@ export interface QueuedInfo {
 }
 
 /**
- * Trạng thái tài khoản locaith.ai (bản VS Code). Chưa `signedIn` thì giao diện chỉ hiện màn đăng nhập và host từ chối mọi lệnh khác.
- * Không có trường này (bản trình duyệt) = không yêu cầu đăng nhập.
+ * Trạng thái tài khoản locaith.ai. Bản VS Code: chưa `signedIn` thì giao diện chỉ hiện màn đăng nhập và host từ chối mọi lệnh khác.
+ * Bản trình duyệt (0.7.10): đăng nhập là TUỲ CHỌN (`optional`) — chỉ cần để dùng mô hình Locaith; không có trường này = không có tài khoản nào để đăng nhập.
  */
 export interface AccountView {
   status: 'signedOut' | 'signingIn' | 'signedIn' | 'expired';
+  /** (0.7.10) Đăng nhập không bắt buộc: giao diện KHÔNG chặn bằng màn đăng nhập; thẻ «Tài khoản Locaith» trong Cài đặt có ô dán mã kết nối. */
+  optional?: boolean;
+  /** (0.7.10) Trang locaith.ai cấp «mã kết nối» cho trình duyệt (chỉ bản trình duyệt). */
+  connectUrl?: string;
+  /** (0.7.10) Đang kiểm «mã kết nối» vừa dán với máy chủ (nút «Kết nối» hiện trạng thái bận). */
+  checking?: boolean;
   user?: { name: string; email: string; avatar?: string | null };
   /** Đang dùng trong thời gian ân hạn vì không xác minh được với máy chủ (mất mạng). */
   offline?: boolean;
@@ -975,17 +981,17 @@ export interface ViewState {
   platform?: 'vscode' | 'browser';
   /** Chỉ có ở bản trình duyệt. */
   browser?: BrowserViewState;
-  /** Tài khoản locaith.ai (chỉ bản VS Code). */
+  /** Tài khoản locaith.ai (bản VS Code: bắt buộc; bản trình duyệt từ 0.7.10: tuỳ chọn — xem AccountView.optional). */
   account?: AccountView;
   /** Remote — điều khiển từ xa (chỉ bản VS Code). */
   remote?: RemoteView;
-  /** Đang đứng trong hàng chờ của cổng Locaith (chỉ bản VS Code). Vắng = không phải chờ. */
+  /** Đang đứng trong hàng chờ của cổng Locaith (VS Code; bản trình duyệt từ 0.7.10). Vắng = không phải chờ. */
   modelQueue?: ModelQueueView;
   /** Trí nhớ sinh học đang được TỰ bật cho model Locaith-v5 (đang cài / chưa bật được). Vắng = không có gì để hiện. */
   memory?: MemoryView;
   /** Extension Chrome đang xin kết nối (ghép đôi không mã) — thẻ Cho phép / Từ chối trong khung chat (chỉ bản VS Code). */
   chromePair?: ChromePairView;
-  /** Mô hình Locaith: đồng ý thông báo dữ liệu + thẻ thông báo (chỉ bản VS Code). */
+  /** Mô hình Locaith: đồng ý thông báo dữ liệu + thẻ thông báo + mức dùng (VS Code; bản trình duyệt từ 0.7.10). */
   locaith?: LocaithView;
   // ── (lane:cc-timeline-ui) ──
   // ── (lane:ctx-compaction) ──
@@ -1137,6 +1143,8 @@ export type WebviewMessage =
   | { type: 'remote_manage' }
   // ── mô hình Locaith (bản VS Code): accept = «Đồng ý và dùng» (ghi nhận lên máy chủ) · decline = «Dùng API riêng» · withdraw = rút lại ở máy này · review = mở lại thẻ thông báo ──
   | { type: 'locaith_consent'; action: 'accept' | 'decline' | 'withdraw' | 'review' }
+  /** (0.7.10) Giao diện vừa mở Cài đặt: đọc lại mức đã dùng của hạn mức (tối đa 15 giây một lần). */
+  | { type: 'locaith_refresh' }
   | { type: 'send'; text: string; attachments: AttachmentInfo[] }
   | { type: 'stop' }
   /** Bỏ một tin khỏi hàng đợi; `edit: true` thì trả nội dung về ô nhập để sửa. */

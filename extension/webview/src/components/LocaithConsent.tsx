@@ -16,10 +16,11 @@ import { Icon } from './Icons';
 import { Button } from './ui';
 
 function NoticeBody() {
-  const { t } = useApp();
+  const { t, platform } = useApp();
   return (
     <ul class="lcn-list">
-      <li>{t('locaith.notice.p1')}</li>
+      {/* Bản trình duyệt nói đúng cái nó gửi đi: nội dung các trang web trợ lý đọc (cùng số phiên bản thông báo; xem test/webview/locaithStyles.test.ts). */}
+      <li>{t(platform === 'browser' ? 'locaith.notice.p1.browser' : 'locaith.notice.p1')}</li>
       <li>{t('locaith.notice.p2')}</li>
       <li>{t('locaith.notice.p3')}</li>
       <li>{t('locaith.notice.p4')}</li>

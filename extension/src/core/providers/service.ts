@@ -78,8 +78,8 @@ export class ProviderService {
         keyFromEnv: d.keyFromEnv,
         builtin: d.builtin,
         keyUrl: d.keyUrl,
-        // Tài khoản Locaith: không có ô nhập khoá. `needsConsent` = chưa đồng ý thông báo dữ liệu → chưa được tính vào kho điều phối/failover.
-        ...(d.account ? { account: true, needsConsent: !!this.deps.account?.guard?.() } : {}),
+        // Tài khoản Locaith: không có ô nhập khoá. `needsConsent` = ĐÃ đăng nhập nhưng chưa đồng ý thông báo dữ liệu → chưa được tính vào kho điều phối/failover.
+        ...(d.account ? { account: true, needsConsent: d.hasKey && !!this.deps.account?.guard?.() } : {}),
         models: peek?.models ?? d.fallbackModels,
         modelSource: peek?.source ?? 'fallback',
         modelError: peek?.error,

@@ -32,6 +32,7 @@ Tải **tệp zip** lên tab «Gói» của mục cửa hàng (manifest ở gố
 | `sidepanel.html` nạp `store-consent.js` trước `panel.js`; có `store-consent-sw.js`; dịch vụ nền nạp nó; URL chính sách thật (không còn chỗ giữ chỗ); giao diện và cổng nền dùng chung một khoá đồng ý | Phải có thông báo dữ liệu + đồng ý NGAY TRONG tiện ích |
 | Không có `testHooks`, không phải bản `--test`, `manifest.version` khớp `package.json`, các tệp manifest tham chiếu đều có trong gói | Lỗi đóng gói cơ học |
 | Mã gửi đánh giá một chạm tới `<máy chủ>/api/feedback` thì máy chủ đó PHẢI nằm trong `host_permissions`; và thông báo đồng ý phải nói việc chấm sao được gửi tới Locaith | Backend không cho CORS với origin tiện ích: thiếu quyền là mọi lần chạm sao lỗi âm thầm; dữ liệu rời máy phải được nói trước |
+| (0.7.10) Mã gọi cổng mô hình `<máy chủ>/api/llm/v1` thì máy chủ đó PHẢI nằm trong `host_permissions`; thông báo đồng ý nói việc dùng mô hình Locaith là TUỲ CHỌN, nội dung gửi tới Locaith được lưu để tìm lỗi và cải thiện mô hình; `panel.js` có chuỗi riêng của bản trình duyệt (thẻ kết nối, thông báo dữ liệu nói về trang web) và câu nói thật «mã kết nối … không mã hoá» | Cùng lý do với dòng trên; và dữ liệu rời máy tới Locaith phải được nói trước khi gửi |
 
 Kèm theo là test tự động (`npx vitest run test/browser`): dựng thật một gói rồi kiểm, và cố ý đưa vào từng lỗi trên (biểu tượng «N», mô tả có «Claude», CDN, quyền `tabs`/thừa, mất thông báo đồng ý…) để chứng minh bộ kiểm bắt được.
 
@@ -41,12 +42,12 @@ Bản `--test` (dùng cho `npm run test:browser-e2e`) cố ý KHÔNG có thông 
 
 Bộ kiểm chỉ thấy nội dung TRONG gói. Những thứ này nằm ở bảng điều khiển cửa hàng và KHÔNG tự cập nhật theo gói:
 
-1. **Mô tả chi tiết** (tab «Trang thông tin trên cửa hàng») — dán từ `docs/chrome-store/MO-TA-CHI-TIET-VI.txt` và `…-EN.txt`. Hai bản này chỉ nêu tính năng CÓ THẬT trong bản trình duyệt hiện tại; tính năng đổi thì sửa mô tả.
+1. **Mô tả chi tiết** (tab «Trang thông tin trên cửa hàng») — dán từ `docs/chrome-store/MO-TA-CHI-TIET-VI.txt` và `…-EN.txt`. Hai bản này chỉ nêu tính năng CÓ THẬT trong bản trình duyệt hiện tại; tính năng đổi thì sửa mô tả. **Từ 0.7.10** có thêm: mô hình Locaith-v5 (tuỳ chọn, qua «mã kết nối») và một gạch đầu dòng quyền riêng tư nói thật việc đó. **Mô tả ngắn** (lấy từ gói, không sửa tay): «…Dùng khoá API của bạn hoặc tài khoản Locaith.»
 2. **Ảnh chụp màn hình** (1280×800) và ô quảng bá nhỏ (440×280) — chụp lại nếu giao diện hoặc tính năng đổi. Ảnh nào còn hiện tính năng đã bỏ là rủi ro bị gỡ vì «mô tả sai sự thật».
-3. **Tab «Quyền riêng tư»**: lý do cho từng quyền (xem `LY-DO-QUYEN-CHROME.md` trong bộ hồ sơ nộp), URL chính sách quyền riêng tư (https://www.locaith.ai/chinh-sach-quyen-rieng-tu-chrome/ — trang phải còn truy cập được), khai báo «sử dụng dữ liệu». Nội dung khai báo phải khớp thông báo trong tiện ích.
+3. **Tab «Quyền riêng tư»**: lý do cho từng quyền (xem `LY-DO-QUYEN-CHROME.md` trong bộ hồ sơ nộp), URL chính sách quyền riêng tư (https://www.locaith.ai/chinh-sach-quyen-rieng-tu-chrome/ — trang phải còn truy cập được), khai báo «sử dụng dữ liệu». Nội dung khai báo phải khớp thông báo trong tiện ích. **Từ 0.7.10 (mô hình Locaith, tuỳ chọn)** khai thêm các loại dữ liệu: *thông tin xác thực* (mã kết nối Locaith, chỉ khi người dùng tự kết nối), *thông tin nhận dạng cá nhân* (tên + email hiển thị sau khi kết nối), *nội dung trang web* và *hoạt động của người dùng* (đã khai cho nhà cung cấp AI; nay còn gửi tới Locaith khi dùng mô hình Locaith, sau khi người dùng đồng ý thông báo dữ liệu); mục đích = cung cấp tính năng; KHÔNG bán, KHÔNG dùng cho quảng cáo / xếp hạng tín dụng; xác nhận ba cam kết «Dữ liệu người dùng».
 4. **Ghi chú cho người duyệt** nếu cần.
 5. **ĐĂNG trang chính sách quyền riêng tư mới TRƯỚC khi nộp.** Bản 0.7.0 gửi số sao (ẩn danh) về Locaith khi người dùng chạm sao, nên chính sách phải có mục «Khi bạn chấm sao đánh giá» và bỏ phần nói về tính năng bản này không có (Theo dõi tin nhắn, cầu nối VS Code, mô hình Locaith). Bản đã soạn: `chrome-store-assets/publish-07/chinh-sach-quyen-rieng-tu-chrome/index.html` (chép vào `public/chinh-sach-quyen-rieng-tu-chrome/` của repo locaith-ai-v2 rồi đẩy lên; URL giữ nguyên).
-6. **Lý do quyền máy chủ** `studio-api.locaith.com` (mới so với 0.6.27): dán từ `LY-DO-QUYEN-CHROME.md`, mục `host_permissions`. Cập nhật lên 0.7.0 Chrome sẽ hỏi người đang dùng bản cũ chấp nhận quyền mới.
+6. **Lý do quyền máy chủ** `studio-api.locaith.com` (mới so với 0.6.27): dán từ `LY-DO-QUYEN-CHROME.md`, mục `host_permissions`. Cập nhật lên 0.7.0 Chrome sẽ hỏi người đang dùng bản cũ chấp nhận quyền mới. **Từ 0.7.10** máy chủ này còn phục vụ cổng mô hình Locaith (`/api/llm/v1`): bổ sung vào lý do — «gửi đánh giá một chạm và, chỉ khi người dùng tự kết nối tài khoản Locaith, gửi yêu cầu tới mô hình Locaith». Không có quyền mới nào được thêm so với 0.7.9 (máy chủ tài khoản Supabase trả CORS cho mọi origin).
 7. Nộp vào ĐÚNG mục «Locaith AI — Trợ lý trình duyệt» (không phải «Locaith Memory Sync» — sản phẩm khác).
 
 ## 4. Bài học chính sách (đừng lặp lại)
@@ -57,6 +58,8 @@ Bộ kiểm chỉ thấy nội dung TRONG gói. Những thứ này nằm ở b�
 - **Nói đúng nơi lưu khoá API:** bản chia sẻ giao diện với VS Code từng hiện «khoá nằm trong kho bí mật của VS Code». Ở Chrome khoá nằm trong `chrome.storage.local`, không mã hoá. Phải nói thật.
 - **Sự cố biểu tượng «N» (bản 0.6.27):** gói dựng từ mã nguồn có biểu tượng của dự án cũ; không ai mở gói ra xem. Từ nay biểu tượng bị khoá bằng băm và bị kiểm ở ba chỗ: test, bộ kiểm gói, và lệnh nén.
 - **Quyền không dùng:** khai báo `tabs` mà không gọi → cửa hàng đòi lý do. Chỉ khai quyền mã thật sự dùng.
+- **Mô hình Locaith trong bản cửa hàng (0.7.10) là TUỲ CHỌN:** không bắt đăng nhập để dùng khoá API riêng; trước khi nội dung rời máy tới Locaith có hai lớp báo trước (màn «Trước khi dùng» ở lần mở đầu — nói việc dùng mô hình Locaith là tuỳ chọn và Locaith lưu để cải thiện mô hình — và thẻ thông báo dữ liệu riêng trong khung chat, ghi nhận theo tài khoản). Bộ kiểm bắt cả hai.
+- **Mã kết nối là bí mật:** ô dán mã là ô mật khẩu; mã dán nhầm vào ô chat bị chặn trước khi gửi cho nhà cung cấp AI; mã nằm trong `chrome.storage.local` KHÔNG mã hoá — phải nói thật (chuỗi `acct.b.hint`), không nói «kho bí mật».
 
 ## 5. Khi muốn đổi logo hoặc thêm quyền / chuỗi hạn chế
 

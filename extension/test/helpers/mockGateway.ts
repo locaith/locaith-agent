@@ -30,6 +30,10 @@ export interface GatewayMode {
   modelNotFound?: boolean;
   /** Dòng chữ cổng trả lời (mặc định «Xin chào từ Locaith»). */
   reply?: string;
+  /** (0.7.10) GET /account: khối `entitlement` mà cổng trả (mức dùng của hạn mức 5 giờ / tuần). Vắng = 404 như cổng cũ chưa có endpoint này. */
+  account?: { plan?: string; entitlement: Record<string, unknown> };
+  /** (0.7.10) Hết hạn mức kiểu Anthropic: gói trả phí hết phiên 5 giờ / tuần (429) hoặc tài khoản miễn phí hết token một lần (402) — cùng mã `locaith_quota` + khối `entitlement`. */
+  limit?: { state: 'limit_session' | 'limit_week' | 'free_exhausted'; message: string; plan?: string; resetsInS?: number; canUpgrade?: boolean };
 }
 
 export const GATEWAY_MODELS = [
@@ -114,6 +118,10 @@ export class MockGateway {
       this.consents.push({ userId: user, version, client: String(rec.body?.client ?? '') });
       return json(res, 200, { ok: true });
     }
+    if (path === '/account' && rec.method === 'GET') {
+      if (!this.mode.account) return json(res, 404, errBody('locaith_not_found', 'Không có đường dẫn này.'));
+      return json(res, 200, { ok: true, account: { name: 'Người Thử', email_masked: 't***@example.com', plan: this.mode.account.plan ?? 'free' }, limits: { unlimited: false }, entitlement: this.mode.account.entitlement });
+    }
     if (path === '/queue/leave' && rec.method === 'POST') {
       this.leaves.push({ ticket: String(rec.body?.ticket ?? ''), userId: user });
       return json(res, 200, { ok: true });
@@ -145,6 +153,13 @@ export class MockGateway {
           { 'retry-after': '1' },
         );
       }
+    }
+    if (mode.limit) {
+      const l = mode.limit;
+      const scope = l.state === 'limit_week' ? 'week' : l.state === 'limit_session' ? 'session' : 'credit';
+      const entitlement = { state: l.state, plan: l.plan ?? 'free', scope, usage: l.resetsInS !== undefined ? { [scope]: { percent: 100, resets_in_s: l.resetsInS } } : { [scope]: { percent: 100 } }, can_upgrade: l.canUpgrade !== false, upgrade_url: 'https://locaith.ai/#upgrade' };
+      if (l.state === 'free_exhausted') return json(res, 402, { ...errBody('locaith_quota', l.message, 'insufficient_quota'), entitlement });
+      return json(res, 429, { ...errBody('locaith_quota', l.message, 'quota'), entitlement }, { 'retry-after': String(l.resetsInS ?? 3600) });
     }
     if (mode.quota) return json(res, 429, errBody('locaith_quota', mode.quota, 'quota'), { 'retry-after': '10800' });
     if (mode.rateLimited) return json(res, 429, errBody('locaith_rate_limited', mode.rateLimited.message, 'rate_limit'), { 'retry-after': String(mode.rateLimited.retryAfterSec) });

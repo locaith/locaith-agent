@@ -1780,7 +1780,8 @@ describe.skipIf(BROWSERS.length === 0)('bản trình duyệt (tiện ích MV3) t
           URL.createObjectURL = (b: Blob | MediaSource) => (w.__blobs.push(b), orig(b));
         });
         const buttons = await c.panel.$$('.hist-tools button');
-        expect(await Promise.all(buttons.map((b) => b.evaluate((e) => e.textContent)))).toEqual(['Sao lưu tất cả', 'Khôi phục từ tệp']);
+        // «Chọn nhiều» (xoá hàng loạt) do lane sessions-ux thêm sau; hai nút sao lưu vẫn ở đầu và bấm bằng chỉ số 0.
+        expect(await Promise.all(buttons.map((b) => b.evaluate((e) => e.textContent)))).toEqual(['Sao lưu tất cả', 'Khôi phục từ tệp', 'Chọn nhiều']);
         // Thông báo "Đã chuyển vào Thùng rác / Đã khôi phục" đang phủ lên vùng này (toast nhận chuột) → bấm bằng DOM chứ không bằng toạ độ
         await buttons[0].evaluate((b) => (b as HTMLElement).click());
         await c.panel.waitForFunction(() => (window as any).__blobs.length >= 1, { timeout: 10_000 });

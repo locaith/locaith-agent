@@ -31,6 +31,8 @@ import {
   SESSIONS,
   verifyScene, // (lane:blind-verifier)
   planEndedScene, // (0.7.8)
+  browserAccountState, // (0.7.10)
+  type BrowserAccountKind,
 } from './scenarios';
 import { promoReply } from './promo';
 
@@ -378,6 +380,43 @@ class MockHost {
         } else if (m.action === 'review') {
           this.patch({ locaith: { ...cur, card: true }, screen: 'chat' });
         }
+        break;
+      }
+      case 'locaith_refresh':
+        break; // (0.7.10) mở Cài đặt: host thật đọc lại mức dùng; host giả không có gì để đọc
+      // ── (0.7.10) tài khoản Locaith tuỳ chọn của bản trình duyệt: dán mã → kiểm → kết nối ──
+      case 'account_sign_in': {
+        const a = this.view.account;
+        if (a) this.patch({ account: { ...a, status: 'signingIn', error: undefined } });
+        break;
+      }
+      case 'account_cancel': {
+        const a = this.view.account;
+        if (a) this.patch({ account: { ...a, status: 'signedOut', error: undefined } });
+        break;
+      }
+      case 'account_enter_code': {
+        const a = this.view.account;
+        if (!a) break;
+        const ok = /lat_[A-Za-z0-9_-]{43}/.test(String(m.code ?? ''));
+        if (!ok) {
+          this.patch({ account: { ...a, error: 'bad_code' } });
+          break;
+        }
+        this.patch({ account: { ...a, checking: true, error: undefined } });
+        setTimeout(() => {
+          const cur = this.view.account;
+          if (!cur) return;
+          this.patch({
+            account: { ...cur, status: 'signedIn', checking: undefined, error: undefined, user: { name: 'Nguyễn Tuấn Anh', email: 'tuananh@locaith.ai' } },
+            providers: this.view.providers.map((p) => (p.account ? { ...p, hasKey: true, modelSource: 'live' } : p)),
+          });
+        }, 600);
+        break;
+      }
+      case 'account_sign_out': {
+        const a = this.view.account;
+        if (a) this.patch({ account: { ...a, status: 'signedOut', user: undefined }, providers: this.view.providers.map((p) => (p.account ? { ...p, hasKey: false } : p)) });
         break;
       }
       case 'new_session':
@@ -1126,6 +1165,17 @@ function initialView(): ViewState {
     case 'plan-limit-top':
       v = planEndedScene(params.get('lang') === 'en' ? 'en' : 'vi', scenario === 'plan-ended' ? 'free' : scenario === 'plan-limit-session' ? 'session' : 'top');
       break;
+    // (0.7.10) bản Chrome / Edge: tài khoản Locaith tuỳ chọn (platform=browser được đặt luôn bên dưới)
+    case 'browser-account-out':
+    case 'browser-account-waiting':
+    case 'browser-account-error':
+    case 'browser-account-expired':
+    case 'browser-account-in':
+    case 'browser-welcome':
+    case 'browser-welcome-keys':
+    case 'browser-consent':
+      v = browserAccountState(scenario.replace(/^browser-(account-)?/, '') as BrowserAccountKind);
+      break;
     // (0.7.9) thẻ «Mô hình Locaith» trong Cài đặt có mức dùng hạn mức
     case 'locaith-usage-plus':
       v = locaithState({ accepted: true, screen: 'settings', usage: { plan: 'plus', state: 'ok', session: { percent: 37.5, resetsInS: 7800 }, week: { percent: 12.4, resetsInS: 5 * 86400 + 3 * 3600 }, sessionHours: 5, weekHours: 168, canUpgrade: true, upgradeUrl: 'https://locaith.ai/#upgrade', at: Date.now() } });
@@ -1162,7 +1212,7 @@ function initialView(): ViewState {
   // (0.7.2) lite=1: chế độ nhẹ (tắt hiệu ứng, không tự xem trước media)
   if (params.get('lite') === '1') v = { ...v, settings: { ...v.settings, liteMode: true } };
   // (lane:cc-timeline-ui) platform=browser: cùng giao diện chạy như bản Chrome/Edge (không nút mở tệp, placeholder tab).
-  if (params.get('platform') === 'browser') v = { ...v, platform: 'browser', canQueue: false, remote: undefined, account: undefined };
+  if (params.get('platform') === 'browser') v = { ...v, platform: 'browser', canQueue: false, remote: undefined, ...(v.account?.optional ? {} : { account: undefined }) };
   v = {
     ...v,
     orchestration: {

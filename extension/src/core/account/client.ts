@@ -38,8 +38,10 @@ export type HostUpsertResult = { ok: true; keyed?: boolean } | { ok: false; erro
 
 type Rpc = { kind: 'ok'; data: unknown } | { kind: 'err'; error: 'network' | 'server'; status?: number };
 
-const TOKEN_RE = /^lat_[A-Za-z0-9_-]{43}$/;
-const str = (v: unknown, max: number): string | undefined => (typeof v === 'string' && v.length > 0 && v.length <= max ? v : undefined);
+/** Token thiết bị do ext_auth_exchange cấp: `lat_` + 43 ký tự base64url. Bản trình duyệt (0.7.10) còn dùng nó để kiểm «mã kết nối» người dùng dán vào. */
+export const DEVICE_TOKEN_RE = /^lat_[A-Za-z0-9_-]{43}$/;
+const TOKEN_RE = DEVICE_TOKEN_RE;
+const str =(v: unknown, max: number): string | undefined => (typeof v === 'string' && v.length > 0 && v.length <= max ? v : undefined);
 
 function parseUser(v: unknown): AccountUser | undefined {
   if (!v || typeof v !== 'object') return undefined;

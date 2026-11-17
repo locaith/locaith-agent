@@ -21,6 +21,8 @@ import { GatewayTokenManager } from '../core/account/gatewayToken';
 import { gatewayDiagnosticHeaders, type GatewayClientFamily } from '../core/providers/gatewayDiagnostics';
 
 const CACHE_KEY = 'locaithAgent.locaith.consent';
+/** Khoá của bản đệm «đã đồng ý» trong kho (globalState của VS Code; bản trình duyệt nạp sẵn nó từ chrome.storage). */
+export const LOCAITH_CONSENT_CACHE_KEY = CACHE_KEY;
 
 interface CacheRecord {
   /** Id tài khoản Locaith đã đồng ý trên máy này. */

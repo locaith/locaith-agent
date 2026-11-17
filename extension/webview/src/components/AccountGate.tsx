@@ -2,6 +2,7 @@
  * Màn đăng nhập tài khoản locaith.ai — chặn mọi thứ còn lại cho tới khi đăng nhập xong (giống Claude Code: đăng nhập qua trình duyệt, bấm «Cho phép»).
  * Host (AccountService) mới là nơi cưỡng chế: dù giao diện bị bỏ qua, ChatController vẫn từ chối mọi thao tác khác.
  */
+import { useState } from 'preact/hooks';
 import type { AccountView } from '../../../src/shared/protocol';
 import { useApp } from '../ctx';
 import type { I18nKey } from '../i18n';
@@ -10,7 +11,7 @@ import { LoShine, LoSpinner } from './Brand';
 import { Icon, LogoMark } from './Icons';
 import { Button } from './ui';
 
-const KNOWN_ERRORS = new Set(['denied', 'failed', 'no_pending', 'state_mismatch', 'invalid_grant', 'network', 'server']);
+const KNOWN_ERRORS = new Set(['denied', 'failed', 'no_pending', 'state_mismatch', 'invalid_grant', 'network', 'server', 'bad_code', 'invalid_token']);
 
 export function AccountGate({ account }: { account: AccountView }) {
   const { t } = useApp();
@@ -104,6 +105,85 @@ export function AccountGate({ account }: { account: AccountView }) {
   );
 }
 
+/**
+ * (0.7.10) Bản Chrome / Edge: thẻ «Tài khoản Locaith (tuỳ chọn)» trong Cài đặt khi CHƯA kết nối (hoặc phiên đã hết hiệu lực). Đăng nhập không bắt buộc — chỉ cần để dùng mô hình Locaith;
+ * có API key của riêng mình thì không bao giờ phải làm gì ở đây. Luồng: «Lấy mã kết nối» mở locaith.ai/#ext-browser (đăng nhập, đọc thông báo dữ liệu, tạo mã) → dán mã → «Kết nối».
+ * Mã là bí mật nên ô nhập dạng mật khẩu; host kiểm mã với máy chủ tài khoản (sai thì lý do hiện ngay dưới ô nhập, mã đang gõ được giữ nguyên để sửa).
+ */
+export function AccountConnectCard({ account }: { account: AccountView }) {
+  const { t } = useApp();
+  const [code, setCode] = useState('');
+  const signingIn = account.status === 'signingIn';
+  const expired = account.status === 'expired';
+  const busy = account.checking === true;
+  const err = account.error ? (KNOWN_ERRORS.has(account.error) ? account.error : 'failed') : undefined;
+  const connect = () => {
+    const v = code.trim();
+    if (v && !busy) post({ type: 'account_enter_code', code: v });
+  };
+  return (
+    <section class="set-section acct-set acct-b" aria-label={t('acct.b.title')} data-testid="account-connect" data-state={account.status}>
+      <h2 class="set-title">{t('acct.b.title')}</h2>
+      <p class="set-hint">{t('acct.b.intro')}</p>
+      {expired && (
+        <div class="acct-banner is-warn" role="status">
+          <Icon name="alert" size={15} />
+          <span>{t(account.reason === 'grace' ? 'acct.expired.grace' : 'acct.expired.revoked')}</span>
+        </div>
+      )}
+      <ol class="acct-b-steps">
+        <li>{t('acct.b.step1')}</li>
+        <li>{t('acct.b.step2')}</li>
+      </ol>
+      <div class="acct-actions acct-b-actions">
+        <Button variant={signingIn ? 'secondary' : 'primary'} small icon="external" onClick={() => post({ type: 'account_sign_in' })}>
+          {signingIn ? t('acct.b.reopen') : t('acct.b.get')}
+        </Button>
+        {signingIn && (
+          <Button variant="ghost" small onClick={() => post({ type: 'account_cancel' })}>
+            {t('acct.cancel')}
+          </Button>
+        )}
+      </div>
+      <div class="field">
+        <label class="field-label" for="acct-b-code">
+          {t('acct.b.codeLabel')}
+        </label>
+        <div class="field-row">
+          <input
+            id="acct-b-code"
+            class="text-input is-mono"
+            type="password"
+            autocomplete="off"
+            spellcheck={false}
+            placeholder={t('acct.b.codePlaceholder')}
+            value={code}
+            disabled={busy}
+            onInput={(e) => setCode((e.target as HTMLInputElement).value)}
+            onKeyDown={(e) => {
+              if (e.isComposing || e.keyCode === 229) return;
+              if (e.key === 'Enter') {
+                e.preventDefault();
+                connect();
+              }
+            }}
+          />
+          <Button variant="primary" small icon="check" busy={busy} disabled={code.trim().length === 0} onClick={connect}>
+            {busy ? t('acct.b.checking') : t('acct.b.connect')}
+          </Button>
+        </div>
+        {err && !busy && (
+          <div class="acct-banner is-error" role="alert">
+            <Icon name="alert" size={15} />
+            <span>{t(`acct.err.${err}` as I18nKey)}</span>
+          </div>
+        )}
+      </div>
+      <p class="set-hint">{t('acct.b.hint')}</p>
+    </section>
+  );
+}
+
 /** Thẻ «Tài khoản Locaith» trong Cài đặt: ai đang đăng nhập, quản lý thiết bị, đăng xuất. */
 export function AccountCard({ account }: { account: AccountView }) {
   const { t } = useApp();
@@ -133,7 +213,7 @@ export function AccountCard({ account }: { account: AccountView }) {
           {t('acct.set.signOut')}
         </Button>
       </div>
-      <p class="set-hint">{t('acct.set.hint')}</p>
+      <p class="set-hint">{t(account.optional ? 'acct.set.hint.browser' : 'acct.set.hint')}</p>
     </section>
   );
 }

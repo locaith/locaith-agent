@@ -151,6 +151,97 @@ async function assertUsage(p, want) {
   }
 }
 
+/**
+ * (0.7.10) Thẻ «Tài khoản Locaith (tuỳ chọn)» của bản Chrome / Edge: KHÔNG có màn đăng nhập chặn (đăng nhập tuỳ chọn), thẻ có trạng thái đúng, ô dán mã là ô mật khẩu,
+ * nút «Kết nối» chỉ bật khi đã có chữ, lỗi hiện đúng chỗ, và dán mã thì host nhận đúng MỘT account_enter_code mang mã đó.
+ */
+async function assertConnect(p, want) {
+  const r = await p.evaluate(() => {
+    const c = document.querySelector('[data-testid="account-connect"]');
+    const root = document.querySelector('.app');
+    return {
+      gate: !!document.querySelector('.screen-account, .acct-gate'),
+      card: !!c,
+      state: c ? c.getAttribute('data-state') : '',
+      text: c ? c.textContent || '' : '',
+      input: c ? { type: (c.querySelector('input') || {}).type, ac: (c.querySelector('input') || {}).autocomplete, disabled: !!(c.querySelector('input') || {}).disabled } : null,
+      connectDisabled: c ? !!(c.querySelector('.field-row .btn') || {}).disabled : null,
+      alerts: c ? [...c.querySelectorAll('[role="alert"]')].map((e) => e.textContent.trim()) : [],
+      statuses: c ? [...c.querySelectorAll('[role="status"]')].map((e) => e.textContent.trim()) : [],
+      providerCards: [...document.querySelectorAll('.prov-card .prov-label')].map((e) => e.textContent.trim()),
+      overflowX: root ? root.scrollWidth - root.clientWidth : 0,
+      accountCard: !!document.querySelector('.acct-set .acct-user'),
+    };
+  });
+  if (r.gate) throw new Error('đăng nhập là TUỲ CHỌN ở bản trình duyệt: không được hiện màn đăng nhập chặn');
+  if (want.card === false) {
+    if (r.card) throw new Error('đã kết nối thì không còn thẻ dán mã');
+    return r;
+  }
+  if (!r.card) throw new Error('không thấy thẻ [data-testid=account-connect]');
+  if (r.state !== want.state) throw new Error(`trạng thái thẻ cần «${want.state}», thấy «${r.state}»`);
+  for (const t of want.texts ?? []) if (!r.text.includes(t)) throw new Error(`thiếu chữ «${t}» trong thẻ: ${r.text}`);
+  if (!r.input || r.input.type !== 'password' || r.input.ac !== 'off') throw new Error(`ô dán mã phải là ô mật khẩu autocomplete=off: ${JSON.stringify(r.input)}`);
+  if (r.providerCards.some((x) => /Locaith/.test(x))) throw new Error(`Locaith dùng tài khoản — không được có thẻ nhập khoá API: ${JSON.stringify(r.providerCards)}`);
+  if (want.error) {
+    if (!r.alerts.some((a) => a.includes(want.error))) throw new Error(`thiếu lỗi «${want.error}»: ${JSON.stringify(r.alerts)}`);
+  } else if (r.alerts.length) throw new Error(`không được có lỗi: ${JSON.stringify(r.alerts)}`);
+  if (want.banner && !r.statuses.some((a) => a.includes(want.banner))) throw new Error(`thiếu dải «${want.banner}»: ${JSON.stringify(r.statuses)}`);
+  if (r.overflowX > 1) throw new Error(`tràn ngang ${r.overflowX}px`);
+  if (!want.type) return r;
+  if (!r.connectDisabled) throw new Error('chưa có chữ trong ô thì nút «Kết nối» phải tắt');
+  await p.type('[data-testid="account-connect"] input', want.type);
+  await wait(60);
+  const after = await p.evaluate(() => ({ disabled: !!document.querySelector('[data-testid="account-connect"] .field-row .btn').disabled, value: document.querySelector('[data-testid="account-connect"] input').value }));
+  if (after.disabled) throw new Error('có chữ trong ô rồi mà nút «Kết nối» vẫn tắt');
+  await p.evaluate(() => (window.__ND_LOG__ = []));
+  await p.click('[data-testid="account-connect"] .field-row .btn');
+  await wait(120);
+  const sent = await p.evaluate(() => (window.__ND_LOG__ || []).filter((m) => m.type === 'account_enter_code'));
+  if (sent.length !== 1 || sent[0].code !== want.type) throw new Error(`bấm «Kết nối» phải gửi đúng một account_enter_code mang mã đã dán: ${JSON.stringify(sent)}`);
+  return r;
+}
+
+/** (0.7.10) Màn chào của bản trình duyệt khi chưa có khoá nào: có lời mời kết nối tài khoản Locaith (tuỳ chọn); có khoá rồi thì không có. */
+async function assertBrowserWelcome(p, want) {
+  const r = await p.evaluate(() => {
+    const c = document.querySelector('[data-testid="welcome-account"]');
+    const root = document.querySelector('.app');
+    return { callout: !!c, text: c ? c.textContent || '' : '', cta: c ? [...c.querySelectorAll('.btn')].map((b) => b.textContent.trim()) : [], overflowX: root ? root.scrollWidth - root.clientWidth : 0 };
+  });
+  if (r.callout !== want.callout) throw new Error(`lời mời kết nối Locaith: cần ${want.callout}, thấy ${r.callout}`);
+  if (r.overflowX > 1) throw new Error(`tràn ngang ${r.overflowX}px`);
+  if (!want.callout) return;
+  for (const t of want.texts ?? []) if (!r.text.includes(t)) throw new Error(`thiếu chữ «${t}»: ${r.text}`);
+  if (!want.click) return;
+  await p.evaluate(() => (window.__ND_LOG__ = []));
+  await p.click('[data-testid="welcome-account"] .btn');
+  await wait(150);
+  const sent = await p.evaluate(() => (window.__ND_LOG__ || []).map((m) => m.type));
+  if (!sent.includes('account_sign_in')) throw new Error(`bấm lời mời phải gửi account_sign_in: ${JSON.stringify(sent)}`);
+  const settings = await p.evaluate(() => !!document.querySelector('.screen-settings'));
+  if (!settings) throw new Error('bấm lời mời phải mở Cài đặt (thẻ kết nối nằm ở đầu trang)');
+}
+
+/** (0.7.10) Bộ chọn model của bản trình duyệt khi chưa kết nối: nhóm Locaith có «Đăng nhập…» và «Cần tài khoản Locaith», KHÔNG có «Thêm khóa…». */
+async function assertPickerSignedOut(p) {
+  await p.click('.picker-model');
+  await wait(200);
+  const r = await p.evaluate(() => {
+    const g = [...document.querySelectorAll('.model-group')].find((x) => /Locaith/.test(x.querySelector('.model-group-name')?.textContent || ''));
+    return g
+      ? { found: true, link: (g.querySelector('.link-btn') || {}).textContent || '', nokey: (g.querySelector('.model-nokey') || {}).textContent || '', logo: !!g.querySelector('.model-group-head svg, .model-group-head img'), models: [...g.querySelectorAll('.model-name')].map((e) => e.textContent) }
+      : { found: false };
+  });
+  if (!r.found) throw new Error('không thấy nhóm Locaith trong bộ chọn model');
+  if (!/Đăng nhập|Sign in/.test(r.link) || /khóa|key/i.test(r.link)) throw new Error(`nhóm Locaith chưa kết nối phải mời «Đăng nhập…», không «Thêm khóa…»: ${JSON.stringify(r)}`);
+  if (!/tài khoản Locaith|Locaith account/.test(r.nokey)) throw new Error(`dòng chú thích phải nói cần tài khoản Locaith: ${JSON.stringify(r)}`);
+  if (!r.logo) throw new Error('mô hình Locaith luôn có logo (quy ước): nhóm Locaith thiếu logo');
+  // Như mọi nhà cung cấp chưa có khoá: không liệt kê model để chọn, nhưng dòng chú thích nói rõ bên trong có gì.
+  if (!/Locaith-v5-flash/.test(r.nokey) || !/Locaith-v5-SI/.test(r.nokey)) throw new Error(`dòng chú thích phải nêu hai model Locaith-v5: ${JSON.stringify(r)}`);
+  if (r.models.length) throw new Error(`chưa kết nối thì không liệt kê model để chọn: ${JSON.stringify(r.models)}`);
+}
+
 async function assertCcCollapsed(p) {
   const r = await p.evaluate(() => {
     const q = (s) => [...document.querySelectorAll(s)];
@@ -561,6 +652,44 @@ const SHOTS = [
   { name: 'plan-limit-session-en-light-320', q: { scenario: 'plan-limit-session', theme: 'light', lang: 'en' }, w: 320, h: 600, act: assertPlanEnded },
   { name: 'plan-limit-top-dark-420', q: { scenario: 'plan-limit-top', theme: 'dark' }, w: 420, h: 520, act: assertNoPlanButton },
   // (0.7.9) thẻ «Mô hình Locaith» có mức dùng: gói trả phí (phiên + tuần), hết phiên, gói cao nhất, tài khoản miễn phí (token miễn phí một lần)
+  // (0.7.10) bản Chrome / Edge: tài khoản Locaith TUỲ CHỌN (mã kết nối), bộ chọn model, màn chào, thẻ đồng ý nói về trang web
+  { name: 'browser-account-out-dark-420', q: { scenario: 'browser-account-out', theme: 'dark' }, w: 420, h: 760, full: true, act: (p) => assertConnect(p, { state: 'signedOut', texts: ['Tài khoản Locaith (tuỳ chọn)', 'Lấy mã kết nối', 'không cần đăng nhập', 'không mã hoá'] }) },
+  { name: 'browser-account-paste-dark-420', q: { scenario: 'browser-account-out', theme: 'dark' }, w: 420, h: 760, full: true, act: (p) => assertConnect(p, { state: 'signedOut', type: 'lat_' + 'A1b2C3d4E5f6G7h8I9j0K1l2M3n4O5p6Q7r8S9t0U1v' }) },
+  { name: 'browser-account-out-en-light-320', q: { scenario: 'browser-account-out', theme: 'light', lang: 'en' }, w: 320, h: 900, full: true, act: (p) => assertConnect(p, { state: 'signedOut', texts: ['Locaith account (optional)', 'Get connection code', 'Connect'] }) },
+  { name: 'browser-account-waiting-light-320', q: { scenario: 'browser-account-waiting', theme: 'light' }, w: 320, h: 900, full: true, act: (p) => assertConnect(p, { state: 'signingIn', texts: ['Mở lại trang locaith.ai', 'Huỷ'] }) },
+  { name: 'browser-account-error-dark-420', q: { scenario: 'browser-account-error', theme: 'dark' }, w: 420, h: 760, full: true, act: (p) => assertConnect(p, { state: 'signingIn', error: 'đã bị thu hồi hoặc đã hết hạn' }) },
+  { name: 'browser-account-expired-en-dark-420', q: { scenario: 'browser-account-expired', theme: 'dark', lang: 'en' }, w: 420, h: 800, full: true, act: (p) => assertConnect(p, { state: 'expired', banner: 'revoked or has expired' }) },
+  { name: 'browser-account-out-hc-300', q: { scenario: 'browser-account-out', theme: 'hc' }, w: 300, h: 1000, full: true, act: (p) => assertConnect(p, { state: 'signedOut', texts: ['Lấy mã kết nối'] }) },
+  {
+    name: 'browser-account-in-dark-420',
+    q: { scenario: 'browser-account-in', theme: 'dark' },
+    w: 420,
+    h: 1000,
+    full: true,
+    act: async (p) => {
+      await assertConnect(p, { card: false });
+      const r = await p.evaluate(() => ({ account: !!document.querySelector('.acct-set .acct-user'), hint: (document.querySelector('.acct-set .set-hint') || {}).textContent || '', usage: !!document.querySelector('[data-testid="locaith-usage"]'), text: document.querySelector('.acct-set')?.textContent || '' }));
+      if (!r.account || !r.usage) throw new Error(`đã kết nối: phải có thẻ tài khoản và khối hạn mức: ${JSON.stringify(r)}`);
+      if (/VS Code/.test(r.hint) || !/trình duyệt/.test(r.hint)) throw new Error(`gợi ý đăng xuất của bản trình duyệt phải nói «trình duyệt», không nói VS Code: ${r.hint}`);
+    },
+  },
+  { name: 'browser-welcome-dark-420', q: { scenario: 'browser-welcome', theme: 'dark' }, w: 420, h: 760, act: (p) => assertBrowserWelcome(p, { callout: true, texts: ['không cần API key', 'Kết nối tài khoản Locaith'] }) },
+  { name: 'browser-welcome-en-light-320', q: { scenario: 'browser-welcome', theme: 'light', lang: 'en' }, w: 320, h: 900, act: (p) => assertBrowserWelcome(p, { callout: true, texts: ['no API key needed', 'Connect a Locaith account'] }) },
+  { name: 'browser-welcome-click-dark-420', q: { scenario: 'browser-welcome', theme: 'dark' }, w: 420, h: 900, full: true, act: (p) => assertBrowserWelcome(p, { callout: true, click: true }) },
+  { name: 'browser-welcome-has-keys-dark-420', q: { scenario: 'browser-welcome-keys', theme: 'dark' }, w: 420, h: 760, act: (p) => assertBrowserWelcome(p, { callout: false }) },
+  { name: 'browser-picker-signed-out-dark-420', q: { scenario: 'browser-welcome', theme: 'dark' }, w: 420, h: 800, act: assertPickerSignedOut },
+  {
+    name: 'browser-consent-light-420',
+    q: { scenario: 'browser-consent', theme: 'light' },
+    w: 420,
+    h: 900,
+    full: true,
+    act: async (p) => {
+      const r = await p.evaluate(() => ({ card: !!document.querySelector('[data-testid="locaith-consent"]'), p1: (document.querySelector('.lcn-list li') || {}).textContent || '' }));
+      if (!r.card) throw new Error('không thấy thẻ thông báo dữ liệu');
+      if (!/trang web/.test(r.p1)) throw new Error(`thông báo dữ liệu của bản trình duyệt phải nói nội dung TRANG WEB được gửi tới Locaith: ${r.p1}`);
+    },
+  },
   { name: 'locaith-usage-plus-dark-420', q: { scenario: 'locaith-usage-plus', theme: 'dark' }, w: 420, h: 900, full: true, act: (p) => assertUsage(p, { bars: 2, texts: ['Gói Plus', '37%', '12%', 'làm mới sau 2 giờ 10 phút', 'làm mới sau 5 ngày 3 giờ'], upgrade: true }) },
   { name: 'locaith-usage-plus-en-light-320', q: { scenario: 'locaith-usage-plus', theme: 'light', lang: 'en' }, w: 320, h: 1000, full: true, act: (p) => assertUsage(p, { bars: 2, texts: ['Plus plan', '5-hour session', 'renews in 2 h 10 min'], upgrade: true }) },
   { name: 'locaith-usage-limit-dark-420', q: { scenario: 'locaith-usage-limit', theme: 'dark' }, w: 420, h: 900, full: true, act: (p) => assertUsage(p, { bars: 2, texts: ['Gói Pro', '100%', '84%'], full: 1, high: 1, upgrade: true }) },

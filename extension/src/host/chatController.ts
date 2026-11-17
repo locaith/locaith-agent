@@ -1104,6 +1104,9 @@ export class ChatController implements vscode.Disposable {
         return this.d.remote?.manage();
       case 'locaith_consent':
         return this.onLocaithConsent(m.action);
+      case 'locaith_refresh': // (0.7.10) giao diện vừa mở Cài đặt: đọc lại mức đã dùng của hạn mức (tối đa 15 giây một lần)
+        this.refreshLocaithUsage({ always: true });
+        return;
       case 'send': {
         this.recordPrompt(m.text); // (0.7.4) lịch sử ↑/↓: mọi tin người dùng gửi, kể cả tin vào hàng đợi và tin từ Remote
         if (this.viewing) {

@@ -6,12 +6,13 @@
  * hai engine, kiểm tra quyết định cấp quyền, lệnh gạch chéo xử lý trước khi khoá…) nhưng không có workspace, trình soạn thảo hay diff.
  */
 
-import { AgentEngine } from '../core/engine/engine';
+import { AgentEngine, type QueueState } from '../core/engine/engine';
 import { t, type Lang } from '../core/engine/strings';
 import { Summarizer } from '../core/engine/summarizer';
 import type { ToolRegistry } from '../core/engine/toolRegistry';
 import { newSession, type ArtifactRecord, type PermissionDecision, type SessionState } from '../core/engine/types';
 import { DEMO_PROVIDER_ID } from '../core/providers/demo';
+import { LOCAITH_NOTICE_VERSION, LOCAITH_PROVIDER_ID } from '../core/providers/locaithGateway';
 import type { ProviderService } from '../core/providers/service';
 import type { SkillRegistry } from '../core/skills/registry';
 import type { ContentBlock } from '../core/types';
@@ -24,6 +25,7 @@ import type {
   BrowserViewState,
   FileHit,
   HostMessage,
+  LocaithView,
   PermissionMode,
   PermissionRequest,
   SkillSummary,
@@ -43,6 +45,8 @@ import { newId, reduceView } from '../shared/transcript';
 import type { BrowserApi, TabLite } from './api';
 import type { BrowserConfig } from './config';
 import { browserContextBlock, buildBrowserUserContent, withFreshContext } from './context';
+import type { AcceptResult, LocaithGate } from '../host/locaith';
+import { extractDeviceToken, type BrowserAccountGate } from './account';
 import { BrowserToolHost } from './host';
 import type { BrowserLogger } from './logger';
 import { clip } from './page/pure';
@@ -83,6 +87,13 @@ export interface BrowserControllerDeps {
   lastSession?: { get(): Promise<string | undefined>; set(id: string | undefined): Promise<void> };
   /** Đọc tệp tải lên (PDF/Word/Excel/HTML/CSV/TXT) thành chữ. Bản thật nạp lười từ docparse.js (xem panel.tsx); bỏ trống = chưa hỗ trợ đọc tệp. */
   extractDocument?: DocExtractor;
+  /**
+   * (0.7.10) Tài khoản locaith.ai — TUỲ CHỌN, chỉ để dùng mô hình Locaith (Locaith-v5-flash / SI) không cần API key. Vắng (kiểm thử đơn vị) = không có tài khoản nào
+   * (giao diện không hiện thẻ đăng nhập). Dùng API key của riêng mình thì không bao giờ phải đăng nhập.
+   */
+  account?: BrowserAccountGate;
+  /** (0.7.10) Đồng ý thông báo dữ liệu theo tài khoản + mức đã dùng của hạn mức (cùng bộ với bản VS Code). Vắng = không có thẻ đồng ý. */
+  locaith?: LocaithGate;
   /** Gửi một đánh giá về Locaith (mặc định ở panel.tsx = `postRating`). Bỏ trống = không gửi gì (kiểm thử / chạy không mạng): đánh giá vẫn được ghi nhận và chờ gửi. */
   sendFeedback?: (payload: RatingPayload) => Promise<RatingSendResult>;
 }
@@ -217,6 +228,18 @@ export class BrowserController {
   /** Bộ đếm cho kiểm thử tích hợp. */
   readonly stats = { ready: 0, messages: 0 };
 
+  // ── (0.7.10) mô hình Locaith: thẻ đồng ý thông báo dữ liệu, hàng chờ, theo dõi tài khoản (cùng cách làm với ChatController của bản VS Code) ──
+  /** Thẻ thông báo dữ liệu của mô hình Locaith đang mở trong khung chat. */
+  private consentCard = false;
+  private consentSaving = false;
+  private consentError: string | undefined;
+  /** Lúc bắt đầu đứng trong hàng chờ của cổng Locaith (0 = không xếp hàng). */
+  private modelQueueSince = 0;
+  private accountWasUsable = false;
+  /** Chế độ demo do TA tự chọn lúc chưa có gì (khác với người dùng tự chọn): được thay khi có chỗ tốt hơn (vừa đăng nhập Locaith, vừa nhập khoá). */
+  private autoPickedDemo = false;
+  private readonly offs: (() => void)[] = [];
+
   constructor(private readonly d: BrowserControllerDeps) {
     this.host = new BrowserToolHost({
       askPermission: (req, signal) => this.askPermission(req, signal),
@@ -227,6 +250,28 @@ export class BrowserController {
     this.registry = createBrowserToolRegistry({ skills: d.skills, api: d.api, scope: this.scope, presence: this.presence, focusTabs: () => d.config.browser().focusTabs });
     this.session = this.freshSession();
     this.view = this.baseView();
+    // Tài khoản Locaith đổi (dán mã xong, bị thu hồi, đăng xuất ở khung chat của cửa sổ khác…) → cập nhật ngay giao diện.
+    this.accountWasUsable = d.account?.usable ?? false;
+    if (d.account) {
+      const acc = d.account;
+      this.offs.push(
+        acc.onChange(() => {
+          if (this.disposed) return;
+          this.patch({ account: acc.view() });
+          void this.afterAccountChange();
+        }),
+      );
+    }
+    // Đồng ý thông báo dữ liệu đổi (đồng ý, rút lại, máy chủ đòi lại, khung chat khác đã đồng ý…) → cập nhật thẻ và cờ «cần đồng ý» của nhà cung cấp.
+    if (d.locaith) {
+      const sub = d.locaith.onChange(() => {
+        if (this.disposed) return;
+        void this.providerSummaries().then((providers) => {
+          if (!this.disposed) this.patch({ providers, locaith: this.locaithView() });
+        });
+      });
+      this.offs.push(() => sub.dispose());
+    }
   }
 
   get isRunning(): boolean {
@@ -383,6 +428,8 @@ export class BrowserController {
       screen: 'chat',
       platform: 'browser',
       browser: this.browserState(),
+      ...(this.d.account ? { account: this.d.account.view() } : {}),
+      ...(this.d.locaith ? { locaith: this.locaithView() } : {}),
     };
   }
 
@@ -410,13 +457,21 @@ export class BrowserController {
     this.post({ type: 'toast', level, text });
   }
 
-  /** Phiên còn trống mà nhà cung cấp đang chọn chưa có khoá → chuyển sang nhà cung cấp đầu tiên có khoá, hoặc chế độ demo. */
+  /**
+   * Phiên còn trống mà nhà cung cấp đang chọn chưa có khoá → chuyển sang nhà cung cấp đầu tiên có khoá, hoặc chế độ demo.
+   * Thứ tự (như bản VS Code): khoá API người dùng đã tự nhập → tài khoản Locaith đã đăng nhập (mô hình Locaith-v5, không cần khoá) → demo.
+   */
   private async autoPickProvider(): Promise<void> {
     if (this.session.messages.length > 0 || this.busy) return;
-    if (await this.d.providers.hasKey(this.session.provider)) return;
+    const cur = this.session.provider;
+    // Demo do người dùng TỰ chọn thì giữ; demo do ta tự chọn lúc chưa có gì thì được thay khi có chỗ tốt hơn (vừa đăng nhập Locaith, vừa nhập khoá).
+    if ((await this.d.providers.hasKey(cur)) && !(cur === DEMO_PROVIDER_ID && this.autoPickedDemo)) return;
     const descriptors = await this.d.providers.registry.descriptors();
-    const pick = descriptors.find((p) => p.id !== DEMO_PROVIDER_ID && p.hasKey) ?? descriptors.find((p) => p.id === DEMO_PROVIDER_ID);
-    if (!pick) return;
+    const own = descriptors.find((p) => p.id !== DEMO_PROVIDER_ID && p.hasKey && !p.account);
+    const locaith = descriptors.find((p) => p.account && p.hasKey);
+    const pick = own ?? locaith ?? descriptors.find((p) => p.id === DEMO_PROVIDER_ID);
+    if (!pick || pick.id === cur) return;
+    this.autoPickedDemo = pick.id === DEMO_PROVIDER_ID;
     this.session.provider = pick.id;
     this.session.model = pick.defaultModel;
     this.view = { ...this.view, provider: pick.id, model: pick.defaultModel };
@@ -444,8 +499,11 @@ export class BrowserController {
       browser: this.browserState(tabs, siteAccess),
       // Lời mời đánh giá: đã đủ điều kiện từ lần dùng trước thì hiện ngay khi mở lại khung chat.
       rating: shouldAskRating(rating) ? { sends: rating.sends } : undefined,
+      ...(this.d.account ? { account: this.d.account.view() } : {}),
+      ...(this.d.locaith ? { locaith: this.locaithView() } : {}),
     };
     this.post({ type: 'init', state: this.view });
+    this.refreshLocaithUsage(); // (0.7.10) đang dùng mô hình Locaith: đọc mức đã dùng (giãn cách 15 giây)
     void this.d.config.promptHistory().then((items) => {
       if (!this.disposed) this.post({ type: 'prompt_history', items: [...items] }); // (0.7.4) ↑/↓ ở ô nhập
     });
@@ -653,6 +711,23 @@ export class BrowserController {
 
   private async dispatch(m: WebviewMessage): Promise<void> {
     switch (m.type) {
+      // ── (0.7.10) tài khoản Locaith tuỳ chọn + mô hình Locaith ──
+      case 'account_sign_in':
+        return void (await this.d.account?.signIn());
+      case 'account_cancel':
+        this.d.account?.cancel();
+        return;
+      case 'account_sign_out':
+        return this.signOutAccount();
+      case 'account_enter_code':
+        return this.enterAccountCode(typeof m.code === 'string' ? m.code : '');
+      case 'account_manage':
+        return void (await this.d.account?.manage());
+      case 'locaith_consent':
+        return this.onLocaithConsent(m.action);
+      case 'locaith_refresh':
+        this.refreshLocaithUsage({ always: true });
+        return;
       case 'ready': {
         this.stats.ready++;
         await this.sendInit(this.view.screen);
@@ -904,6 +979,14 @@ export class BrowserController {
     if (this.busy) return this.busyToast();
     const text = String(rawText ?? '').trim();
     if (!text && attachments.length === 0) return;
+    // (0.7.10) «Mã kết nối» Locaith (token thiết bị) dán nhầm vào ô chat sẽ bị gửi cho nhà cung cấp AI như một tin nhắn thường: chặn TRƯỚC khi rời máy.
+    if (extractDeviceToken(text)) {
+      const vi = this.lang === 'vi';
+      this.toast('warn', vi ? 'Đó là mã kết nối Locaith — chưa gửi gì (gửi vào cuộc trò chuyện sẽ lộ mã cho nhà cung cấp AI). Hãy dán mã vào Cài đặt → Tài khoản Locaith.' : 'That is a Locaith connection code — nothing was sent (a code in the chat would be exposed to the AI provider). Paste it in Settings → Locaith account instead.');
+      const rest = text.replace(/lat_[A-Za-z0-9_-]{43}(?![A-Za-z0-9_-])/g, '').trim();
+      if (rest) this.post({ type: 'draft', text: rest, attachments: attachments.filter((a) => a.kind !== 'image') });
+      return;
+    }
     // Lệnh gạch chéo xử lý TRƯỚC khi khoá: /compact, /new… tự kiểm tra "đang bận" nên sẽ tự chặn mình nếu đã đặt `starting`.
     if (text.startsWith('/') && attachments.length === 0) {
       const [cmd, ...rest] = text.slice(1).split(/\s+/);
@@ -994,6 +1077,27 @@ export class BrowserController {
       this.emit({ t: 'notice', level: 'error', text: `Nhà cung cấp "${providerId}" không còn tồn tại. Hãy chọn lại model.` });
       return;
     }
+    // (0.7.10) Mô hình Locaith cần tài khoản (tuỳ chọn): chưa đăng nhập / phiên đã hết hiệu lực thì KHÔNG gửi gì — trả lại nội dung vừa gõ và mở Cài đặt (thẻ tài khoản ở đầu trang).
+    if (providerId === LOCAITH_PROVIDER_ID) {
+      if (!this.d.account?.usable) {
+        const vi = this.lang === 'vi';
+        this.emit({
+          t: 'notice',
+          level: 'warn',
+          text: vi
+            ? 'Mô hình Locaith cần tài khoản Locaith: vào Cài đặt → Tài khoản Locaith, lấy mã kết nối trên locaith.ai rồi dán vào. Hoặc chọn mô hình khác dùng API key của bạn.'
+            : 'The Locaith models need a Locaith account: open Settings → Locaith account, get a connection code on locaith.ai and paste it. Or pick another model that uses your own API key.',
+        });
+        this.post({ type: 'draft', text: String(rawText ?? ''), attachments: attachments.filter((a) => a.kind !== 'image') });
+        await this.showScreen('settings');
+        return;
+      }
+      // CHƯA đồng ý thông báo dữ liệu thì không gửi gì; mở thẻ thông báo ngay trong cuộc trò chuyện và trả lại nội dung vừa gõ.
+      if (this.d.locaith && !(await this.ensureLocaithConsent())) {
+        this.post({ type: 'draft', text: String(rawText ?? ''), attachments: attachments.filter((a) => a.kind !== 'image') });
+        return;
+      }
+    }
     if (!(await this.d.providers.hasKey(providerId))) {
       this.emit({ t: 'notice', level: 'error', text: t(this.lang, 'noKey', { provider: this.d.providers.get(providerId).label }) });
       this.post({ type: 'draft', text: String(rawText ?? ''), attachments: attachments.filter((a) => a.kind !== 'image') });
@@ -1071,6 +1175,11 @@ export class BrowserController {
       host: this.host,
       settings,
       emit: (ev) => this.onEngineEvent(ev),
+      // (0.7.10) cổng Locaith: hàng chờ khi đông người, đòi đồng ý lại, token bị từ chối (401), hết hạn mức
+      onQueue: (q) => this.setModelQueue(q),
+      onConsentRequired: () => this.onConsentRequired(),
+      onAccountInvalid: () => void this.d.account?.recheck(),
+      onUsageLimit: () => this.refreshLocaithUsage({ force: true }),
       profile: 'browser',
       // Hướng dẫn riêng của người dùng thay cho LOCAITH.md của bản VS Code.
       loadInstructions: async () => {
@@ -1092,6 +1201,8 @@ export class BrowserController {
     else this.presence.end();
     this.emit({ t: 'run_state', running });
     if (!running) {
+      this.setModelQueue(null);
+      this.refreshLocaithUsage(); // (0.7.10) lượt xong: cập nhật mức đã dùng (chỉ khi đang dùng mô hình Locaith; giãn cách 15 giây)
       this.flushNow();
       void this.saveNow().then(async () => this.patch({ ...(await this.listings()), context: this.contextInfo(), ...this.meterPatch() })); // (lane:sessions-ux)
     }
@@ -1262,10 +1373,22 @@ export class BrowserController {
 
   async setModel(provider: string, model: string): Promise<void> {
     if (!this.d.providers.has(provider) || !model) return;
+    const leavingLocaith = this.session.provider === LOCAITH_PROVIDER_ID && provider !== LOCAITH_PROVIDER_ID;
     this.session.provider = provider;
     this.session.model = model;
+    this.autoPickedDemo = false;
+    if (leavingLocaith && this.consentCard) {
+      this.consentCard = false;
+      this.consentError = undefined;
+    }
     await this.d.config.setLastModel(provider, model);
-    this.patch({ provider, model, context: this.contextInfo() });
+    this.patch({ provider, model, context: this.contextInfo(), ...(this.d.locaith ? { locaith: this.locaithView() } : {}) });
+    // Chọn mô hình Locaith: hỏi trước máy chủ xem tài khoản đã đồng ý ở máy khác chưa để khỏi hiện thẻ không cần thiết.
+    if (provider === LOCAITH_PROVIDER_ID && this.d.account?.usable && this.d.locaith && !this.d.locaith.accepted()) {
+      void this.d.locaith.refresh().then(() => {
+        if (!this.disposed) this.patch({ locaith: this.locaithView() });
+      });
+    }
   }
 
   async showScreen(screen: 'chat' | 'settings' | 'history'): Promise<void> {
@@ -1294,6 +1417,222 @@ export class BrowserController {
     }
     this.session.mode = mode;
     this.patch({ mode });
+  }
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // (0.7.10) Mô hình Locaith: tài khoản tuỳ chọn, hàng chờ khi đông người, đồng ý thông báo dữ liệu, mức đã dùng
+  // ─────────────────────────────────────────────────────────────────────────
+
+  private locaithView(): LocaithView | undefined {
+    const c = this.d.locaith;
+    if (!c) return undefined;
+    const usage = c.usage?.(); // hạn mức 5 giờ / tuần — chỉ phần trăm và giờ làm mới
+    return {
+      noticeVersion: LOCAITH_NOTICE_VERSION,
+      accepted: c.accepted(),
+      card: this.consentCard,
+      ...(this.consentSaving ? { saving: true } : {}),
+      ...(this.consentError ? { error: this.consentError } : {}),
+      ...(c.outdated() ? { outdated: true } : {}),
+      ...(usage ? { usage } : {}),
+    };
+  }
+
+  /**
+   * Đọc lại mức đã dùng của hạn mức (GET /account) rồi cập nhật khung Cài đặt. Mặc định chỉ khi phiên đang dùng mô hình Locaith (lượt xong, đổi model);
+   * `always` cho chỗ người dùng chủ động xem (mở Cài đặt, vừa đăng nhập) và `force` cho lúc vừa bị từ chối vì hạn mức (không chờ giãn cách 15 giây).
+   */
+  private refreshLocaithUsage(opts: { force?: boolean; always?: boolean } = {}): void {
+    const c = this.d.locaith;
+    if (!c?.refreshUsage || this.disposed || !this.d.account?.usable) return;
+    if (!opts.always && !opts.force && this.session.provider !== LOCAITH_PROVIDER_ID) return;
+    void c
+      .refreshUsage(opts.force === true)
+      .then(() => {
+        if (!this.disposed) this.patch({ locaith: this.locaithView() });
+      })
+      .catch(() => undefined);
+  }
+
+  /** Cổng báo đang xếp hàng (có `q`) hoặc đã được nhận / dừng (`null`): cập nhật dải đếm ngược ngay trong khung chat. */
+  private setModelQueue(q: QueueState | null): void {
+    if (this.disposed) return;
+    if (!q) {
+      this.modelQueueSince = 0;
+      if (this.view.modelQueue) this.patch({ modelQueue: undefined });
+      return;
+    }
+    if (!this.modelQueueSince) this.modelQueueSince = Date.now();
+    this.patch({ modelQueue: { ...q, since: this.modelQueueSince } });
+  }
+
+  /**
+   * Tài khoản vừa đổi trạng thái dùng được. Vừa kết nối → chọn mô hình Locaith cho người chưa có khoá nào + hỏi máy chủ xem đã đồng ý ở máy khác chưa.
+   * Vừa mất (đăng xuất / thu hồi) → dọn thẻ và rời Locaith nếu phiên còn trống.
+   */
+  private async afterAccountChange(): Promise<void> {
+    const acc = this.d.account;
+    if (!acc || this.disposed) return;
+    const usable = acc.usable;
+    const was = this.accountWasUsable;
+    this.accountWasUsable = usable;
+    if (usable === was) return;
+    if (usable) {
+      await this.autoPickProvider();
+      if (this.d.locaith) await this.d.locaith.refresh().catch(() => undefined);
+      if (this.disposed) return;
+      this.d.providers.registry.catalog.invalidate(LOCAITH_PROVIDER_ID);
+      this.patch({ provider: this.view.provider, model: this.view.model, providers: await this.providerSummaries(), locaith: this.locaithView(), context: this.contextInfo() });
+      this.refreshLocaithUsage({ always: true });
+      void this.d.providers
+        .refresh([LOCAITH_PROVIDER_ID], true)
+        .then(async () => {
+          if (!this.disposed) this.patch({ providers: await this.providerSummaries(), context: this.contextInfo() });
+        })
+        .catch(() => undefined);
+      return;
+    }
+    this.consentCard = false;
+    this.consentError = undefined;
+    this.setModelQueue(null);
+    // Phiên còn trống đang ở Locaith thì chuyển sang chỗ khác (khoá của người dùng, hoặc demo); phiên đã có tin nhắn giữ nguyên — lần gửi tới sẽ nhắc kết nối lại.
+    if (this.session.provider === LOCAITH_PROVIDER_ID && this.session.messages.length === 0 && !this.busy) {
+      const own = (await this.d.providers.registry.descriptors()).find((p) => p.id !== DEMO_PROVIDER_ID && p.hasKey && !p.account);
+      if (own) await this.setModel(own.id, own.defaultModel);
+      else {
+        const demo = this.d.providers.registry.defaultModel(DEMO_PROVIDER_ID);
+        this.session.provider = DEMO_PROVIDER_ID;
+        this.session.model = demo;
+        this.autoPickedDemo = true;
+        this.view = { ...this.view, provider: DEMO_PROVIDER_ID, model: demo };
+      }
+    }
+    if (this.disposed) return;
+    this.patch({ provider: this.view.provider, model: this.view.model, providers: await this.providerSummaries(), locaith: this.locaithView(), context: this.contextInfo() });
+  }
+
+  /** Người dùng dán «mã kết nối»: kiểm với máy chủ tài khoản; sai thì lý do hiện cạnh ô dán (qua `account.view().error`), đúng thì báo một dòng. */
+  private async enterAccountCode(raw: string): Promise<void> {
+    const acc = this.d.account;
+    if (!acc) return;
+    const r = await acc.enterCode(raw);
+    if (r.ok) this.toast('info', this.lang === 'vi' ? 'Đã kết nối tài khoản Locaith.' : 'Locaith account connected.');
+    else if (r.error !== 'already_signed_in') this.patch({ account: acc.view() });
+  }
+
+  private async signOutAccount(): Promise<void> {
+    await this.d.account?.signOut();
+    this.toast('info', this.lang === 'vi' ? 'Đã đăng xuất Locaith trên trình duyệt này — mã kết nối đã bị thu hồi.' : 'Signed out of Locaith in this browser — the connection code was revoked.');
+  }
+
+  /** true = tài khoản đã đồng ý (kể cả đã đồng ý ở máy khác hoặc trên trang locaith.ai). false = đã mở thẻ thông báo trong khung chat. */
+  private async ensureLocaithConsent(): Promise<boolean> {
+    const c = this.d.locaith;
+    if (!c || c.accepted()) return true;
+    await c.refresh();
+    if (c.accepted()) {
+      this.patch({ locaith: this.locaithView() });
+      return true;
+    }
+    this.openConsentCard();
+    return false;
+  }
+
+  private openConsentCard(): void {
+    this.consentCard = true;
+    this.consentError = undefined;
+    this.patch({ locaith: this.locaithView() });
+  }
+
+  /** Cổng từ chối vì chưa có bản ghi đồng ý hợp lệ (tài khoản mới, hoặc thông báo đã đổi phiên bản): bỏ bản đệm và hỏi lại ngay trong khung chat. */
+  private onConsentRequired(): void {
+    this.d.locaith?.invalidate();
+    this.openConsentCard();
+  }
+
+  private consentErrorText(r: Exclude<AcceptResult, { ok: true }>): string {
+    const vi = this.lang === 'vi';
+    switch (r.error) {
+      case 'signed_out':
+      case 'unauthorized':
+        return vi ? 'Mã kết nối Locaith không còn hiệu lực — hãy tạo mã mới trên locaith.ai rồi dán lại.' : 'Your Locaith connection code is no longer valid — create a new one on locaith.ai and paste it again.';
+      case 'network':
+        return vi ? 'Không kết nối được máy chủ Locaith để ghi nhận đồng ý. Kiểm tra mạng rồi bấm lại.' : 'Could not reach the Locaith server to record your consent. Check your network and try again.';
+      case 'rejected':
+        return vi
+          ? `Máy chủ Locaith không nhận bản ghi đồng ý${r.message ? ` (${r.message})` : ''}. Hãy cập nhật tiện ích lên bản mới nhất rồi thử lại.`
+          : `The Locaith server did not accept the consent record${r.message ? ` (${r.message})` : ''}. Update the extension to the latest version and retry.`;
+      default:
+        return vi ? 'Máy chủ Locaith đang gặp lỗi khi ghi nhận đồng ý. Thử lại sau ít phút.' : 'The Locaith server had an error while recording your consent. Try again in a few minutes.';
+    }
+  }
+
+  /** Rời mô hình Locaith: sang nhà cung cấp có khoá API của chính người dùng, không có thì sang demo (và mở Cài đặt để nhập khoá nếu `openSettings`). */
+  private async leaveLocaith(openSettings: boolean): Promise<void> {
+    const descriptors = await this.d.providers.registry.descriptors();
+    const own = descriptors.find((p) => p.id !== DEMO_PROVIDER_ID && p.hasKey && !p.account);
+    if (own) {
+      await this.setModel(own.id, own.defaultModel);
+      return;
+    }
+    const demo = descriptors.find((p) => p.id === DEMO_PROVIDER_ID);
+    if (demo && this.session.provider === LOCAITH_PROVIDER_ID) {
+      await this.setModel(demo.id, demo.defaultModel);
+      this.autoPickedDemo = true;
+    }
+    if (openSettings) {
+      this.toast('info', this.lang === 'vi' ? 'Hãy nhập API key của hãng bạn muốn dùng (Claude, ChatGPT, Gemini, DeepSeek, Grok…) ở mục Nhà cung cấp.' : 'Add the API key of the provider you want (Claude, ChatGPT, Gemini, DeepSeek, Grok…) under Providers.');
+      await this.showScreen('settings');
+    }
+  }
+
+  private async onLocaithConsent(action: 'accept' | 'decline' | 'withdraw' | 'review'): Promise<void> {
+    const c = this.d.locaith;
+    if (!c) return;
+    const vi = this.lang === 'vi';
+    switch (action) {
+      case 'review':
+        this.consentCard = true;
+        this.consentError = undefined;
+        this.patch({ locaith: this.locaithView(), screen: 'chat' });
+        return;
+      case 'accept': {
+        if (this.consentSaving) return;
+        this.consentSaving = true;
+        this.consentError = undefined;
+        this.patch({ locaith: this.locaithView() });
+        let r: AcceptResult;
+        try {
+          r = await c.accept();
+        } finally {
+          this.consentSaving = false;
+        }
+        if (r.ok) {
+          this.consentCard = false;
+          this.consentError = undefined;
+          this.patch({ locaith: this.locaithView(), providers: await this.providerSummaries() });
+          this.toast('info', vi ? 'Đã ghi nhận đồng ý. Bấm Gửi để tiếp tục.' : 'Consent recorded. Press Send to continue.');
+        } else {
+          this.consentError = this.consentErrorText(r);
+          this.patch({ locaith: this.locaithView() });
+        }
+        return;
+      }
+      case 'decline':
+        this.consentCard = false;
+        this.consentError = undefined;
+        this.patch({ locaith: this.locaithView() });
+        await this.leaveLocaith(true);
+        return;
+      case 'withdraw':
+        await c.withdraw();
+        this.consentCard = false;
+        this.consentError = undefined;
+        this.patch({ locaith: this.locaithView(), providers: await this.providerSummaries() });
+        if (this.session.provider === LOCAITH_PROVIDER_ID) await this.leaveLocaith(false);
+        this.toast('info', vi ? 'Đã rút lại đồng ý trên trình duyệt này — mô hình Locaith sẽ hỏi lại khi bạn dùng. Bản ghi cũ vẫn lưu ở máy chủ làm bằng chứng.' : 'Consent withdrawn in this browser — the Locaith model will ask again when you use it. The earlier record stays on the server as an audit trail.');
+        return;
+    }
   }
 
   // ─────────────────────────────────────────────────────────────────────────
@@ -1607,6 +1946,7 @@ export class BrowserController {
     if (this.disposed) return;
     this.disposed = true;
     this.offTabs?.();
+    for (const off of this.offs.splice(0)) off();
     this.stop();
     this.presence.dispose();
     if (this.flushTimer) clearTimeout(this.flushTimer);

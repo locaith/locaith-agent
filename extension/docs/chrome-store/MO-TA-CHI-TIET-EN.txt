@@ -6,11 +6,12 @@ Locaith AI is an AI assistant that lives in the side panel of Chrome and Microso
 • Work through multi-step tasks on a page: click, type, select, scroll, open and switch tabs. By default the extension asks before every action; "Full access" mode only turns on when you ask for it. You can stop it at any time.
 • Keep your conversation history on this device, search it, branch it, export it as Markdown.
 
-You use your own API key with the model provider you choose, or sign in with a provider account where one-click sign-in is supported. A demo mode lets you try the interface right away, no key needed.
+You use your own API key with the model provider you choose, or sign in with a provider account where one-click sign-in is supported. Optionally, connect a Locaith account (paste a "connection code" from locaith.ai) to use the Locaith-v5-flash and Locaith-v5-SI models, 1-million-token context window, no API key needed — a new account has a few tokens to try, and a plan from locaith.ai is needed to keep going. A demo mode lets you try the interface right away, no key needed.
 
 Privacy:
 • On first use the extension tells you exactly what data goes where, and only runs after you agree.
 • Your API key is kept in the extension's own storage on this device (not encrypted) and is only sent to the provider it belongs to.
+• If you choose to connect a Locaith account to use the Locaith models (optional, never required), your questions, attached files and the content of the pages you let the assistant read are sent to Locaith's service to be processed and stored to find errors and improve the models — only after you separately accept Locaith's data notice in the chat. The connection code is also kept in the extension's own storage (not encrypted); revoke it any time with "Sign out" or on locaith.ai. If you do not use the Locaith models nothing of yours is sent to Locaith, except the star rating below.
 • Only when you tap a star in the rating prompt is the star count (and your comment, if you type one) sent, anonymously, to Locaith — never page content, conversations or keys.
 • The extension reads a page only when you ask or give a command. Access to all sites is optional, requested only when you press a button in Settings, and can be revoked at any time.
 • No remote code, no ads, no browsing-history tracking, no selling of data.

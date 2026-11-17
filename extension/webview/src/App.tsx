@@ -46,7 +46,7 @@ export function App() {
   const closeToast = useCallback((id: number) => setToasts((prev) => prev.filter((x) => x.id !== id)), []);
 
   // Đăng nhập xong thì bỏ các toast «Hãy đăng nhập…» còn sót (do thử gửi tin trước khi đăng nhập) — không để chúng treo trên giao diện chính.
-  const signedIn = !view?.account || view.account.status === 'signedIn';
+  const signedIn = !view?.account || view.account.optional === true || view.account.status === 'signedIn';
   useEffect(() => {
     if (signedIn) setToasts([]);
   }, [signedIn]);
@@ -200,7 +200,7 @@ export function App() {
   const hasAnyKey = view.providers.some((p) => p.hasKey);
 
   // CỔNG TÀI KHOẢN: chưa đăng nhập locaith.ai thì chỉ hiện màn đăng nhập (host cũng từ chối mọi thao tác khác — đây chỉ là phần giao diện).
-  if (view.account && view.account.status !== 'signedIn') {
+  if (view.account && !view.account.optional && view.account.status !== 'signedIn') {
     return (
       <AppContext.Provider value={ctx}>
         <div class="app screen-account">

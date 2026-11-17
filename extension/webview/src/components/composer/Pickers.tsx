@@ -171,11 +171,11 @@ export function ModelPicker({ view, open, onToggle, onClose }: { view: ViewState
                       </button>
                     ) : (
                       <button type="button" class="link-btn" onClick={() => { onClose(); openSettings(); }}>
-                        {t('model.addKey')}
+                        {t(p.account ? 'model.signIn' : 'model.addKey')}
                       </button>
                     )}
                   </div>
-                  {!p.hasKey && <div class="model-nokey">{t('model.noKey')}</div>}
+                  {!p.hasKey && <div class="model-nokey">{t(p.account ? 'model.needsAccount' : 'model.noKey')}</div>}
                   {models.map((m) => {
                     runningIdx++;
                     const idx = runningIdx;

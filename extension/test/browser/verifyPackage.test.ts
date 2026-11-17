@@ -74,6 +74,46 @@ describe('đánh giá một chạm: điểm gửi và thông báo đồng ý ph�
   });
 });
 
+describe('(0.7.10) mô hình Locaith trong bản trình duyệt: cổng, thông báo dữ liệu và nơi lưu mã kết nối phải khớp nhau', () => {
+  it('gói thật có máy chủ cổng mô hình trong host_permissions, thẻ kết nối có chuỗi riêng và thông báo đồng ý nói thật việc dùng mô hình Locaith (tuỳ chọn)', () => {
+    const { passed } = verifyBrowserPackage(good, { root: ROOT });
+    expect(passed).toContain('host_permissions có https://studio-api.locaith.com/* (cổng mô hình Locaith)');
+    expect(passed.some((p) => p.startsWith('panel.js có chuỗi acct.b.title'))).toBe(true);
+    expect(passed.some((p) => p.startsWith('panel.js có chuỗi locaith.notice.p1.browser'))).toBe(true);
+    expect(passed.some((p) => p.startsWith('acct.b.hint nói rõ mã kết nối nằm trong bộ nhớ tiện ích, không mã hoá'))).toBe(true);
+    expect(passed.some((p) => p.startsWith('thông báo đồng ý nói việc dùng mô hình Locaith (tuỳ chọn)'))).toBe(true);
+  });
+
+  it('thiếu host_permissions của cổng mô hình → bị chặn (nếu không mọi lời gọi Locaith đều lỗi CORS)', () => {
+    // Máy chủ cổng và máy chủ nhận đánh giá là MỘT tên miền: gỡ nó làm hỏng cả hai mục — mục cổng phải có mặt trong thông báo lỗi.
+    const dir = mutated((d) => editManifest(d, (m) => void (m.host_permissions = (m.host_permissions as string[]).filter((h) => !h.includes('studio-api.locaith.com')))));
+    expect(() => verifyBrowserPackage(dir, { root: ROOT })).toThrow(/host_permissions có https:\/\/studio-api\.locaith\.com\/\* \(cổng mô hình Locaith\)/);
+  });
+
+  it('thông báo đồng ý không nhắc việc dùng mô hình Locaith gửi nội dung tới Locaith → bị chặn', () => {
+    const dir = mutated((d) => edit(d, 'store-consent.js', (s) => s.replace(/Nếu BẠN chọn kết nối tài khoản Locaith[^']*?(?=Nếu BẠN tự chạm)/, '').replace(/If YOU choose to connect a Locaith account[^']*?(?=If YOU tap)/, '')));
+    expect(() => verifyBrowserPackage(dir, { root: ROOT })).toThrow(/thông báo đồng ý nói việc dùng mô hình Locaith/);
+  });
+
+  it('chuỗi «mã kết nối» lại nói nằm trong «kho bí mật» (sai ở Chrome) → bị chặn', () => {
+    // esbuild thoát ký tự không-ASCII (\u…) nên không thể sửa «giữa câu»: thay nguyên giá trị của khoá bằng một câu sai sự thật.
+    const dir = mutated((d) => edit(d, 'panel.js', (s) => s.replace(/("acct\.b\.hint":)"(?:[^"\\\n]|\\.)*"/, (_m, k: string) => `${k}"Mã nằm trong kho bí mật của tiện ích."`)));
+    expect(() => verifyBrowserPackage(dir, { root: ROOT })).toThrow(/acct\.b\.hint nói rõ mã kết nối nằm trong bộ nhớ tiện ích/);
+  });
+
+  it('bản phát hành mà còn móc đổi máy chủ tài khoản của bản kiểm thử (nd.test.account) → bị chặn; bản --test thì có móc đó', () => {
+    const dir = mutated((d) => edit(d, 'panel.js', (s) => s + '\n;void "nd.test.account";'));
+    expect(() => verifyBrowserPackage(dir, { root: ROOT })).toThrow(/nd\.test\.account/);
+    expect(fs.readFileSync(path.join(testBuild, 'panel.js'), 'utf8')).toContain('nd.test.account'); // e2e cần nó; bản phát hành thì không
+    expect(fs.readFileSync(path.join(good, 'panel.js'), 'utf8')).not.toContain('nd.test.account');
+  });
+
+  it('mất chuỗi riêng của bản trình duyệt (thẻ kết nối, thông báo dữ liệu nói về trang web) → bị chặn', () => {
+    const dir = mutated((d) => edit(d, 'panel.js', (s) => s.split('"acct.b.title"').join('"acct.x.title"')));
+    expect(() => verifyBrowserPackage(dir, { root: ROOT })).toThrow(/panel\.js có chuỗi acct\.b\.title/);
+  });
+});
+
 describe('gói phát hành dựng thật', () => {
   it('đạt toàn bộ bộ kiểm', () => {
     const { passed } = verifyBrowserPackage(good, { root: ROOT });
