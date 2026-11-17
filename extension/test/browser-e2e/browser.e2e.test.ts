@@ -174,7 +174,7 @@ describe.skipIf(BROWSERS.length === 0)('bản trình duyệt (tiện ích MV3) t
           tab: v.browser?.tab,
           siteAccess: v.browser?.siteAccess,
           fontOk: document.fonts.check('14px "Be Vietnam Pro"', 'Nguyễn Thị Thuỷ Tiên'),
-          welcome: document.body.innerText.slice(0, 400),
+          welcome: document.body.innerText.slice(0, 1500), // 0.7.11: thẻ mời kết nối Locaith (~330 chữ) đứng trước các câu gợi ý
           theme: document.body.className,
         };
       });

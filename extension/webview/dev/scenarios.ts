@@ -122,6 +122,21 @@ export function noKeyProviders(): ProviderSummary[] {
   return PROVIDERS.map((p) => ({ ...p, hasKey: false, keyFromEnv: false }));
 }
 
+/**
+ * Chế độ demo đúng như host thật dựng ra: ProviderService luôn đăng ký nó và `hasKey` là true vì nó không cần khoá. Màn chào KHÔNG được coi đó là «đã có khoá riêng»
+ * (0.7.11: lời mời kết nối tài khoản Locaith từng gắn với «chưa có khoá nào» nên không bao giờ hiện ở bản cài thật; harness cũ bỏ sót demo nên không thấy lỗi).
+ */
+export const DEMO_PROVIDER: ProviderSummary = {
+  id: 'demo',
+  label: 'Chế độ demo (không cần API key)',
+  kind: 'demo',
+  baseUrl: '',
+  hasKey: true,
+  builtin: true,
+  modelSource: 'fallback',
+  models: [m('demo-1', 'Demo — kịch bản mẫu', 'top', 200_000)],
+};
+
 export const SESSIONS: SessionSummary[] = [
   { id: 's1', title: 'So sánh điểm Intelligence Index của các model AI', updatedAt: Date.now() - 4 * 60_000, provider: 'anthropic', model: 'claude-opus-5-5', messageCount: 14 },
   { id: 's2', title: 'Sửa lỗi hiển thị dấu tiếng Việt trong báo cáo PDF', updatedAt: Date.now() - 3 * 3600_000, provider: 'openai', model: 'gpt-6.1-sol', messageCount: 22 },
@@ -1234,6 +1249,7 @@ export function browserAccountState(kind: BrowserAccountKind): ViewState {
   const providers: ProviderSummary[] = [
     { ...LOCAITH_PROVIDER, hasKey: signedIn, needsConsent: kind === 'consent', modelSource: signedIn ? 'live' : 'fallback' },
     ...(noKeys ? noKeyProviders() : PROVIDERS),
+    DEMO_PROVIDER,
   ];
   const account: NonNullable<ViewState['account']> = {
     status: kind === 'waiting' || kind === 'error' ? 'signingIn' : kind === 'expired' ? 'signedOut' : signedIn ? 'signedIn' : 'signedOut',
@@ -1252,7 +1268,7 @@ export function browserAccountState(kind: BrowserAccountKind): ViewState {
     remote: undefined,
     screen: kind === 'welcome' || kind === 'welcome-keys' || kind === 'consent' ? 'chat' : 'settings',
     provider: kind === 'in' || kind === 'consent' ? 'locaith' : noKeys ? 'demo' : 'anthropic',
-    model: kind === 'in' || kind === 'consent' ? 'locaith-v5-flash' : noKeys ? 'demo' : 'claude-opus-5-5',
+    model: kind === 'in' || kind === 'consent' ? 'locaith-v5-flash' : noKeys ? 'demo-1' : 'claude-opus-5-5',
     providers,
     account,
     locaith: {

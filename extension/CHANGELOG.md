@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.7.11 - 2026-11-17
+
+- **Chrome / Edge: the welcome screen now really invites a new user to connect a Locaith account.** 0.7.10 added the card (*Use the Locaith models — no API key needed*, with a **Connect a Locaith account** button) but showed it only when no provider had a key — and the demo mode, which needs no key, always counts as one that has, so on a real install the card never appeared (Settings and the model picker were the only ways in). It now shows whenever you have no API key of your own and are not connected, above the suggested questions; with your own key, or once connected, it is not shown. The pages the checks used left the demo mode out, which is why 0.7.10's checks missed it; they include it now, and a test on real Chrome and Edge starts from a fresh profile and covers the card, its button and **Cancel**.
+- **The welcome screen opens at the top.** With the card it is taller than a short side panel (logo, the card, the suggested questions, the page-access card) and used to open scrolled to the bottom — the same scroll-to-the-end that follows a running conversation — which hid the title and the top of the card on the very first screen. It now starts at the top, in the browser edition and in VS Code alike; a conversation still follows its newest message.
+
 ## 0.7.10 - 2026-11-17
 
 - **The Locaith-v5 models are in the Chrome / Edge edition.** Locaith-v5-flash and Locaith-v5-SI (1-million-token context, no API key) now sit in the model picker of the browser extension — the Chrome Web Store build shipped without them. Signing in is **optional**: with your own API key nothing changes and nothing goes to Locaith. To use the Locaith models open **Settings → Locaith account (optional)**, click **Get connection code** (locaith.ai opens; sign in, read the data notice, create the code), paste the code and click **Connect**. The code is kept in the extension's own storage on this device (not encrypted, like API keys) and is revoked by **Sign out** or on locaith.ai → Devices. A code pasted into the chat box by mistake is never sent to a model.

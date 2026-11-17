@@ -101,6 +101,51 @@ describe.skipIf(BROWSERS.length === 0)('mô hình Locaith trong bản trình duy
       fs.rmSync(profile, { recursive: true, force: true });
     });
 
+    it('người mới cài (chỉ có chế độ demo, chưa có khoá riêng): màn chào mời kết nối Locaith TRƯỚC các câu gợi ý; bấm nút → Cài đặt mở ở thẻ kết nối (đang chờ); «Huỷ» → chưa kết nối', async () => {
+      // 0.7.10 gắn lời mời với «chưa có khoá nào», nhưng chế độ demo luôn được tính là có khoá nên ở bản cài thật nó không bao giờ hiện — chỉ bản chạy thật mới thấy.
+      await panel.waitForSelector('[data-testid="welcome-account"]', { timeout: 15_000 });
+      const order = await panel.evaluate(() => {
+        const c = document.querySelector('[data-testid="welcome-account"]')!;
+        const s = document.querySelector('.welcome .suggest');
+        return { suggest: !!s, first: !!s && !!(c.compareDocumentPosition(s) & Node.DOCUMENT_POSITION_FOLLOWING), text: c.textContent ?? '' };
+      });
+      expect(order.suggest).toBe(true); // demo được tính là «có khoá» → câu gợi ý có mặt, và lời mời đứng trước chúng
+      expect(order.first).toBe(true);
+      expect(order.text).toMatch(/Locaith-v5-flash/);
+      await waitFor(panel, () => (window as any).__nd.controller.snapshot().view.provider === 'demo'); // chưa kết nối: đang ở chế độ demo, không tự chọn Locaith
+      // Khung thấp thì màn chào dài hơn khung: phải mở ở ĐẦU trang (trước đây cuộn xuống đáy như cuộc trò chuyện đang chạy, mất tiêu đề và phần đầu thẻ mời)
+      await panel.setViewport({ width: 430, height: 520 });
+      await panel.reload({ waitUntil: 'load' });
+      await panel.waitForFunction(() => (window as any).__nd && document.querySelector('.composer-input') && document.querySelector('[data-testid="welcome-account"]'), { timeout: 30_000 });
+      const sc = await panel.evaluate(() => {
+        const t = document.querySelector('.timeline')!;
+        return { top: t.scrollTop, over: t.scrollHeight - t.clientHeight };
+      });
+      expect(sc.over).toBeGreaterThan(40);
+      expect(sc.top).toBe(0);
+      await panel.setViewport({ width: 430, height: 900 });
+      if (SHOTS) {
+        fs.mkdirSync(SHOTS, { recursive: true });
+        await panel.screenshot({ path: path.join(SHOTS, `${name}-locaith-welcome.png`) });
+      }
+      // Không mở tab thật: tab mới sẽ giành tiêu điểm, trang thử bị coi là ẩn và chuột thật (CDP) gửi vào nó không bao giờ trả về. Ghi lại địa chỉ định mở.
+      await panel.evaluate(() => {
+        (window as any).__opened = [];
+        (chrome.tabs as any).create = async (o: { url?: string }) => {
+          (window as any).__opened.push(o.url);
+          return { id: -1 };
+        };
+      });
+      await panel.click('[data-testid="welcome-account"] .btn');
+      await panel.waitForSelector('[data-testid="account-connect"][data-state="signingIn"]', { timeout: 10_000 });
+      expect(await panel.evaluate(() => (window as any).__opened)).toEqual(['http://127.0.0.1:1/#ext-browser']); // webUrl của bản --test; bản phát hành mở https://locaith.ai/#ext-browser
+      await panel.click('[data-testid="account-connect"] .btn-ghost'); // «Huỷ»
+      await panel.waitForSelector('[data-testid="account-connect"][data-state="signedOut"]', { timeout: 10_000 });
+      expect((await view(panel)).account.status).toBe('signedOut');
+      await panel.click('button[aria-label="Quay lại cuộc trò chuyện"]');
+      await panel.waitForSelector('.composer-input');
+    });
+
     it('chưa kết nối: giao diện KHÔNG bị chặn bởi màn đăng nhập; Cài đặt có thẻ «Tài khoản Locaith (tuỳ chọn)»; nhóm Locaith có «Đăng nhập…»', async () => {
       const v = await view(panel);
       expect(v.account).toMatchObject({ status: 'signedOut', optional: true });

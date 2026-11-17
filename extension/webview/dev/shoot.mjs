@@ -206,12 +206,30 @@ async function assertConnect(p, want) {
 async function assertBrowserWelcome(p, want) {
   const r = await p.evaluate(() => {
     const c = document.querySelector('[data-testid="welcome-account"]');
+    const s = document.querySelector('.welcome .suggest');
     const root = document.querySelector('.app');
-    return { callout: !!c, text: c ? c.textContent || '' : '', cta: c ? [...c.querySelectorAll('.btn')].map((b) => b.textContent.trim()) : [], overflowX: root ? root.scrollWidth - root.clientWidth : 0 };
+    const tl = document.querySelector('.timeline');
+    return {
+      timeline: tl ? { top: tl.scrollTop, over: tl.scrollHeight - tl.clientHeight } : null,
+      callout: !!c,
+      text: c ? c.textContent || '' : '',
+      cta: c ? [...c.querySelectorAll('.btn')].map((b) => b.textContent.trim()) : [],
+      suggest: !!s,
+      calloutFirst: c && s ? !!(c.compareDocumentPosition(s) & Node.DOCUMENT_POSITION_FOLLOWING) : null,
+      overflowX: root ? root.scrollWidth - root.clientWidth : 0,
+    };
   });
   if (r.callout !== want.callout) throw new Error(`lời mời kết nối Locaith: cần ${want.callout}, thấy ${r.callout}`);
   if (r.overflowX > 1) throw new Error(`tràn ngang ${r.overflowX}px`);
   if (!want.callout) return;
+  // (0.7.11) Như bản cài thật: chế độ demo được tính là «có khoá» nên câu gợi ý có mặt, và lời mời phải đứng TRƯỚC chúng
+  if (!r.suggest) throw new Error('màn chào phải có câu gợi ý (chế độ demo luôn được tính là có khoá) — cảnh harness chưa giống bản cài thật');
+  if (r.calloutFirst !== true) throw new Error('lời mời kết nối Locaith phải đứng trước các câu gợi ý');
+  // (0.7.11) Màn chào dài hơn khung (khung thấp / nhiều thẻ) phải mở ở ĐẦU trang, không bị cuộn xuống đáy như một cuộc trò chuyện đang chạy
+  if (want.top) {
+    if (!r.timeline || r.timeline.over < 40) throw new Error(`cảnh phải dài hơn khung để kiểm việc mở ở đầu trang: ${JSON.stringify(r.timeline)}`);
+    if (r.timeline.top !== 0) throw new Error(`màn chào dài hơn khung phải mở ở ĐẦU trang, thấy scrollTop=${r.timeline.top}`);
+  }
   for (const t of want.texts ?? []) if (!r.text.includes(t)) throw new Error(`thiếu chữ «${t}»: ${r.text}`);
   if (!want.click) return;
   await p.evaluate(() => (window.__ND_LOG__ = []));
@@ -676,6 +694,7 @@ const SHOTS = [
   { name: 'browser-welcome-dark-420', q: { scenario: 'browser-welcome', theme: 'dark' }, w: 420, h: 760, act: (p) => assertBrowserWelcome(p, { callout: true, texts: ['không cần API key', 'Kết nối tài khoản Locaith'] }) },
   { name: 'browser-welcome-en-light-320', q: { scenario: 'browser-welcome', theme: 'light', lang: 'en' }, w: 320, h: 900, act: (p) => assertBrowserWelcome(p, { callout: true, texts: ['no API key needed', 'Connect a Locaith account'] }) },
   { name: 'browser-welcome-click-dark-420', q: { scenario: 'browser-welcome', theme: 'dark' }, w: 420, h: 900, full: true, act: (p) => assertBrowserWelcome(p, { callout: true, click: true }) },
+  { name: 'browser-welcome-short-dark-420', q: { scenario: 'browser-welcome', theme: 'dark' }, w: 420, h: 520, act: (p) => assertBrowserWelcome(p, { callout: true, top: true }) },
   { name: 'browser-welcome-has-keys-dark-420', q: { scenario: 'browser-welcome-keys', theme: 'dark' }, w: 420, h: 760, act: (p) => assertBrowserWelcome(p, { callout: false }) },
   { name: 'browser-picker-signed-out-dark-420', q: { scenario: 'browser-welcome', theme: 'dark' }, w: 420, h: 800, act: assertPickerSignedOut },
   {

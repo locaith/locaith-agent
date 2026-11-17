@@ -30,7 +30,7 @@ const vi = {
   'welcome.nokey.title': 'Thêm API key để bắt đầu',
   'welcome.nokey.body': 'Chọn một nhà cung cấp (Claude, ChatGPT, Gemini, DeepSeek, Grok…) rồi dán API key. Khóa được lưu trong kho bí mật của VS Code, không nằm trong tệp cài đặt.',
   'welcome.nokey.cta': 'Thêm API key',
-  'welcome.account.title': 'Hoặc dùng mô hình Locaith — không cần API key',
+  'welcome.account.title': 'Dùng mô hình Locaith — không cần API key',
   'welcome.account.body': 'Kết nối tài khoản Locaith để dùng Locaith-v5-flash và Locaith-v5-SI (cửa sổ ngữ cảnh 1 triệu token). Tài khoản mới có ít token để thử; dùng tiếp cần mua gói tại locaith.ai.',
   'welcome.account.cta': 'Kết nối tài khoản Locaith',
 
@@ -1170,7 +1170,7 @@ const en: Record<I18nKey, string> = {
   'welcome.nokey.title': 'Add an API key to get started',
   'welcome.nokey.body': 'Pick a provider (Claude, ChatGPT, Gemini, DeepSeek, Grok…) and paste its API key. Keys are stored in VS Code’s secret storage, never in settings files.',
   'welcome.nokey.cta': 'Add API key',
-  'welcome.account.title': 'Or use the Locaith models — no API key needed',
+  'welcome.account.title': 'Use the Locaith models — no API key needed',
   'welcome.account.body': 'Connect your Locaith account to use Locaith-v5-flash and Locaith-v5-SI (1-million-token context window). A new account has a few tokens to try; to keep going a plan from locaith.ai is needed.',
   'welcome.account.cta': 'Connect a Locaith account',
 

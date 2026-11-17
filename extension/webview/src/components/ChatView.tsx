@@ -47,13 +47,20 @@ export function ChatView({ view, hasAnyKey }: { view: ViewState; hasAnyKey: bool
     return () => ro.disconnect();
   }, []);
 
-  // Tin nhắn mới của người dùng hoặc đổi cuộc trò chuyện → luôn nhảy xuống cuối.
+  // Tin nhắn mới của người dùng hoặc đổi cuộc trò chuyện → luôn nhảy xuống cuối. Màn chào (chưa có tin nào) thì ngược lại: về ĐẦU và không bám đáy — màn chào của
+  // bản trình duyệt dài hơn khung (logo, thẻ mời kết nối Locaith, câu gợi ý, thẻ cấp quyền); cuộn xuống đáy làm mất tiêu đề và phần đầu thẻ ngay lần mở đầu tiên.
   const last = view.transcript[view.transcript.length - 1];
   const lastIsUser = last?.kind === 'user';
+  const welcome = view.transcript.length === 0;
   useEffect(() => {
+    if (welcome) {
+      stick.current = false;
+      scrollRef.current?.scrollTo({ top: 0, behavior: 'auto' });
+      return;
+    }
     stick.current = true;
     scrollToBottom();
-  }, [view.sessionId, view.transcript.length === 0, lastIsUser ? last?.id : undefined]);
+  }, [view.sessionId, welcome, lastIsUser ? last?.id : undefined]);
 
   // (lane:cc-timeline-ui) mốc giờ/ngày — O(n) trên số mục (không phải số khối), tính lại khi transcript đổi.
   const marks = useMemo(() => timelineMarks(view.transcript), [view.transcript]);
