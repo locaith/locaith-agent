@@ -289,7 +289,7 @@ export function applyEvent(items: readonly TItem[], ev: UiEvent): TItem[] {
             // (lane:blind-verifier) Kiểm tra độc lập: cùng `verify.key` trong cùng lượt → cập nhật TẠI CHỖ (đang chạy → kết quả), không thêm dòng mới.
             const vk = ev.verify?.key;
             const prev = vk ? findLastIndex(blocks, (b) => b.type === 'notice' && b.verify?.key === vk) : -1;
-            const block = { type: 'notice' as const, id: prev >= 0 ? blocks[prev].id : blockId(a, blocks, 'n'), level: ev.level, text: ev.text, ...(ev.compact ? { compact: ev.compact } : {}), ...(ev.verify ? { verify: ev.verify } : {}) };
+            const block = { type: 'notice' as const, id: prev >= 0 ? blocks[prev].id : blockId(a, blocks, 'n'), level: ev.level, text: ev.text, ...(ev.compact ? { compact: ev.compact } : {}), ...(ev.verify ? { verify: ev.verify } : {}), ...(ev.link ? { link: ev.link } : {}) };
             if (prev >= 0) blocks[prev] = block;
             else blocks.push(block);
             return { ...a, blocks };
@@ -307,7 +307,7 @@ export function applyEvent(items: readonly TItem[], ev: UiEvent): TItem[] {
       }
       return [
         ...items,
-        { kind: 'notice', id: `notice:${items.length}:${Date.now()}`, level: ev.level, text: ev.text, ts: Date.now(), ...(ev.compact ? { compact: ev.compact } : {}), ...(ev.verify ? { verify: ev.verify } : {}) },
+        { kind: 'notice', id: `notice:${items.length}:${Date.now()}`, level: ev.level, text: ev.text, ts: Date.now(), ...(ev.compact ? { compact: ev.compact } : {}), ...(ev.verify ? { verify: ev.verify } : {}), ...(ev.link ? { link: ev.link } : {}) },
       ];
     }
 

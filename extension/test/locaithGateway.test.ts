@@ -6,12 +6,15 @@ import {
   LOCAITH_GATEWAY_URL,
   LOCAITH_MAX_OUTPUT_TOKENS,
   LOCAITH_NOTICE_VERSION,
+  LOCAITH_UPGRADE_URL,
   LocaithGatewayClient,
+  PLAN_REQUIRED_DEFAULT_MESSAGE,
   QUEUE_DEFAULT_WAIT_MS,
   QUEUE_MAX_WAIT_MS,
   QUEUE_MIN_WAIT_MS,
   classifyGatewayError,
   queueWaitMs,
+  safeUpgradeUrl,
 } from '../src/core/providers/locaithGateway';
 import { classifyHttpError, redactSecrets } from '../src/core/providers/http';
 import { knownContextWindow, presetById, ACCOUNT_PRESETS, BUILTIN_PRESETS } from '../src/core/providers/presets';
@@ -153,6 +156,54 @@ describe('classifyGatewayError — các mã lỗi khác của cổng (lời củ
   it('thân 400 "locaith_bad_request" và lời lẽ ngữ cảnh-quá-dài KHÔNG bị chặn: vẫn đi đường chung để phát hiện tràn ngữ cảnh', () => {
     const ctx = JSON.stringify({ error: { code: 'locaith_bad_request', message: "This model's maximum context length is 1000000 tokens. However, you requested 1200000 tokens." } });
     expect(classifyHttpError('locaith', 400, ctx, undefined).kind).toBe('context_length');
+  });
+});
+
+describe('402 locaith_quota — hết dùng thử miễn phí 1 ngày, cần mua gói (từ 17/11/2026)', () => {
+  const MSG = 'Bạn đã dùng hết 1 ngày dùng thử miễn phí Locaith-v5 của tài khoản này. Hãy mua gói tại https://locaith.ai/#upgrade để dùng tiếp — hoặc chọn mô hình khác bằng API riêng của bạn.';
+  const body = (ent: unknown, message: string | null = MSG) =>
+    JSON.stringify({ error: { code: 'locaith_quota', type: 'insufficient_quota', ...(message !== null ? { message } : {}) }, ...(ent !== undefined ? { entitlement: ent } : {}) });
+  const ENT = { state: 'trial_ended', trial_hours: 24, upgrade_url: 'https://locaith.ai/#upgrade' };
+
+  it('mang khối entitlement: không bao giờ thử lại, lời cổng nguyên văn, có địa chỉ mua gói', () => {
+    const e = classifyGatewayError('locaith', 402, body(ENT), undefined)!;
+    expect(e).toMatchObject({ kind: 'rate_limit', retryable: false, verbatim: true, status: 402, gatewayCode: 'locaith_quota', message: MSG });
+    expect(e.entitlement).toEqual({ state: 'trial_ended', trialHours: 24, upgradeUrl: 'https://locaith.ai/#upgrade' });
+    // Qua classifyHttpError (đường thật của mọi lần gọi): cùng kết quả, KHÔNG phải câu chung «đã hết hạn mức hoặc chưa kích hoạt thanh toán».
+    const viaHttp = classifyHttpError('locaith', 402, body(ENT), new Headers());
+    expect(viaHttp.entitlement?.upgradeUrl).toBe('https://locaith.ai/#upgrade');
+    expect(viaHttp.message).toBe(MSG);
+    expect(viaHttp.message).not.toMatch(/chưa kích hoạt thanh toán/);
+  });
+
+  it('cổng đã bỏ khối entitlement nhưng vẫn HTTP 402 → vẫn là «cần gói» với địa chỉ chuẩn; 429 không có khối → hạn mức NGÀY như cũ', () => {
+    const e402 = classifyGatewayError('locaith', 402, body(undefined), undefined)!;
+    expect(e402.entitlement).toEqual({ state: 'trial_ended', upgradeUrl: LOCAITH_UPGRADE_URL });
+    expect(classifyGatewayError('locaith', 402, body(undefined, null), undefined)!.message).toBe(PLAN_REQUIRED_DEFAULT_MESSAGE);
+    const e429 = classifyGatewayError('locaith', 429, body(undefined, 'Hết hạn mức hôm nay.'), 3_600_000)!;
+    expect(e429.entitlement).toBeUndefined();
+    expect(e429).toMatchObject({ status: 429, retryable: false, verbatim: true });
+    // trạng thái lạ trong khối ở một 429: không phải «cần gói»
+    expect(classifyGatewayError('locaith', 429, body({ state: 'paid' }, 'x'), undefined)!.entitlement).toBeUndefined();
+  });
+
+  it('địa chỉ mua gói: chỉ https + tên miền Locaith; mọi thứ khác (máy chủ lạ nói giọng cổng) → địa chỉ chuẩn', () => {
+    const url = (u: unknown) => classifyGatewayError('locaith', 402, body({ ...ENT, upgrade_url: u }), undefined)!.entitlement!.upgradeUrl;
+    expect(url('https://locaith.ai/#upgrade')).toBe('https://locaith.ai/#upgrade');
+    expect(url('https://www.locaith.ai/goi?from=cli')).toBe('https://www.locaith.ai/goi?from=cli');
+    expect(url('https://pay.locaith.com/plans')).toBe('https://pay.locaith.com/plans');
+    for (const bad of ['http://locaith.ai/#upgrade', 'https://evil.example/#upgrade', 'https://locaith.ai.evil.example/', 'https://evil.example/locaith.ai', 'https://user:pw@locaith.ai/', 'javascript:alert(1)', 'https://notlocaith.ai/', 'ftp://locaith.ai/', '', 5, null, 'x'.repeat(400)]) {
+      expect(url(bad)).toBe(LOCAITH_UPGRADE_URL);
+    }
+    expect(safeUpgradeUrl(undefined)).toBe(LOCAITH_UPGRADE_URL);
+  });
+
+  it('trial_hours bất thường bị bỏ (không tin số vô lý), còn lại vẫn là «cần gói»', () => {
+    for (const h of [-1, 1e9, 'x', null]) {
+      const e = classifyGatewayError('locaith', 402, body({ ...ENT, trial_hours: h }), undefined)!;
+      expect(e.entitlement).toEqual({ state: 'trial_ended', upgradeUrl: LOCAITH_UPGRADE_URL });
+    }
+    expect(classifyGatewayError('locaith', 402, body({ ...ENT, trial_hours: 0 }), undefined)!.entitlement?.trialHours).toBe(0);
   });
 });
 

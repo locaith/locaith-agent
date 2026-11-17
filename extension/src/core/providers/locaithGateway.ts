@@ -46,6 +46,9 @@ export const QUEUE_DEFAULT_MESSAGE = 'Đang có nhiều lượt sử dụng, vui
 export const AUTH_MESSAGE = 'Phiên đăng nhập Locaith không còn hiệu lực. Hãy đăng nhập lại tài khoản Locaith.';
 export const CONSENT_MESSAGE = 'Cần đồng ý thông báo dữ liệu của Locaith trước khi dùng mô hình Locaith.';
 export const QUOTA_DEFAULT_MESSAGE = 'Bạn đã dùng hết hạn mức mô hình Locaith của hôm nay. Hạn mức được làm mới vào ngày mai.';
+/** Trang mua gói trên locaith.ai (mở bảng «Gói cước» sau khi đăng nhập). Cổng gửi kèm địa chỉ của nó trong `entitlement.upgrade_url`. */
+export const LOCAITH_UPGRADE_URL = 'https://locaith.ai/#upgrade';
+export const PLAN_REQUIRED_DEFAULT_MESSAGE = `Bạn đã dùng hết thời gian dùng thử miễn phí Locaith-v5 của tài khoản này. Hãy mua gói tại ${LOCAITH_UPGRADE_URL} để dùng tiếp — hoặc chọn mô hình khác bằng API riêng của bạn.`;
 export const RATE_LIMITED_DEFAULT_MESSAGE = 'Bạn đang gửi quá nhiều yêu cầu tới mô hình Locaith cùng lúc. Hãy chờ một lát rồi thử lại.';
 export const UNAVAILABLE_DEFAULT_MESSAGE = 'Dịch vụ mô hình Locaith đang bảo trì. Hãy thử lại sau ít phút.';
 export const MODEL_NOT_FOUND_DEFAULT_MESSAGE = 'Mô hình Locaith này không tồn tại hoặc đã ngừng cung cấp. Hãy chọn một model khác trong danh sách.';
@@ -56,6 +59,35 @@ export const RATE_LIMIT_AUTO_RETRY_MAX_MS = 60_000;
 export const UNAVAILABLE_RETRY_MS = 3_000;
 export const UNAVAILABLE_RETRY_MAX_MS = 10_000;
 const GATEWAY_MESSAGE_MAX = 600;
+
+/**
+ * Địa chỉ mua gói do cổng gửi: chỉ nhận https và tên miền của Locaith — một máy chủ khác nói «giọng» cổng Locaith không đặt được nút dẫn tới trang lạ.
+ * Không hợp lệ thì dùng địa chỉ chuẩn.
+ */
+export function safeUpgradeUrl(v: unknown): string {
+  if (typeof v === 'string' && v.length <= 300) {
+    try {
+      const u = new URL(v.trim());
+      const host = u.hostname.toLowerCase();
+      const ours = host === 'locaith.ai' || host === 'locaith.com' || host.endsWith('.locaith.ai') || host.endsWith('.locaith.com');
+      if (u.protocol === 'https:' && ours && !u.username && !u.password) return u.toString();
+    } catch {
+      /* dùng địa chỉ chuẩn */
+    }
+  }
+  return LOCAITH_UPGRADE_URL;
+}
+
+/** Khối `entitlement` của 402 `locaith_quota`: «hết dùng thử, cần gói». Chỉ trạng thái `trial_ended` mới là lỗi; khối thiếu/lạ → undefined. */
+function planRequiredOf(v: unknown, status: number | undefined): ProviderError['entitlement'] | undefined {
+  const e = v && typeof v === 'object' && !Array.isArray(v) ? (v as Record<string, unknown>) : undefined;
+  if (e?.state === 'trial_ended') {
+    const hours = num(e.trial_hours);
+    return { state: 'trial_ended', ...(hours !== undefined && hours >= 0 && hours <= 24 * 365 ? { trialHours: hours } : {}), upgradeUrl: safeUpgradeUrl(e.upgrade_url) };
+  }
+  // Cổng chỉ dùng HTTP 402 cho việc này (hết nhà cung cấp bên trên được đổi thành 429): thiếu khối thì vẫn là «cần gói».
+  return status === 402 ? { state: 'trial_ended', upgradeUrl: LOCAITH_UPGRADE_URL } : undefined;
+}
 
 /** Lời của cổng hiện nguyên văn cho người dùng: bỏ ký tự điều khiển, cắt độ dài. */
 function gatewayMessage(v: unknown): string | undefined {
@@ -106,8 +138,19 @@ export function classifyGatewayError(providerId: string, status: number | undefi
     return new ProviderError(AUTH_MESSAGE, { kind: 'auth', providerId, status: 401, retryable: false, accountAuth: true, gatewayCode: code });
   }
   // Hết hạn mức chi tiêu trong NGÀY: Retry-After có thể là nhiều GIỜ (tới nửa đêm) — không bao giờ thử lại, hiện nguyên lời cổng rồi dừng lượt.
+  // Cùng mã này, HTTP 402 + khối `entitlement` (từ 17/11/2026): tài khoản không có gói và đã dùng hết lượt dùng thử miễn phí → cần mua gói.
   if (code === 'locaith_quota') {
-    return new ProviderError(message ?? QUOTA_DEFAULT_MESSAGE, { kind: 'rate_limit', providerId, status: status ?? 429, retryable: false, ...(headerRetryMs !== undefined ? { retryAfterMs: headerRetryMs } : {}), verbatim: true, gatewayCode: code });
+    const need = planRequiredOf(root.entitlement, status);
+    return new ProviderError(message ?? (need ? PLAN_REQUIRED_DEFAULT_MESSAGE : QUOTA_DEFAULT_MESSAGE), {
+      kind: 'rate_limit',
+      providerId,
+      status: status ?? (need ? 402 : 429),
+      retryable: false,
+      ...(headerRetryMs !== undefined ? { retryAfterMs: headerRetryMs } : {}),
+      verbatim: true,
+      gatewayCode: code,
+      ...(need ? { entitlement: need } : {}),
+    });
   }
   // Giới hạn theo người dùng (quá nhiều yêu cầu song song / quá nhanh): chỉ tự thử lại khi cổng bảo chờ ≤ 60 giây; lâu hơn thì hiện lời cổng.
   if (code === 'locaith_rate_limited') {
@@ -155,6 +198,11 @@ export interface AccountPayload {
   account?: { name?: string; email_masked?: string; plan?: string; avatar?: string; device_label?: string; device_expires_at?: string } | null;
   plan?: string;
   limits?: { unlimited?: boolean; note?: string };
+  /**
+   * (cổng từ 17/11/2026) Quyền dùng mô hình: `state` = paid | trial | trial_unused | trial_ended | staff | internal | open | unverified.
+   * Cổng cũ không có khối này.
+   */
+  entitlement?: { state?: string; plan?: string; trial_hours?: number; trial_ends_at?: string; trial_seconds_left?: number; plan_expires_at?: string; upgrade_url?: string };
 }
 export type AccountResult = { ok: true; account: AccountPayload } | { ok: false; error: 'unauthorized' | 'unsupported' | 'network' | 'server' };
 

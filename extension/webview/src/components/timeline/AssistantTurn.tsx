@@ -1,6 +1,7 @@
 import type { VNode } from 'preact';
 import { useEffect, useMemo, useRef, useState } from 'preact/hooks';
-import type { AssistantItem, CompactInfo, NoticeItem } from '../../../../src/shared/protocol';
+import type { AssistantItem, CompactInfo, NoticeItem, NoticeLink } from '../../../../src/shared/protocol';
+import { openExternalLink } from '../../externalLink';
 import { useApp } from '../../ctx';
 import { formatCompact } from '../../format';
 import { Markdown } from '../../markdown/Markdown';
@@ -37,24 +38,39 @@ export function NoticeView({
   text,
   compact,
   onRetry,
+  link,
 }: {
   level: 'info' | 'warn' | 'error';
   text: string;
   compact?: CompactInfo;
   onRetry?: () => void;
+  /** (0.7.8) Nút kèm thông báo — «Mua gói» khi hết lượt dùng thử miễn phí. Chỉ nhận địa chỉ https. */
+  link?: NoticeLink;
 }) {
   const { t } = useApp();
   if (compact) return <CompactRow compact={compact} text={text} />;
+  const linkOk = !!link && /^https:\/\//i.test(link.url) && !!link.label;
+  const retry = onRetry && (
+    <Button small variant="secondary" icon="refresh" onClick={onRetry}>
+      {t('turn.retry')}
+    </Button>
+  );
   return (
-    <div class={cx('notice', `notice-${level}`, 'cc-notice')} role={level === 'error' ? 'alert' : 'status'}>
+    <div class={cx('notice', `notice-${level}`, 'cc-notice', linkOk && 'notice-has-link')} role={level === 'error' ? 'alert' : 'status'}>
       <span class="notice-icon">
         <StatusDot tone={level === 'info' ? 'muted' : level === 'warn' ? 'warn' : 'fail'} />
       </span>
       <div class="notice-text">{text}</div>
-      {onRetry && (
-        <Button small variant="secondary" icon="refresh" onClick={onRetry}>
-          {t('turn.retry')}
-        </Button>
+      {linkOk && link ? (
+        // (0.7.8) Có nút «Mua gói»: các nút xuống dòng dưới chữ (không bóp chữ thành một cột hẹp ở khung hẹp).
+        <div class="notice-actions">
+          <Button small variant="primary" onClick={() => openExternalLink(link.url)}>
+            {link.label}
+          </Button>
+          {retry}
+        </div>
+      ) : (
+        retry
       )}
     </div>
   );
@@ -65,7 +81,7 @@ export function StandaloneNotice({ item, canRetry }: { item: NoticeItem; canRetr
   if (item.fork) return <BranchBacklink item={item} />; // (lane:sessions-ux) dòng «Rẽ nhánh từ …»
   return (
     <div class="turn turn-notice">
-      <NoticeView level={item.level} text={item.text} compact={item.compact} onRetry={canRetry && item.level === 'error' ? () => post({ type: 'retry' }) : undefined} />
+      <NoticeView level={item.level} text={item.text} compact={item.compact} link={item.link} onRetry={canRetry && item.level === 'error' ? () => post({ type: 'retry' }) : undefined} />
     </div>
   );
 }
@@ -255,6 +271,7 @@ function AssistantTurnView({ item, live, isLast }: { item: AssistantItem; live: 
             level={b.level}
             text={b.text}
             compact={b.compact}
+            link={b.link}
             onRetry={isLast && item.done && b.level === 'error' ? () => post({ type: 'retry' }) : undefined}
           />
         );

@@ -4,6 +4,10 @@ From **0.6.0** the extension has a model family of its own, **AI Local**: **Loca
 account — **no API key** — and have a **1-million-token context window**. A new user with no API key starts on `Locaith-v5-flash`; if you already use another provider your
 choice is left alone.
 
+**Free trial, then a plan (from 17/11/2026).** Every locaith.ai account gets **one free 1-day trial** of the Locaith-v5 models, counted from its first request; it is
+not renewed. After that an account needs a **paid plan** (Plus / Pro, bought inside locaith.ai) — or it can use any other model with its own API key. Nothing changes for an
+account that already has a plan, and the locaith.ai web chat has its own credits and is not affected. Details below, in *When the service answers with an error*.
+
 This page is what *you* see and what happens to your data. The service-side contract (headers, error codes, queue protocol, logging) is in
 `locaith-ai-v2/docs/LOCAITH-MODELS.md`; account sign-in is in [ACCOUNT.md](ACCOUNT.md).
 
@@ -15,6 +19,7 @@ This page is what *you* see and what happens to your data. The service-side cont
 | First time you use it | a **data notice card at the end of the conversation** (not a VS Code pop-up). Your message goes back into the input box; nothing is sent until you press **Agree and use** |
 | When the service is full | a slim amber strip above the input — **queue**, see below |
 | When the service says no | a normal error notice in the service's own words (daily quota, too many requests, maintenance…) |
+| When the free trial is over | an error notice in the service's words with a **Buy a plan** button that opens `https://locaith.ai/#upgrade` (the *Plans* tab of your account; it asks you to sign in first if needed) |
 | Settings → *Locaith model* | status of your consent, the notice text, **Withdraw consent**. The Locaith model has no key field because your account is the credential |
 
 ## Your data — read this once
@@ -57,6 +62,7 @@ The service writes the message in Vietnamese; the extension shows it **verbatim*
 | Service code | What happens |
 | --- | --- |
 | `locaith_quota` (daily spend cap, or the service's own balance used up) | shown as is — “come back tomorrow” — the turn stops, **never retried** (the reset may be hours away). In *Failover* mode another provider you configured can take over |
+| `locaith_quota` with HTTP **402** and an `entitlement` block (`state: "trial_ended"`) — the account has **no paid plan and its one free trial is over** | the service's message is shown as is (it already contains the link) together with a **Buy a plan** button; the turn stops, **never retried**. Waiting does not help; buying a plan does — the service re-reads the plan the moment the trial is over, so a person who just paid is served on the next try (**Retry**). The link is only honoured when it is `https` and on a Locaith domain, otherwise the standard `https://locaith.ai/#upgrade` is used. Older extensions show the same message as text (the 402 deliberately keeps the code `locaith_quota`) |
 | `locaith_rate_limited` | retried automatically **only if** the service says to wait ≤ 60 s; otherwise the message is shown and the turn stops |
 | `locaith_unavailable` (maintenance) | retried **once** after a few seconds, then the service's message |
 | `locaith_unauthorized` (401) | your device token was rejected: the token is flagged bad, the extension refreshes it **exactly once** (re-reads the store, then asks the account service) and resends the request **exactly once**; a second 401 stops the turn, locks the session ("Sign in again") and never loops. Parallel 401s cause one refresh. It never tells you to enter an API key |

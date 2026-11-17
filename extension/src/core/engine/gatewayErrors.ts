@@ -21,6 +21,8 @@ const GROUP: Record<string, StringKey> = {
 /** Câu hiển thị cho lỗi cổng Locaith, hoặc undefined nếu không thuộc nhóm nào ở đây (để đường cũ xử lý). */
 export function gatewayErrorText(err: ProviderError, lang: Lang): string | undefined {
   if (err.providerId !== LOCAITH_PROVIDER_ID || err.accountAuth) return undefined;
+  // (0.7.8) Hết dùng thử miễn phí, cần gói: vi giữ lời cổng (đã có địa chỉ mua gói), en dùng câu chuẩn kèm địa chỉ.
+  if (err.entitlement) return lang === 'vi' && err.verbatim && err.message ? err.message : t(lang, 'gwTrialEnded', { url: err.entitlement.upgradeUrl });
   // Hàng chờ/quá tải không mang mã cổng (HTTP 503/529 từ proxy phía trước cổng) cũng vào nhóm «quá tải».
   const key = (err.gatewayCode ? GROUP[err.gatewayCode] : undefined) ?? (err.kind === 'overloaded' || err.kind === 'queued' ? 'gwOverloaded' : undefined);
   if (key) return lang === 'vi' && err.verbatim && err.message ? err.message : t(lang, key);

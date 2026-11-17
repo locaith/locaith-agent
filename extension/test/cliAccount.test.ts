@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { loginCmd, whoamiCmd, type AccountDeps } from '../src/cli/account';
+import { setLang } from '../src/cli/i18n';
 import { deviceLabel, makePkce, TOKEN_RE, VERIFIER_RE } from '../src/cli/browserLogin';
 import { LocaithGatewayClient } from '../src/core/providers/locaithGateway';
 
@@ -167,6 +168,71 @@ describe('locaith whoami', () => {
     } finally {
       restore();
     }
+  });
+
+  describe('cổng mới (từ 17/11/2026): quyền dùng Locaith-v5 = gói hoặc 1 lượt dùng thử miễn phí 1 ngày', () => {
+    const accountWith = (entitlement: Record<string, unknown>, plan = 'free'): AccountOut =>
+      ({ ok: true, account: { ok: true, account: { name: 'Nguyễn Văn A', plan }, plan, limits: { unlimited: false, note: 'x' }, entitlement } }) as never;
+    const run = async (entitlement: Record<string, unknown>, plan?: string) => {
+      const restore = stub({ account: accountWith(entitlement, plan), consent: { ok: true, state: { accepted: true, version: 1, current: 1 } } });
+      try {
+        const { deps, state } = rig();
+        expect(await whoamiCmd(deps)).toBe(0);
+        return state.out.join('\n');
+      } finally {
+        restore();
+      }
+    };
+
+    it('đang dùng thử: còn bao lâu + nơi mua gói; KHÔNG còn «không giới hạn» / «giai đoạn mở»', async () => {
+      const text = await run({ state: 'trial', plan: 'free', trial_hours: 24, trial_seconds_left: 3600 * 23 + 60 * 59 + 30, upgrade_url: 'https://locaith.ai/#upgrade' });
+      expect(text).toContain('Dùng Locaith-v5: đang dùng thử miễn phí — còn 23 giờ 59 phút');
+      expect(text).toContain('https://locaith.ai/#upgrade');
+      expect(text).not.toMatch(/không giới hạn|giai đoạn mở|không thu phí/);
+    });
+
+    it('chưa gọi lần nào: nói thời gian dùng thử tính từ lần dùng đầu; hết dùng thử: nói mua gói ở đâu', async () => {
+      expect(await run({ state: 'trial_unused', plan: 'free', trial_hours: 24 })).toContain('dùng thử miễn phí 1 ngày, tính từ lần dùng đầu tiên');
+      const ended = await run({ state: 'trial_ended', plan: 'free', trial_hours: 24, upgrade_url: 'https://locaith.ai/#upgrade' });
+      expect(ended).toContain('Dùng Locaith-v5: đã hết dùng thử miễn phí — mua gói tại https://locaith.ai/#upgrade');
+      expect(ended).toContain('Gói: free');
+    });
+
+    it('gói trả phí: nêu gói và ngày hết hạn (nếu có); tài khoản nội bộ / chưa xác minh có câu riêng', async () => {
+      expect(await run({ state: 'paid', plan: 'plus', plan_expires_at: '2026-12-13T10:13:26Z' }, 'plus')).toContain('gói plus đang hoạt động (đến 2026-12-13)');
+      expect(await run({ state: 'paid', plan: 'pro' }, 'pro')).toMatch(/gói pro đang hoạt động$/m);
+      expect(await run({ state: 'staff', plan: 'staff' })).toContain('không cần gói (tài khoản nội bộ)');
+      expect(await run({ state: 'unverified', plan: 'unknown' })).toContain('chưa xác minh được gói');
+    });
+
+    it('địa chỉ mua gói thiếu → dùng địa chỉ chuẩn; trạng thái lạ → không in dòng (không đoán)', async () => {
+      expect(await run({ state: 'trial_ended' })).toContain('https://locaith.ai/#upgrade');
+      expect(await run({ state: 'weird_future_state' })).not.toContain('Dùng Locaith-v5');
+    });
+
+    it('bản tiếng Anh dùng chuỗi của CLI, không lặp lại câu tiếng Việt của máy chủ', async () => {
+      setLang('en');
+      try {
+        const text = await run({ state: 'trial', plan: 'free', trial_hours: 24, trial_seconds_left: 5400 });
+        expect(text).toContain('Locaith-v5 access: free trial — 1 h 30 min left');
+        expect(text).not.toMatch(/dùng thử|còn/);
+      } finally {
+        setLang('vi');
+      }
+    });
+
+    it('--json: thêm khối entitlement, các trường cũ (plan/limits/account/consentAccepted) giữ nguyên', async () => {
+      const restore = stub({ account: accountWith({ state: 'trial', plan: 'free', trial_seconds_left: 10 }), consent: { ok: true, state: { accepted: true, version: 1, current: 1 } } });
+      try {
+        const { deps, state } = rig();
+        deps.json = true;
+        expect(await whoamiCmd(deps)).toBe(0);
+        const j = JSON.parse(state.out.join('\n'));
+        expect(j).toMatchObject({ ok: true, plan: 'free', limits: { unlimited: false }, consentAccepted: true, entitlement: { state: 'trial', trial_seconds_left: 10 } });
+      } finally {
+        restore();
+      }
+    });
   });
 
   it('cổng CŨ chưa có /account (404) nhưng /consent chạy → vẫn coi là đã đăng nhập, nói rõ chưa có endpoint', async () => {

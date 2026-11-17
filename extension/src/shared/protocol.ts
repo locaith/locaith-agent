@@ -275,7 +275,13 @@ export type ABlock =
   | { type: 'skill'; id: string; skill: string; unlocked: string[] }
   | ToolBlock
   | ({ type: 'artifact'; id: string; state: 'writing' | 'ready'; sizeChars?: number } & ArtifactRef)
-  | { type: 'notice'; id: string; level: 'info' | 'warn' | 'error'; text: string; compact?: CompactInfo; verify?: VerifyInfo /* (lane:blind-verifier) */ };
+  | { type: 'notice'; id: string; level: 'info' | 'warn' | 'error'; text: string; compact?: CompactInfo; verify?: VerifyInfo /* (lane:blind-verifier) */; link?: NoticeLink };
+
+/** (0.7.8) Nút kèm thông báo — hiện nay: «Mua gói» khi tài khoản hết lượt dùng thử miễn phí. Bản webview cũ (Chrome) bỏ qua; địa chỉ vẫn nằm trong `text`. */
+export interface NoticeLink {
+  url: string;
+  label: string;
+}
 
 /** Tệp người dùng tải lên (PDF, Word, Excel, HTML, CSV, TXT) sau khi đã được đọc thành chữ. */
 export interface DocInfo {
@@ -346,6 +352,8 @@ export interface NoticeItem {
   text: string;
   ts: number;
   compact?: CompactInfo;
+  /** (0.7.8) Nút «Mua gói» (hết dùng thử miễn phí). */
+  link?: NoticeLink;
   /** (lane:blind-verifier) Kết quả kiểm tra độc lập chạy tay (/verify) — thông báo độc lập. */
   verify?: VerifyInfo;
   /** (lane:sessions-ux) Dòng đầu nhánh: «Rẽ nhánh từ …» — bấm để mở cuộc gốc. Tuỳ chọn: bản cũ / Remote cũ chỉ thấy dòng chữ. */
@@ -395,7 +403,7 @@ export type UiEvent =
   | { t: 'usage'; id: string; usage: Usage; contextTokens?: number }
   | { t: 'assistant_end'; id: string; stopReason: string }
   /** Có id → gắn vào lượt trả lời đó; không có → thành NoticeItem độc lập. */
-  | { t: 'notice'; id?: string; level: 'info' | 'warn' | 'error'; text: string; compact?: CompactInfo; verify?: VerifyInfo /* (lane:blind-verifier) */ }
+  | { t: 'notice'; id?: string; level: 'info' | 'warn' | 'error'; text: string; compact?: CompactInfo; verify?: VerifyInfo /* (lane:blind-verifier) */; link?: NoticeLink }
   | { t: 'run_state'; running: boolean }
   | { t: 'mode'; mode: PermissionMode }
   /** Cập nhật bảng tác vụ cố định phía trên ô nhập. */

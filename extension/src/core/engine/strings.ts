@@ -228,6 +228,9 @@ const vi = {
   gwOverloaded: 'Cổng Locaith đang quá tải hoặc bảo trì. Chờ vài phút rồi bấm «Thử lại».',
   gwModelGone: 'Mô hình Locaith này không tồn tại hoặc đã ngừng cung cấp. Hãy chọn một model khác trong danh sách.',
   gwOffline: 'Không kết nối được tới cổng Locaith — kiểm tra mạng (hoặc VPN/proxy) rồi bấm «Thử lại». Chi tiết: {detail}',
+  // (0.7.8) Hết thời gian dùng thử miễn phí 1 ngày của tài khoản (không có gói): lời cổng soạn (có địa chỉ) được giữ nguyên ở bản tiếng Việt.
+  gwTrialEnded: 'Bạn đã dùng hết thời gian dùng thử miễn phí Locaith-v5 của tài khoản này. Hãy mua gói tại {url} để dùng tiếp — hoặc chọn mô hình khác bằng API riêng của bạn.',
+  buyPlan: 'Mua gói',
   // ── (lane:mcp-parity) ──
   // ── (lane:instructions-memory) ──
   // ── (lane:tools-parity) ──
@@ -451,6 +454,8 @@ const en: typeof vi = {
   gwOverloaded: 'The Locaith gateway is overloaded or under maintenance. Wait a few minutes, then press “Retry”.',
   gwModelGone: 'This Locaith model does not exist or has been retired. Pick another model from the list.',
   gwOffline: 'Could not reach the Locaith gateway — check your network (or VPN/proxy), then press “Retry”. Details: {detail}',
+  gwTrialEnded: 'You have used up the free Locaith-v5 trial of this account. Buy a plan at {url} to keep using it — or pick another model with your own API key.',
+  buyPlan: 'Buy a plan',
   // ── (lane:mcp-parity) ──
   // ── (lane:instructions-memory) ──
   // ── (lane:tools-parity) ──

@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.7.8 - 2026-11-17
+
+- **Locaith-v5 needs a plan after one free day.** The opening phase — every locaith.ai account free — has ended. Each account now gets **one free 1-day trial** of the Locaith-v5 models, counted from its first request and never renewed; after that the models need a **paid plan** (Plus / Pro, bought in locaith.ai) — or you pick another model and use your own API key. The Locaith server decides from the account's plan, so an account that already has a plan notices nothing, the locaith.ai web chat (which has its own credits) is not affected, and a request is never refused just because the plan could not be read for a moment.
+- **A clear message and a button when the trial is over.** The chat shows the service's message ("You have used up the 1-day free trial …") with a **Buy a plan** button that opens `https://locaith.ai/#upgrade` (the Plans tab; it asks you to sign in first when needed). The turn stops and is not retried — buying a plan is what helps, and the server re-reads the plan the moment the trial is over, so **Retry** works right after paying. The link is trusted only when it is https on a Locaith domain; otherwise the standard one is used. English shows the extension's own sentence, Vietnamese the service's. Older versions show the same message as plain text (the refusal keeps the code `locaith_quota`, HTTP 402).
+- **The texts say so.** Settings → Locaith model, the welcome line, “Why sign in?”, `docs/LOCAITH-MODELS.md` and `docs/ACCOUNT.md` now describe "free 1-day trial, then a plan". The button also travels to Remote clients on locaith.ai (only a short https link is kept; older clients just show the text).
+- **In the source, shipping with the next `locaith-cli` release:** `locaith whoami` prints a "Locaith-v5 access" line (plan active until …, free trial — N h M min left, trial over — buy a plan at …) instead of the old "unlimited (open phase, no charge)", and `--json` gains an `entitlement` block.
+
 ## locaith-cli 0.4.11 - 2026-11-10 (PyPI)
 
 - **Vietnamese typing: deleting no longer takes a whole word or a whole group of letters.** After 0.4.10 typing worked, but pressing Backspace could still remove several letters at once. Two causes, both reproduced in the simulated-input-method lab (which now also covers *pressing* Backspace, not only typing) and fixed:

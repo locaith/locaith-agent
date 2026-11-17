@@ -8,6 +8,14 @@ From **0.5.2** the extension needs a locaith.ai account. Until you sign in, the 
 * **Remote control** lets a browser do anything the assistant can do on your machine. Your account is the first gate: only signed-in installs can open Remote, and you can see and revoke every signed-in machine on locaith.ai. Since **0.6.5 the account is also the key**: a browser signed in to the SAME Locaith account opens your machine from locaith.ai with no pairing (the machine keeps a random key in your account's machine list that only you can read back while signed in), so anyone who can sign in to your account can control it — keep the account safe. Turn it off with `locaithAgent.remote.trustAccount`; see `docs/REMOTE-RELAY.md` §2b.
 * One account across devices: the **VS Code remote** tab of locaith.ai lists «Your machines» (the VS Code windows that turned Remote on).
 
+## Plans and the free trial (from 17/11/2026)
+
+The Locaith-v5 models are free to *try*, then a plan is needed: every account gets **one free 1-day trial**, counted from its first Locaith-v5 request and never renewed;
+afterwards the model needs a **paid plan** (Plus / Pro, bought in locaith.ai → Settings → Plans — `https://locaith.ai/#upgrade` opens it). The server decides, from your account's plan, so there is
+nothing to configure and nothing stored in the extension. When the trial is over the chat says so with a **Buy a plan** button. If the plan cannot be read for a moment the request is
+let through rather than blocking someone who paid. Other providers with your own API key are unaffected, and so is the locaith.ai web chat (it has its own credits). The CLI shows the state in
+`locaith whoami` ("Locaith-v5 access: …").
+
 ## How sign-in works (OAuth authorization-code + PKCE, like other developer tools)
 
 1. **Locaith AI: Account: sign in to Locaith** (or the button in the chat) generates a random `code_verifier` and `state` on your machine and opens

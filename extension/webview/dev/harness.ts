@@ -30,6 +30,7 @@ import {
   type Step,
   SESSIONS,
   verifyScene, // (lane:blind-verifier)
+  planEndedScene, // (0.7.8)
 } from './scenarios';
 import { promoReply } from './promo';
 
@@ -1118,6 +1119,10 @@ function initialView(): ViewState {
     case 'media':
     case 'media-live':
       v = mediaScene(scenario === 'media-live');
+      break;
+    // (0.7.8) hết dùng thử miễn phí → nút «Mua gói»
+    case 'plan-ended':
+      v = planEndedScene(params.get('lang') === 'en' ? 'en' : 'vi');
       break;
     // (lane:blind-verifier)
     case 'verify':

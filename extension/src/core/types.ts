@@ -272,6 +272,11 @@ export class ProviderError extends Error {
   readonly retryLimit?: number;
   /** (lane:gateway-client) Mã lỗi của cổng Locaith (`locaith_quota`, `locaith_rate_limited`…) để chọn đúng nhóm thông điệp. */
   readonly gatewayCode?: string;
+  /**
+   * (0.7.8) Cổng Locaith từ chối vì tài khoản KHÔNG có gói và đã dùng hết lượt dùng thử miễn phí (402 `locaith_quota` + khối `entitlement`).
+   * `upgradeUrl` đã được kiểm (https, tên miền Locaith) để engine đặt nút «Mua gói» cạnh thông báo.
+   */
+  readonly entitlement?: { state: 'trial_ended'; trialHours?: number; upgradeUrl: string };
 
   constructor(
     message: string,
@@ -287,6 +292,7 @@ export class ProviderError extends Error {
       accountAuth?: boolean;
       retryLimit?: number;
       gatewayCode?: string;
+      entitlement?: { state: 'trial_ended'; trialHours?: number; upgradeUrl: string };
       cause?: unknown;
     },
   ) {
@@ -303,6 +309,7 @@ export class ProviderError extends Error {
     this.accountAuth = opts.accountAuth;
     this.retryLimit = opts.retryLimit;
     this.gatewayCode = opts.gatewayCode;
+    this.entitlement = opts.entitlement;
   }
 }
 

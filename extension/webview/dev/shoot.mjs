@@ -68,6 +68,41 @@ const assertParallelTick = (p) => assertParallel(p, true);
  * (lane:cc-timeline-ui) Cảnh «cc-timeline» gập: đúng 4 dòng nhóm (22 · 54+2 lỗi · 36+2 lỗi · đang chạy), chấm xanh/đỏ/sống đúng màu,
  * dòng agent với bộ số nằm dưới nhóm gập, dòng nén, đường ngăn ngày + giờ, chip đồng hồ dưới ô nhập, placeholder xếp hàng, không tràn ngang.
  */
+/**
+ * (0.7.8) Thông báo «hết dùng thử miễn phí»: «Mua gói» + «Thử lại» nằm DƯỚI chữ và thẳng hàng với chữ, chữ không bị bóp thành cột hẹp, không tràn ngang;
+ * bấm «Mua gói» gửi ĐÚNG MỘT `open_external` tới địa chỉ mua gói.
+ */
+async function assertPlanEnded(p) {
+  const r = await p.evaluate(() => {
+    const n = document.querySelector('.notice.notice-has-link');
+    if (!n) return { missing: true };
+    const text = n.querySelector('.notice-text').getBoundingClientRect();
+    const acts = n.querySelector('.notice-actions');
+    const btns = acts ? [...acts.querySelectorAll('button')] : [];
+    const ar = acts ? acts.getBoundingClientRect() : null;
+    const tl = document.querySelector('.timeline');
+    window.__ND_LOG__ = [];
+    return {
+      labels: btns.map((b) => b.textContent.trim()),
+      below: !!ar && ar.top >= text.bottom - 1,
+      aligned: !!ar && Math.abs(ar.left - text.left) <= 2,
+      overflowX: tl ? tl.scrollWidth - tl.clientWidth : -1,
+      textWidth: Math.round(text.width),
+      width: document.querySelector('.app').clientWidth,
+    };
+  });
+  if (r.missing) throw new Error('không thấy thông báo có nút (.notice-has-link)');
+  if (r.labels.length !== 2 || !/^(Mua gói|Buy a plan)$/.test(r.labels[0]) || !/(Thử lại|Retry)/.test(r.labels[1])) throw new Error(`nút sai: ${JSON.stringify(r.labels)}`);
+  if (!r.below) throw new Error('các nút phải nằm dưới chữ');
+  if (!r.aligned) throw new Error('các nút phải thẳng hàng với chữ');
+  if (r.overflowX > 1) throw new Error(`tràn ngang ${r.overflowX}px ở bề ngang ${r.width}px`);
+  if (r.textWidth < r.width * 0.6) throw new Error(`chữ bị bóp còn ${r.textWidth}px ở bề ngang ${r.width}px`);
+  await p.click('.notice-has-link .notice-actions button');
+  await wait(150);
+  const sent = await p.evaluate(() => (window.__ND_LOG__ || []).filter((m) => m.type === 'open_external').map((m) => m.url));
+  if (sent.length !== 1 || sent[0] !== 'https://locaith.ai/#upgrade') throw new Error(`bấm «Mua gói» phải gửi đúng một open_external tới https://locaith.ai/#upgrade: ${JSON.stringify(sent)}`);
+}
+
 async function assertCcCollapsed(p) {
   const r = await p.evaluate(() => {
     const q = (s) => [...document.querySelectorAll(s)];
@@ -469,6 +504,10 @@ const SHOTS = [
   { name: 'locaith-settings-pending-light-420', q: { scenario: 'locaith-settings-pending', theme: 'light' }, w: 420, h: 1000 },
   { name: '02-onboarding-dark-320', q: { scenario: 'onboarding', theme: 'dark' }, w: 320, h: 780 },
   // (lane:blind-verifier)
+  // (0.7.8) Hết dùng thử miễn phí: «Mua gói» + «Thử lại» cạnh thông báo lỗi; kiểm bằng DOM thật (nút có đủ, bấm gửi open_external đúng địa chỉ)
+  { name: 'plan-ended-dark-420', q: { scenario: 'plan-ended', theme: 'dark' }, w: 420, h: 520, act: assertPlanEnded },
+  { name: 'plan-ended-en-light-320', q: { scenario: 'plan-ended', theme: 'light', lang: 'en' }, w: 320, h: 520, act: assertPlanEnded },
+  { name: 'plan-ended-hc-420', q: { scenario: 'plan-ended', theme: 'hc' }, w: 420, h: 520, act: assertPlanEnded },
   { name: 'verify-fail-dark-420', q: { scenario: 'verify', theme: 'dark' }, w: 420, h: 820, act: async (p) => { await p.click('[data-testid="verify-row"] .tool-head'); await wait(200); } },
   { name: 'verify-fail-collapsed-dark-420', q: { scenario: 'verify', theme: 'dark' }, w: 420, h: 820 },
   { name: 'verify-pass-dark-420', q: { scenario: 'verify-pass', theme: 'dark' }, w: 420, h: 820 },

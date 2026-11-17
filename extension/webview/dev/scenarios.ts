@@ -1174,6 +1174,39 @@ export function cutContinueState(opts: { forced?: boolean } = {}): ViewState {
   });
 }
 
+// ── (0.7.8) Hết dùng thử miễn phí 1 ngày: thông báo lỗi của cổng kèm nút «Mua gói» (mở https://locaith.ai/#upgrade) cạnh «Thử lại» ──
+export function planEndedScene(lang: 'vi' | 'en' = 'vi'): ViewState {
+  const vi = lang === 'vi';
+  return baseState({
+    title: 'Locaith-v5',
+    provider: 'locaith',
+    model: 'locaith-v5-flash',
+    transcript: [
+      userItem('u1', vi ? 'Giải thích giúp mình hàm formatMoney trong src/utils.' : 'Explain the formatMoney function in src/utils.', 60_000),
+      {
+        kind: 'assistant',
+        id: 'a_plan',
+        provider: 'locaith',
+        model: 'locaith-v5-flash',
+        ts: Date.now() - 50_000,
+        done: true,
+        stopReason: 'error',
+        blocks: [
+          {
+            type: 'notice',
+            id: 'a_plan:n0',
+            level: 'error',
+            text: vi
+              ? 'Bạn đã dùng hết 1 ngày dùng thử miễn phí Locaith-v5 của tài khoản này. Hãy mua gói tại https://locaith.ai/#upgrade để dùng tiếp — hoặc chọn mô hình khác bằng API riêng của bạn.'
+              : 'You have used up the free Locaith-v5 trial of this account. Buy a plan at https://locaith.ai/#upgrade to keep using it — or pick another model with your own API key.',
+            link: { url: 'https://locaith.ai/#upgrade', label: vi ? 'Mua gói' : 'Buy a plan' },
+          },
+        ],
+      },
+    ],
+  });
+}
+
 // ── (lane:blind-verifier) Kiểm tra độc lập: lượt đã xong có dòng «Kiểm tra độc lập» (đạt / cần sửa / tồn đọng / đang chạy) ──
 export function verifyScene(kind: 'pass' | 'fail' | 'outstanding' | 'running' | 'skipped' = 'fail'): ViewState {
   const A = 'a_v1';

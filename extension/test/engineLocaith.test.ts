@@ -151,6 +151,27 @@ describe('engine — lời của cổng hiện nguyên văn; token tài khoản 
     expect(h.provider.requests).toHaveLength(1);
   });
 
+  it('hết dùng thử miễn phí (402 + entitlement): lời cổng nguyên văn kèm nút «Mua gói» → địa chỉ locaith.ai; dừng lượt, không gọi lại; hạn mức NGÀY thì KHÔNG có nút', async () => {
+    const msg = 'Bạn đã dùng hết 1 ngày dùng thử miễn phí Locaith-v5 của tài khoản này. Hãy mua gói tại https://locaith.ai/#upgrade để dùng tiếp.';
+    const need = new ProviderError(msg, { kind: 'rate_limit', providerId: 'locaith', status: 402, retryable: false, verbatim: true, gatewayCode: 'locaith_quota', entitlement: { state: 'trial_ended', trialHours: 24, upgradeUrl: 'https://locaith.ai/#upgrade' } });
+    const h = makeHarness(failWith(need), { sessionProvider: 'locaith' });
+    const r = await h.run('xin chào');
+    expect(r.stopReason).toBe('error');
+    const last = eventsOf(h.events, 'notice').at(-1)!;
+    expect(last).toMatchObject({ level: 'error', text: msg, link: { url: 'https://locaith.ai/#upgrade', label: 'Mua gói' } });
+    expect(h.provider.requests).toHaveLength(1);
+    // en: câu chuẩn có địa chỉ + nhãn nút tiếng Anh
+    const en = makeHarness(failWith(need), { sessionProvider: 'locaith', settings: { language: 'en' } });
+    await en.run('hi');
+    const last2 = eventsOf(en.events, 'notice').at(-1)!;
+    expect(last2).toMatchObject({ level: 'error', link: { url: 'https://locaith.ai/#upgrade', label: 'Buy a plan' } });
+    expect(last2.text).toContain('https://locaith.ai/#upgrade');
+    // hạn mức ngày (không có khối entitlement): chỉ chữ, không nút
+    const day = makeHarness(failWith(new ProviderError('Hết hạn mức hôm nay.', { kind: 'rate_limit', providerId: 'locaith', status: 429, retryable: false, verbatim: true, gatewayCode: 'locaith_quota' })), { sessionProvider: 'locaith' });
+    await day.run('hi');
+    expect(eventsOf(day.events, 'notice').at(-1)).not.toHaveProperty('link');
+  });
+
   it('locaith_rate_limited (chờ quá lâu) và locaith_model_not_found cũng hiện nguyên lời cổng', async () => {
     for (const [kind, msg] of [
       ['rate_limit', 'Bạn gửi quá nhiều yêu cầu cùng lúc. Hãy chờ vài phút.'],

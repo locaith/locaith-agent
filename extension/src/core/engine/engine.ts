@@ -893,7 +893,9 @@ export class AgentEngine {
     // (lane:gateway-client) Lỗi cổng Locaith theo nhóm (hạn mức, giới hạn tốc độ, quá tải, mất mạng…) kèm hành động; vi giữ lời cổng, en dùng câu chuẩn.
     const gw = gatewayErrorText(err, lang);
     if (gw) {
-      ctx.notice('error', gw);
+      // (0.7.8) Hết lượt dùng thử miễn phí, cần gói: thêm nút «Mua gói» mở trang locaith.ai (địa chỉ đã được kiểm ở classifyGatewayError).
+      if (err.entitlement) this.d.emit({ t: 'notice', id: ctx.id, level: 'error', text: gw, link: { url: err.entitlement.upgradeUrl, label: t(lang, 'buyPlan') } });
+      else ctx.notice('error', gw);
       return 'error';
     }
     // Câu tiếng Việt do máy chủ soạn sẵn (hết hạn mức ngày, quá nhiều lượt, bảo trì, model không tồn tại…): hiện nguyên văn, không thay bằng câu chung "chạm giới hạn tốc độ… chờ N phút".

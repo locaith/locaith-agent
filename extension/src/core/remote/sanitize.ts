@@ -3,7 +3,7 @@
  * (kết quả công cụ, đối số, diff, suy luận). Thuần tuý, không import `vscode`.
  */
 
-import type { ABlock, AgentProgress, AttachmentInfo, CompactInfo, ContextInfo, DiffInfo, PermissionRequest, QueuedInfo, SessionMeterView, SuggestionOption, TItem, TodoItem, ToolBlock, UiEvent, VerifyInfo, ViewState } from '../../shared/protocol';
+import type { ABlock, AgentProgress, AttachmentInfo, CompactInfo, NoticeLink, ContextInfo, DiffInfo, PermissionRequest, QueuedInfo, SessionMeterView, SuggestionOption, TItem, TodoItem, ToolBlock, UiEvent, VerifyInfo, ViewState } from '../../shared/protocol';
 import type { CheckpointTurn, RewindView } from '../../shared/checkpoints'; // (lane:checkpoints-rewind)
 import type { RemoteHostInfo, RemoteProvider, RemoteState } from './protocol';
 import { REMOTE_API_VERSION } from './protocol';
@@ -200,6 +200,13 @@ export function sanitizeAttachment(a: AttachmentInfo): AttachmentInfo {
 /** (lane:hooks) Dòng trạng thái gộp (vd. «Hook PreToolUse · a ✓ 12 ms · b ✗ 40 ms»). */
 const PILL_CAP = 400;
 
+/** (0.7.8) Nút «Mua gói» của thông báo: chỉ giữ khi là địa chỉ https ngắn + nhãn ngắn; sai dạng thì bỏ (dòng chữ của thông báo vẫn có địa chỉ). */
+export function sanitizeNoticeLink(l: NoticeLink | undefined): NoticeLink | undefined {
+  if (!l || typeof l.url !== 'string' || typeof l.label !== 'string') return undefined;
+  if (l.url.length > 300 || !/^https:\/\//i.test(l.url) || l.label.length < 1 || l.label.length > 40) return undefined;
+  return { url: l.url, label: l.label };
+}
+
 function sanitizeBlock(b: ABlock): ABlock {
   switch (b.type) {
     case 'tool':
@@ -210,8 +217,12 @@ function sanitizeBlock(b: ABlock): ABlock {
       const timing = { ...(whole(startedAt) !== undefined ? { startedAt: whole(startedAt) } : {}), ...(whole(durationMs) !== undefined ? { durationMs: whole(durationMs) } : {}) };
       return { ...rest, ...timing, text: b.text.length > THINK_CAP ? capTail(b.text, THINK_CAP) : b.text };
     }
-    case 'notice':
-      return b.compact || b.verify ? { ...b, ...(b.compact ? { compact: sanitizeCompact(b.compact) } : {}), ...(b.verify ? { verify: sanitizeVerify(b.verify) } : {}) } : b;
+    case 'notice': {
+      if (!b.compact && !b.verify && !b.link) return b;
+      const { link, ...rest } = b; // (0.7.8)
+      const lk = sanitizeNoticeLink(link);
+      return { ...rest, ...(b.compact ? { compact: sanitizeCompact(b.compact) } : {}), ...(b.verify ? { verify: sanitizeVerify(b.verify) } : {}), ...(lk ? { link: lk } : {}) };
+    }
     case 'pill': // (lane:hooks) dòng «Hook …» gộp nhiều hook: cắt độ dài
       return b.text.length > PILL_CAP ? { ...b, text: b.text.slice(0, PILL_CAP) } : b;
     default:
@@ -235,11 +246,13 @@ export function sanitizeFork(f: { fromId: string; fromTitle: string } | undefine
 export function sanitizeItem(it: TItem): TItem {
   if (it.kind === 'user') return { ...it, attachments: it.attachments.map(sanitizeAttachment) };
   if (it.kind === 'assistant') return { ...it, blocks: it.blocks.map(sanitizeBlock) };
-  if (it.kind === 'notice' && (it.compact || it.verify || it.fork)) {
-    const { fork, ...rest } = it; // (lane:sessions-ux)
+  if (it.kind === 'notice' && (it.compact || it.verify || it.fork || it.link)) {
+    const { fork, link, ...rest } = it; // (lane:sessions-ux) + (0.7.8) link
     const f = sanitizeFork(fork);
+    const lk = sanitizeNoticeLink(link);
     return {
       ...rest,
+      ...(lk ? { link: lk } : {}),
       ...(it.compact ? { compact: sanitizeCompact(it.compact) } : {}),
       ...(it.verify ? { verify: sanitizeVerify(it.verify) } : {}),
       ...(f ? { fork: f } : {}),
@@ -400,8 +413,12 @@ export function sanitizeEvent(ev: UiEvent): UiEvent {
       return { ...ev, ...sanitizeAgent(ev) };
     case 'tool_permission':
       return { ...ev, request: sanitizePermission(ev.request) };
-    case 'notice':
-      return ev.compact || ev.verify ? { ...ev, ...(ev.compact ? { compact: sanitizeCompact(ev.compact) } : {}), ...(ev.verify ? { verify: sanitizeVerify(ev.verify) } : {}) } : ev;
+    case 'notice': {
+      if (!ev.compact && !ev.verify && !ev.link) return ev;
+      const { link, ...rest } = ev; // (0.7.8)
+      const lk = sanitizeNoticeLink(link);
+      return { ...rest, ...(ev.compact ? { compact: sanitizeCompact(ev.compact) } : {}), ...(ev.verify ? { verify: sanitizeVerify(ev.verify) } : {}), ...(lk ? { link: lk } : {}) };
+    }
     case 'options':
       return { ...ev, options: sanitizeOptions(ev.options) }; // (lane:output-timeouts)
     case 'text':

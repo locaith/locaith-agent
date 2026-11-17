@@ -395,6 +395,20 @@
 .cc-notice.notice-error .notice-text {
   color: color-mix(in srgb, var(--danger) 78%, var(--fg));
 }
+/* (0.7.8) Thông báo có nút («Mua gói» khi hết dùng thử miễn phí): chữ chiếm trọn dòng cạnh chấm, các nút xuống dòng dưới và thẳng với chữ —
+   không bóp chữ thành cột hẹp ở khung 320 px. 26px = bề rộng chấm 18 + khoảng cách 8. */
+.cc-notice.notice-has-link {
+  flex-wrap: wrap;
+}
+.cc-notice.notice-has-link .notice-text {
+  flex: 1 1 calc(100% - 26px);
+}
+.cc-notice.notice-has-link .notice-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-left: 26px;
+}
 
 /* ── nén ngữ cảnh ── */
 .cc-compact {

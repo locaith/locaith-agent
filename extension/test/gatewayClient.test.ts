@@ -445,6 +445,22 @@ describe('Thông điệp lỗi cổng theo nhóm (vi/en, kèm hành động)', (
     expect(gatewayErrorText(e, 'vi')).toBe('Hết hạn mức hôm nay.');
     expect(gatewayErrorText(e, 'en')).toMatch(/quota/i);
   });
+  it('hết dùng thử miễn phí (402 + entitlement): vi giữ lời cổng, en dùng câu chuẩn có địa chỉ mua gói — không phải câu «hạn mức ngày»', () => {
+    const e = classifyGatewayError(
+      'locaith',
+      402,
+      JSON.stringify({ error: { code: 'locaith_quota', message: 'Hết 1 ngày dùng thử. Mua gói tại https://locaith.ai/#upgrade.' }, entitlement: { state: 'trial_ended', trial_hours: 24, upgrade_url: 'https://locaith.ai/#upgrade' } }),
+      undefined,
+    )!;
+    expect(gatewayErrorText(e, 'vi')).toBe('Hết 1 ngày dùng thử. Mua gói tại https://locaith.ai/#upgrade.');
+    const en = gatewayErrorText(e, 'en')!;
+    expect(en).toMatch(/free .*trial/i);
+    expect(en).toContain('https://locaith.ai/#upgrade');
+    expect(en).not.toMatch(/today|tomorrow|quota/i);
+    // cổng không kèm lời: vi dùng câu chuẩn (cũng có địa chỉ)
+    const bare = classifyGatewayError('locaith', 402, JSON.stringify({ error: { code: 'locaith_quota' }, entitlement: { state: 'trial_ended' } }), undefined)!;
+    expect(gatewayErrorText(bare, 'vi')).toMatch(/dùng thử miễn phí.*https:\/\/locaith\.ai\/#upgrade/);
+  });
   it('giới hạn tốc độ → nhắc chờ rồi «Thử lại» / “Retry”', () => {
     const e = gw('locaith_rate_limited', 429, '');
     expect(gatewayErrorText(e, 'vi')).toMatch(/thử lại/i);
