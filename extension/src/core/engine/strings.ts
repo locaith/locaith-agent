@@ -228,9 +228,19 @@ const vi = {
   gwOverloaded: 'Cổng Locaith đang quá tải hoặc bảo trì. Chờ vài phút rồi bấm «Thử lại».',
   gwModelGone: 'Mô hình Locaith này không tồn tại hoặc đã ngừng cung cấp. Hãy chọn một model khác trong danh sách.',
   gwOffline: 'Không kết nối được tới cổng Locaith — kiểm tra mạng (hoặc VPN/proxy) rồi bấm «Thử lại». Chi tiết: {detail}',
-  // (0.7.8) Hết thời gian dùng thử miễn phí 1 ngày của tài khoản (không có gói): lời cổng soạn (có địa chỉ) được giữ nguyên ở bản tiếng Việt.
-  gwTrialEnded: 'Bạn đã dùng hết thời gian dùng thử miễn phí Locaith-v5 của tài khoản này. Hãy mua gói tại {url} để dùng tiếp — hoặc chọn mô hình khác bằng API riêng của bạn.',
+  // (0.7.9) Hạn mức kiểu Anthropic: gói trả phí có phiên 5 giờ + tuần; tài khoản miễn phí có token miễn phí MỘT LẦN. Bản vi giữ lời cổng nguyên văn; các câu này dành cho bản en
+  // và làm dự phòng khi cổng không kèm lời. Chỉ phần trăm và giờ làm mới — không bao giờ có số tiền.
+  gwFreeExhausted: 'Bạn đã dùng hết token miễn phí của tài khoản này. Hãy mua gói Plus, Pro hoặc Ultra tại {url} để dùng tiếp — hoặc chọn mô hình khác bằng API riêng của bạn.',
+  gwLimitHead: 'Bạn đã dùng hết {what} của {who}. Hạn mức làm mới sau {span}.',
+  gwLimitHeadNoTime: 'Bạn đã dùng hết {what} của {who}.',
+  gwWhat5h: 'hạn mức 5 giờ',
+  gwWhatWeek: 'hạn mức tuần',
+  gwWhoPlan: 'gói {plan}',
+  gwWhoFree: 'tài khoản miễn phí',
+  gwTailUpgrade: 'Nâng cấp gói tại {url} để có thêm hạn mức — hoặc chọn mô hình khác bằng API riêng của bạn.',
+  gwTailWait: 'Hãy chờ hạn mức làm mới — hoặc chọn mô hình khác bằng API riêng của bạn.',
   buyPlan: 'Mua gói',
+  upgradePlan: 'Nâng cấp',
   // ── (lane:mcp-parity) ──
   // ── (lane:instructions-memory) ──
   // ── (lane:tools-parity) ──
@@ -454,8 +464,17 @@ const en: typeof vi = {
   gwOverloaded: 'The Locaith gateway is overloaded or under maintenance. Wait a few minutes, then press “Retry”.',
   gwModelGone: 'This Locaith model does not exist or has been retired. Pick another model from the list.',
   gwOffline: 'Could not reach the Locaith gateway — check your network (or VPN/proxy), then press “Retry”. Details: {detail}',
-  gwTrialEnded: 'You have used up the free Locaith-v5 trial of this account. Buy a plan at {url} to keep using it — or pick another model with your own API key.',
+  gwFreeExhausted: 'You have used up the free tokens of this account. Buy a Plus, Pro or Ultra plan at {url} to keep using it — or pick another model with your own API key.',
+  gwLimitHead: 'You have used up the {what} allowance of {who}. It renews in {span}.',
+  gwLimitHeadNoTime: 'You have used up the {what} allowance of {who}.',
+  gwWhat5h: '5-hour',
+  gwWhatWeek: 'weekly',
+  gwWhoPlan: 'your {plan} plan',
+  gwWhoFree: 'your free account',
+  gwTailUpgrade: 'Upgrade at {url} for more — or pick another model with your own API key.',
+  gwTailWait: 'Wait for it to renew — or pick another model with your own API key.',
   buyPlan: 'Buy a plan',
+  upgradePlan: 'Upgrade',
   // ── (lane:mcp-parity) ──
   // ── (lane:instructions-memory) ──
   // ── (lane:tools-parity) ──

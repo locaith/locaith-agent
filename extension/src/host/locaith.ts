@@ -11,8 +11,10 @@ import {
   CONSENT_MESSAGE,
   LOCAITH_NOTICE_VERSION,
   LOCAITH_PROVIDER_ID,
+  parseUsage,
   type ConsentError,
   type LocaithGatewayClient,
+  type LocaithUsage,
 } from '../core/providers/locaithGateway';
 import type { AccountProviderHooks } from '../core/providers/registry';
 import { GatewayTokenManager } from '../core/account/gatewayToken';
@@ -65,7 +67,14 @@ export interface LocaithGate {
   /** Máy chủ vừa từ chối vì chưa có bản ghi hợp lệ → xoá bản đệm để hỏi lại. */
   invalidate(): void;
   onChange(cb: () => void): { dispose(): void };
+  /** (0.7.9) Mức đã dùng của hạn mức 5 giờ / tuần (hoặc token miễn phí) lần đọc gần nhất; undefined khi chưa đọc / chưa đăng nhập / cổng không tính hạn mức. */
+  usage?(): LocaithUsage | undefined;
+  /** (0.7.9) Đọc lại từ GET /account (không ném). Không `force` thì tối đa 15 giây một lần; mọi nơi hỏi cùng lúc dùng chung MỘT lượt gọi. */
+  refreshUsage?(force?: boolean): Promise<void>;
 }
+
+/** Khoảng tối thiểu giữa hai lần đọc mức dùng khi không ép (mỗi lượt trả lời xong, mở Cài đặt…). */
+export const USAGE_MIN_REFRESH_MS = 15_000;
 
 export class LocaithConsent implements LocaithGate {
   private cache: CacheRecord | null;
@@ -77,7 +86,7 @@ export class LocaithConsent implements LocaithGate {
     private readonly d: {
       memento: MementoLike;
       account: LocaithAccountLike;
-      client: Pick<LocaithGatewayClient, 'getConsent' | 'postConsent'>;
+      client: Pick<LocaithGatewayClient, 'getConsent' | 'postConsent'> & Partial<Pick<LocaithGatewayClient, 'getAccount'>>;
       /** Phiên bản tiện ích, gửi kèm bản ghi: `vscode/0.6.0`. */
       clientLabel: string;
       log?: (level: 'debug' | 'info' | 'warn' | 'error', msg: string) => void;
@@ -175,6 +184,56 @@ export class LocaithConsent implements LocaithGate {
   invalidate(): void {
     if (!this.mine()) return;
     void this.save(null);
+  }
+
+  // ── (0.7.9) mức đã dùng của hạn mức kiểu Anthropic ─────────────────────────
+  private usageCache: { uid: string; value: LocaithUsage } | undefined;
+  private usageAt = 0;
+  private usageInflight: Promise<void> | null = null;
+
+  usage(): LocaithUsage | undefined {
+    const uid = this.d.account.userId();
+    return this.d.account.usable && uid && this.usageCache?.uid === uid ? this.usageCache.value : undefined;
+  }
+
+  async refreshUsage(force = false): Promise<void> {
+    const get = this.d.client.getAccount?.bind(this.d.client);
+    if (!get) return;
+    if (this.usageInflight) return this.usageInflight;
+    if (!force && this.now() - this.usageAt < USAGE_MIN_REFRESH_MS) return;
+    this.usageInflight = this.doRefreshUsage(get).finally(() => {
+      this.usageInflight = null;
+    });
+    return this.usageInflight;
+  }
+
+  private async doRefreshUsage(get: NonNullable<LocaithGatewayClient['getAccount']>): Promise<void> {
+    const token = this.d.account.usable ? this.d.account.token() : undefined;
+    const uid = this.d.account.userId();
+    if (!token || !uid) {
+      this.usageCache = undefined;
+      return;
+    }
+    this.usageAt = this.now();
+    let r;
+    try {
+      r = await get(token);
+    } catch {
+      return; // lỗi lạ: giữ bản cũ
+    }
+    if (!r.ok) {
+      if (r.error === 'unauthorized') this.usageCache = undefined; // token hỏng: không hiện số của phiên cũ
+      return; // mất mạng / cổng cũ: giữ bản cũ, đừng làm ồn
+    }
+    const value = parseUsage(r.account, this.now());
+    this.usageCache = value ? { uid, value } : undefined;
+    for (const cb of [...this.subs]) {
+      try {
+        cb();
+      } catch {
+        /* một bên nghe lỗi không được làm hỏng bên khác */
+      }
+    }
   }
 }
 

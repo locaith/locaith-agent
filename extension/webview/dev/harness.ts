@@ -1122,7 +1122,25 @@ function initialView(): ViewState {
       break;
     // (0.7.8) hết dùng thử miễn phí → nút «Mua gói»
     case 'plan-ended':
-      v = planEndedScene(params.get('lang') === 'en' ? 'en' : 'vi');
+    case 'plan-limit-session':
+    case 'plan-limit-top':
+      v = planEndedScene(params.get('lang') === 'en' ? 'en' : 'vi', scenario === 'plan-ended' ? 'free' : scenario === 'plan-limit-session' ? 'session' : 'top');
+      break;
+    // (0.7.9) thẻ «Mô hình Locaith» trong Cài đặt có mức dùng hạn mức
+    case 'locaith-usage-plus':
+      v = locaithState({ accepted: true, screen: 'settings', usage: { plan: 'plus', state: 'ok', session: { percent: 37.5, resetsInS: 7800 }, week: { percent: 12.4, resetsInS: 5 * 86400 + 3 * 3600 }, sessionHours: 5, weekHours: 168, canUpgrade: true, upgradeUrl: 'https://locaith.ai/#upgrade', at: Date.now() } });
+      break;
+    case 'locaith-usage-limit':
+      v = locaithState({ accepted: true, screen: 'settings', usage: { plan: 'pro', state: 'limit_session', session: { percent: 100, resetsInS: 3600 }, week: { percent: 84, resetsInS: 3 * 86400 }, sessionHours: 5, weekHours: 168, canUpgrade: true, upgradeUrl: 'https://locaith.ai/#upgrade', at: Date.now() } });
+      break;
+    case 'locaith-usage-ultra':
+      v = locaithState({ accepted: true, screen: 'settings', usage: { plan: 'ultra', state: 'ok', session: { percent: 8, resetsInS: 15000 }, week: { percent: 3 }, sessionHours: 5, weekHours: 168, canUpgrade: false, upgradeUrl: 'https://locaith.ai/#upgrade', at: Date.now() } });
+      break;
+    case 'locaith-usage-free':
+      v = locaithState({ accepted: true, screen: 'settings', usage: { plan: 'free', state: 'free', credit: { percent: 60 }, canUpgrade: true, upgradeUrl: 'https://locaith.ai/#upgrade', at: Date.now() } });
+      break;
+    case 'locaith-usage-free-out':
+      v = locaithState({ accepted: true, screen: 'settings', usage: { plan: 'free', state: 'free_exhausted', credit: { percent: 100 }, canUpgrade: true, upgradeUrl: 'https://locaith.ai/#upgrade', at: Date.now() } });
       break;
     // (lane:blind-verifier)
     case 'verify':

@@ -1088,6 +1088,8 @@ export interface LocaithSceneOptions {
   screen?: ViewState['screen'];
   /** Đang xếp hàng: số giây còn lại tới lần hỏi lại, và tổng thời gian chờ. */
   queue?: { position: number; attempt: number; leftSec: number; waitSec: number; limit?: number };
+  /** (0.7.9) Mức đã dùng của hạn mức 5 giờ / tuần hoặc token miễn phí (thẻ «Mô hình Locaith» trong Cài đặt). */
+  usage?: NonNullable<ViewState['locaith']>['usage'];
 }
 
 export function locaithState(o: LocaithSceneOptions = {}): ViewState {
@@ -1108,6 +1110,7 @@ export function locaithState(o: LocaithSceneOptions = {}): ViewState {
       ...(o.saving ? { saving: true } : {}),
       ...(o.error ? { error: o.error } : {}),
       ...(o.outdated ? { outdated: true } : {}),
+      ...(o.usage ? { usage: o.usage } : {}),
     },
     ...(o.queue
       ? { modelQueue: { position: o.queue.position, ahead: o.queue.position - 1, attempt: o.queue.attempt, retryAt: now + o.queue.leftSec * 1000 - 400, waitMs: o.queue.waitSec * 1000, since: now - 38_000, limit: o.queue.limit, active: o.queue.limit, waiting: 23 } }
@@ -1174,9 +1177,27 @@ export function cutContinueState(opts: { forced?: boolean } = {}): ViewState {
   });
 }
 
-// ── (0.7.8) Hết dùng thử miễn phí 1 ngày: thông báo lỗi của cổng kèm nút «Mua gói» (mở https://locaith.ai/#upgrade) cạnh «Thử lại» ──
-export function planEndedScene(lang: 'vi' | 'en' = 'vi'): ViewState {
+// ── (0.7.8 → 0.7.9) Hết hạn mức: thông báo lỗi của cổng kèm nút «Mua gói» (hết token miễn phí) / «Nâng cấp» (gói hết phiên 5 giờ), không nút ở gói cao nhất (mở https://locaith.ai/#upgrade) ──
+export function planEndedScene(lang: 'vi' | 'en' = 'vi', kind: 'free' | 'session' | 'top' = 'free'): ViewState {
   const vi = lang === 'vi';
+  const URL = 'https://locaith.ai/#upgrade';
+  const texts = {
+    free: {
+      vi: 'Bạn đã dùng hết token miễn phí của tài khoản này. Hãy mua gói Plus, Pro hoặc Ultra tại ' + URL + ' để dùng tiếp — hoặc chọn mô hình khác bằng API riêng của bạn.',
+      en: 'You have used up the free tokens of this account. Buy a Plus, Pro or Ultra plan at ' + URL + ' to keep using it — or pick another model with your own API key.',
+      label: { vi: 'Mua gói', en: 'Buy a plan' },
+    },
+    session: {
+      vi: 'Bạn đã dùng hết hạn mức 5 giờ của gói Plus. Hạn mức làm mới sau 2 giờ 10 phút (lúc 17:10 hôm nay, giờ Việt Nam). Nâng cấp gói tại ' + URL + ' để có thêm hạn mức — hoặc chọn mô hình khác bằng API riêng của bạn.',
+      en: 'You have used up the 5-hour allowance of your Plus plan. It renews in 2 h 10 min. Upgrade at ' + URL + ' for more — or pick another model with your own API key.',
+      label: { vi: 'Nâng cấp', en: 'Upgrade' },
+    },
+    top: {
+      vi: 'Bạn đã dùng hết hạn mức tuần của gói Ultra. Hạn mức làm mới sau 2 ngày 4 giờ (lúc 15:00 Thứ Hai 18/01, giờ Việt Nam). Hãy chờ hạn mức làm mới — hoặc chọn mô hình khác bằng API riêng của bạn.',
+      en: 'You have used up the weekly allowance of your Ultra plan. It renews in 2 d 4 h. Wait for it to renew — or pick another model with your own API key.',
+      label: { vi: '', en: '' },
+    },
+  }[kind];
   return baseState({
     title: 'Locaith-v5',
     provider: 'locaith',
@@ -1196,10 +1217,8 @@ export function planEndedScene(lang: 'vi' | 'en' = 'vi'): ViewState {
             type: 'notice',
             id: 'a_plan:n0',
             level: 'error',
-            text: vi
-              ? 'Bạn đã dùng hết 1 ngày dùng thử miễn phí Locaith-v5 của tài khoản này. Hãy mua gói tại https://locaith.ai/#upgrade để dùng tiếp — hoặc chọn mô hình khác bằng API riêng của bạn.'
-              : 'You have used up the free Locaith-v5 trial of this account. Buy a plan at https://locaith.ai/#upgrade to keep using it — or pick another model with your own API key.',
-            link: { url: 'https://locaith.ai/#upgrade', label: vi ? 'Mua gói' : 'Buy a plan' },
+            text: vi ? texts.vi : texts.en,
+            ...(kind === 'top' ? {} : { link: { url: URL, label: vi ? texts.label.vi : texts.label.en } }),
           },
         ],
       },

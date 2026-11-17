@@ -6,13 +6,16 @@ import {
   LOCAITH_GATEWAY_URL,
   LOCAITH_MAX_OUTPUT_TOKENS,
   LOCAITH_NOTICE_VERSION,
+  FREE_EXHAUSTED_DEFAULT_MESSAGE,
+  LIMIT_SESSION_DEFAULT_MESSAGE,
+  LIMIT_WEEK_DEFAULT_MESSAGE,
   LOCAITH_UPGRADE_URL,
   LocaithGatewayClient,
-  PLAN_REQUIRED_DEFAULT_MESSAGE,
   QUEUE_DEFAULT_WAIT_MS,
   QUEUE_MAX_WAIT_MS,
   QUEUE_MIN_WAIT_MS,
   classifyGatewayError,
+  parseUsage,
   queueWaitMs,
   safeUpgradeUrl,
 } from '../src/core/providers/locaithGateway';
@@ -159,36 +162,53 @@ describe('classifyGatewayError — các mã lỗi khác của cổng (lời củ
   });
 });
 
-describe('402 locaith_quota — hết dùng thử miễn phí 1 ngày, cần mua gói (từ 17/11/2026)', () => {
-  const MSG = 'Bạn đã dùng hết 1 ngày dùng thử miễn phí Locaith-v5 của tài khoản này. Hãy mua gói tại https://locaith.ai/#upgrade để dùng tiếp — hoặc chọn mô hình khác bằng API riêng của bạn.';
-  const body = (ent: unknown, message: string | null = MSG) =>
-    JSON.stringify({ error: { code: 'locaith_quota', type: 'insufficient_quota', ...(message !== null ? { message } : {}) }, ...(ent !== undefined ? { entitlement: ent } : {}) });
-  const ENT = { state: 'trial_ended', trial_hours: 24, upgrade_url: 'https://locaith.ai/#upgrade' };
+describe('hạn mức kiểu Anthropic — 429 phiên 5 giờ / tuần, 402 token miễn phí hết (từ 17/11/2026)', () => {
+  const SESSION_MSG = 'Bạn đã dùng hết hạn mức 5 giờ của gói Plus. Hạn mức làm mới sau 2 giờ 10 phút (lúc 17:10 hôm nay, giờ Việt Nam). Nâng cấp gói tại https://locaith.ai/#upgrade để có thêm hạn mức — hoặc chọn mô hình khác bằng API riêng của bạn.';
+  const FREE_MSG = 'Bạn đã dùng hết token miễn phí của tài khoản này. Hãy mua gói Plus, Pro hoặc Ultra tại https://locaith.ai/#upgrade để dùng tiếp — hoặc chọn mô hình khác bằng API riêng của bạn.';
+  const body = (ent: unknown, message: string | null = SESSION_MSG) =>
+    JSON.stringify({ error: { code: 'locaith_quota', type: 'rate_limit_error', ...(message !== null ? { message } : {}) }, ...(ent !== undefined ? { entitlement: ent } : {}) });
+  const SESSION = { state: 'limit_session', plan: 'plus', scope: 'session', can_upgrade: true, upgrade_url: 'https://locaith.ai/#upgrade', usage: { session: { percent: 100, resets_in_s: 7800 }, week: { percent: 40, resets_in_s: 500000 } } };
 
-  it('mang khối entitlement: không bao giờ thử lại, lời cổng nguyên văn, có địa chỉ mua gói', () => {
-    const e = classifyGatewayError('locaith', 402, body(ENT), undefined)!;
-    expect(e).toMatchObject({ kind: 'rate_limit', retryable: false, verbatim: true, status: 402, gatewayCode: 'locaith_quota', message: MSG });
-    expect(e.entitlement).toEqual({ state: 'trial_ended', trialHours: 24, upgradeUrl: 'https://locaith.ai/#upgrade' });
-    // Qua classifyHttpError (đường thật của mọi lần gọi): cùng kết quả, KHÔNG phải câu chung «đã hết hạn mức hoặc chưa kích hoạt thanh toán».
-    const viaHttp = classifyHttpError('locaith', 402, body(ENT), new Headers());
-    expect(viaHttp.entitlement?.upgradeUrl).toBe('https://locaith.ai/#upgrade');
-    expect(viaHttp.message).toBe(MSG);
-    expect(viaHttp.message).not.toMatch(/chưa kích hoạt thanh toán/);
+  it('429 limit_session: không bao giờ thử lại, lời cổng nguyên văn, mang gói + còn bao lâu làm mới + nơi nâng cấp', () => {
+    const e = classifyGatewayError('locaith', 429, body(SESSION), 7_800_000)!;
+    expect(e).toMatchObject({ kind: 'rate_limit', retryable: false, verbatim: true, status: 429, gatewayCode: 'locaith_quota', message: SESSION_MSG, retryAfterMs: 7_800_000 });
+    expect(e.entitlement).toEqual({ state: 'limit_session', plan: 'plus', scope: 'session', resetsInS: 7800, canUpgrade: true, upgradeUrl: 'https://locaith.ai/#upgrade' });
+    // Qua classifyHttpError (đường thật của mọi lần gọi): cùng kết quả, KHÔNG phải câu chung «đã chạm giới hạn tốc độ… chờ N phút».
+    const viaHttp = classifyHttpError('locaith', 429, body(SESSION), new Headers({ 'retry-after': '7800' }));
+    expect(viaHttp.entitlement?.state).toBe('limit_session');
+    expect(viaHttp.message).toBe(SESSION_MSG);
+    expect(viaHttp.message).not.toMatch(/giới hạn tốc độ|chờ khoảng/);
   });
 
-  it('cổng đã bỏ khối entitlement nhưng vẫn HTTP 402 → vẫn là «cần gói» với địa chỉ chuẩn; 429 không có khối → hạn mức NGÀY như cũ', () => {
-    const e402 = classifyGatewayError('locaith', 402, body(undefined), undefined)!;
-    expect(e402.entitlement).toEqual({ state: 'trial_ended', upgradeUrl: LOCAITH_UPGRADE_URL });
-    expect(classifyGatewayError('locaith', 402, body(undefined, null), undefined)!.message).toBe(PLAN_REQUIRED_DEFAULT_MESSAGE);
+  it('429 limit_week: scope tuần; resets_in_s thiếu trong thân thì lấy từ Retry-After; gói cao nhất → canUpgrade false', () => {
+    const e = classifyGatewayError('locaith', 429, body({ state: 'limit_week', plan: 'ultra', can_upgrade: false, usage: { week: { percent: 100 } } }, 'Hết tuần.'), 4 * 86_400_000)!;
+    expect(e.entitlement).toEqual({ state: 'limit_week', plan: 'ultra', scope: 'week', resetsInS: 4 * 86400, canUpgrade: false, upgradeUrl: LOCAITH_UPGRADE_URL });
+    expect(e).toMatchObject({ retryable: false, verbatim: true, message: 'Hết tuần.' });
+  });
+
+  it('402 free_exhausted (token miễn phí một lần đã hết): scope credit, không có thời gian làm mới, kèm nơi mua gói; tên cũ trial_ended vẫn nhận', () => {
+    const e = classifyGatewayError('locaith', 402, body({ state: 'free_exhausted', plan: 'free', scope: 'credit', can_upgrade: true, upgrade_url: 'https://locaith.ai/#upgrade', usage: { credit: { percent: 100 } } }, FREE_MSG), undefined)!;
+    expect(e).toMatchObject({ kind: 'rate_limit', retryable: false, verbatim: true, status: 402, message: FREE_MSG });
+    expect(e.entitlement).toEqual({ state: 'free_exhausted', plan: 'free', scope: 'credit', canUpgrade: true, upgradeUrl: 'https://locaith.ai/#upgrade' });
+    expect(classifyGatewayError('locaith', 402, body({ state: 'trial_ended', trial_hours: 24 }, 'x'), undefined)!.entitlement?.state).toBe('free_exhausted');
+  });
+
+  it('cổng bỏ khối entitlement: 402 vẫn là «hết token miễn phí, cần gói»; 429 không có khối là hạn mức NGÀY như cũ (không nút nâng cấp)', () => {
+    const e402 = classifyGatewayError('locaith', 402, body(undefined, null), undefined)!;
+    expect(e402.entitlement).toEqual({ state: 'free_exhausted', scope: 'credit', canUpgrade: true, upgradeUrl: LOCAITH_UPGRADE_URL });
+    expect(e402.message).toBe(FREE_EXHAUSTED_DEFAULT_MESSAGE);
     const e429 = classifyGatewayError('locaith', 429, body(undefined, 'Hết hạn mức hôm nay.'), 3_600_000)!;
     expect(e429.entitlement).toBeUndefined();
     expect(e429).toMatchObject({ status: 429, retryable: false, verbatim: true });
-    // trạng thái lạ trong khối ở một 429: không phải «cần gói»
-    expect(classifyGatewayError('locaith', 429, body({ state: 'paid' }, 'x'), undefined)!.entitlement).toBeUndefined();
+    // trạng thái không phải hạn mức (cổng tương lai nói thêm) ở 429: không coi là từ chối theo gói
+    expect(classifyGatewayError('locaith', 429, body({ state: 'ok' }, 'x'), undefined)!.entitlement).toBeUndefined();
+    // thiếu lời: câu dự phòng đúng nhóm
+    expect(classifyGatewayError('locaith', 429, body({ state: 'limit_session' }, null), 100)!.message).toBe(LIMIT_SESSION_DEFAULT_MESSAGE);
+    expect(classifyGatewayError('locaith', 429, body({ state: 'limit_week' }, null), 100)!.message).toBe(LIMIT_WEEK_DEFAULT_MESSAGE);
   });
 
   it('địa chỉ mua gói: chỉ https + tên miền Locaith; mọi thứ khác (máy chủ lạ nói giọng cổng) → địa chỉ chuẩn', () => {
-    const url = (u: unknown) => classifyGatewayError('locaith', 402, body({ ...ENT, upgrade_url: u }), undefined)!.entitlement!.upgradeUrl;
+    const url = (u: unknown) => classifyGatewayError('locaith', 429, body({ ...SESSION, upgrade_url: u }), undefined)!.entitlement!.upgradeUrl;
     expect(url('https://locaith.ai/#upgrade')).toBe('https://locaith.ai/#upgrade');
     expect(url('https://www.locaith.ai/goi?from=cli')).toBe('https://www.locaith.ai/goi?from=cli');
     expect(url('https://pay.locaith.com/plans')).toBe('https://pay.locaith.com/plans');
@@ -198,12 +218,34 @@ describe('402 locaith_quota — hết dùng thử miễn phí 1 ngày, cần mua
     expect(safeUpgradeUrl(undefined)).toBe(LOCAITH_UPGRADE_URL);
   });
 
-  it('trial_hours bất thường bị bỏ (không tin số vô lý), còn lại vẫn là «cần gói»', () => {
-    for (const h of [-1, 1e9, 'x', null]) {
-      const e = classifyGatewayError('locaith', 402, body({ ...ENT, trial_hours: h }), undefined)!;
-      expect(e.entitlement).toEqual({ state: 'trial_ended', upgradeUrl: LOCAITH_UPGRADE_URL });
+  it('số bất thường không được tin: gói lạ, resets_in_s âm / vô lý bị bỏ (vẫn là một lần từ chối hợp lệ)', () => {
+    for (const secs of [-5, 1e9, 'x', null]) {
+      const e = classifyGatewayError('locaith', 429, body({ ...SESSION, usage: { session: { percent: 100, resets_in_s: secs } } }), undefined)!;
+      expect(e.entitlement?.resetsInS).toBeUndefined();
+      expect(e.entitlement?.state).toBe('limit_session');
     }
-    expect(classifyGatewayError('locaith', 402, body({ ...ENT, trial_hours: 0 }), undefined)!.entitlement?.trialHours).toBe(0);
+    expect(classifyGatewayError('locaith', 429, body({ ...SESSION, plan: 'ULTRA<script>' }), undefined)!.entitlement).not.toHaveProperty('plan');
+  });
+});
+
+describe('parseUsage — mức đã dùng từ GET /account (chỉ phần trăm và giờ làm mới)', () => {
+  const NOW = 1_800_000_000_000;
+  it('gói trả phí: phiên + tuần với số giây còn lại; cửa sổ chưa bắt đầu thì không có resetsInS', () => {
+    const u = parseUsage({ ok: true, plan: 'plus', entitlement: { state: 'ok', plan: 'plus', usage: { session: { percent: 37.5, resets_in_s: 7800 }, week: { percent: 12 } }, session_hours: 5, week_hours: 168, can_upgrade: true, upgrade_url: 'https://locaith.ai/#upgrade' } }, NOW)!;
+    expect(u).toEqual({ plan: 'plus', state: 'ok', session: { percent: 37.5, resetsInS: 7800 }, week: { percent: 12 }, sessionHours: 5, weekHours: 168, canUpgrade: true, upgradeUrl: 'https://locaith.ai/#upgrade', at: NOW });
+  });
+  it('tài khoản miễn phí: chỉ có credit; phần trăm bị kẹp 0–100', () => {
+    const u = parseUsage({ ok: true, plan: 'free', entitlement: { state: 'free', plan: 'free', usage: { credit: { percent: 140 } } } }, NOW)!;
+    expect(u).toMatchObject({ plan: 'free', state: 'free', credit: { percent: 100 }, canUpgrade: true, upgradeUrl: LOCAITH_UPGRADE_URL });
+    expect(u.session).toBeUndefined();
+    expect(parseUsage({ ok: true, entitlement: { state: 'free', usage: { credit: { percent: -3 } } } }, NOW)!.credit).toEqual({ percent: 0 });
+  });
+  it('cổng cũ / trạng thái không tính hạn mức / khối hỏng → undefined (không bịa số)', () => {
+    expect(parseUsage(undefined)).toBeUndefined();
+    expect(parseUsage({ ok: true })).toBeUndefined();
+    expect(parseUsage({ ok: true, entitlement: { state: 'staff', plan: 'staff' } })).toBeUndefined();
+    expect(parseUsage({ ok: true, entitlement: { state: 'ok', usage: { session: { percent: 'many' as never } } } })).toBeUndefined();
+    expect(parseUsage({ ok: true, entitlement: { state: 'ok', plan: 'ULTRA!!', usage: { week: { percent: 1 } } }, plan: 'pro' }, NOW)!.plan).toBe('pro');
   });
 });
 

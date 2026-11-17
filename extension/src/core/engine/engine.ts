@@ -113,6 +113,8 @@ export interface EngineDeps {
   onConsentRequired?(): void;
   /** Cổng Locaith báo token đăng nhập không còn hợp lệ (401): host kiểm tra lại tài khoản (bị thu hồi thì khoá extension và đòi đăng nhập lại). */
   onAccountInvalid?(): void;
+  /** (0.7.9) Cổng Locaith từ chối vì HẠN MỨC (phiên 5 giờ / tuần của gói, hoặc token miễn phí đã hết): host đọc lại mức dùng để khung Cài đặt hiện đúng. */
+  onUsageLimit?(): void;
   /** Câu hướng dẫn sửa khoá API theo từng host (CLI: «locaith provider key …» — nó không có màn Cài đặt). Không khai báo / trả undefined = câu mặc định «Mở Cài đặt». */
   authHint?(providerId: string): string | undefined;
   /**
@@ -893,9 +895,15 @@ export class AgentEngine {
     // (lane:gateway-client) Lỗi cổng Locaith theo nhóm (hạn mức, giới hạn tốc độ, quá tải, mất mạng…) kèm hành động; vi giữ lời cổng, en dùng câu chuẩn.
     const gw = gatewayErrorText(err, lang);
     if (gw) {
-      // (0.7.8) Hết lượt dùng thử miễn phí, cần gói: thêm nút «Mua gói» mở trang locaith.ai (địa chỉ đã được kiểm ở classifyGatewayError).
-      if (err.entitlement) this.d.emit({ t: 'notice', id: ctx.id, level: 'error', text: gw, link: { url: err.entitlement.upgradeUrl, label: t(lang, 'buyPlan') } });
-      else ctx.notice('error', gw);
+      // (0.7.9) Hết hạn mức: «Mua gói» (token miễn phí đã hết) hoặc «Nâng cấp» (gói trả phí hết hạn mức 5 giờ / tuần) mở trang locaith.ai — địa chỉ đã được kiểm ở
+      // classifyGatewayError; gói cao nhất (không còn gì để nâng cấp) thì chỉ có chữ. Host được báo để đọc lại mức dùng cho khung Cài đặt.
+      const ent = err.entitlement;
+      if (ent) {
+        this.d.onUsageLimit?.();
+        const label = ent.state === 'free_exhausted' ? t(lang, 'buyPlan') : t(lang, 'upgradePlan');
+        if (ent.canUpgrade) this.d.emit({ t: 'notice', id: ctx.id, level: 'error', text: gw, link: { url: ent.upgradeUrl, label } });
+        else ctx.notice('error', gw);
+      } else ctx.notice('error', gw);
       return 'error';
     }
     // Câu tiếng Việt do máy chủ soạn sẵn (hết hạn mức ngày, quá nhiều lượt, bảo trì, model không tồn tại…): hiện nguyên văn, không thay bằng câu chung "chạm giới hạn tốc độ… chờ N phút".

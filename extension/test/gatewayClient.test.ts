@@ -445,21 +445,34 @@ describe('Thông điệp lỗi cổng theo nhóm (vi/en, kèm hành động)', (
     expect(gatewayErrorText(e, 'vi')).toBe('Hết hạn mức hôm nay.');
     expect(gatewayErrorText(e, 'en')).toMatch(/quota/i);
   });
-  it('hết dùng thử miễn phí (402 + entitlement): vi giữ lời cổng, en dùng câu chuẩn có địa chỉ mua gói — không phải câu «hạn mức ngày»', () => {
+  it('token miễn phí hết (402 free_exhausted): vi giữ lời cổng, en dùng câu chuẩn có địa chỉ mua gói — không phải câu «hạn mức ngày»', () => {
     const e = classifyGatewayError(
       'locaith',
       402,
-      JSON.stringify({ error: { code: 'locaith_quota', message: 'Hết 1 ngày dùng thử. Mua gói tại https://locaith.ai/#upgrade.' }, entitlement: { state: 'trial_ended', trial_hours: 24, upgrade_url: 'https://locaith.ai/#upgrade' } }),
+      JSON.stringify({ error: { code: 'locaith_quota', message: 'Hết token miễn phí. Mua gói tại https://locaith.ai/#upgrade.' }, entitlement: { state: 'free_exhausted', plan: 'free', can_upgrade: true, upgrade_url: 'https://locaith.ai/#upgrade' } }),
       undefined,
     )!;
-    expect(gatewayErrorText(e, 'vi')).toBe('Hết 1 ngày dùng thử. Mua gói tại https://locaith.ai/#upgrade.');
+    expect(gatewayErrorText(e, 'vi')).toBe('Hết token miễn phí. Mua gói tại https://locaith.ai/#upgrade.');
     const en = gatewayErrorText(e, 'en')!;
-    expect(en).toMatch(/free .*trial/i);
+    expect(en).toMatch(/free tokens/i);
     expect(en).toContain('https://locaith.ai/#upgrade');
+    expect(en).toMatch(/Plus, Pro or Ultra/);
     expect(en).not.toMatch(/today|tomorrow|quota/i);
     // cổng không kèm lời: vi dùng câu chuẩn (cũng có địa chỉ)
-    const bare = classifyGatewayError('locaith', 402, JSON.stringify({ error: { code: 'locaith_quota' }, entitlement: { state: 'trial_ended' } }), undefined)!;
-    expect(gatewayErrorText(bare, 'vi')).toMatch(/dùng thử miễn phí.*https:\/\/locaith\.ai\/#upgrade/);
+    const bare = classifyGatewayError('locaith', 402, JSON.stringify({ error: { code: 'locaith_quota' }, entitlement: { state: 'free_exhausted' } }), undefined)!;
+    expect(gatewayErrorText(bare, 'vi')).toMatch(/token miễn phí.*Plus, Pro hoặc Ultra.*https:\/\/locaith\.ai\/#upgrade/);
+  });
+  it('hết hạn mức phiên 5 giờ / tuần của gói: vi giữ lời cổng; en dựng câu từ khối entitlement — gói, cửa sổ, còn bao lâu, nơi nâng cấp (không nâng cấp được thì chỉ nói chờ)', () => {
+    const mk = (state: string, plan: string, secs: number | undefined, canUpgrade = true) =>
+      classifyGatewayError('locaith', 429, JSON.stringify({ error: { code: 'locaith_quota', message: 'Lời của cổng.' }, entitlement: { state, plan, can_upgrade: canUpgrade, upgrade_url: 'https://locaith.ai/#upgrade', usage: { [state === 'limit_week' ? 'week' : 'session']: { percent: 100, ...(secs !== undefined ? { resets_in_s: secs } : {}) } } } }), undefined)!;
+    expect(gatewayErrorText(mk('limit_session', 'plus', 7800), 'vi')).toBe('Lời của cổng.');
+    expect(gatewayErrorText(mk('limit_session', 'plus', 7800), 'en')).toBe('You have used up the 5-hour allowance of your Plus plan. It renews in 2 h 10 min. Upgrade at https://locaith.ai/#upgrade for more — or pick another model with your own API key.');
+    expect(gatewayErrorText(mk('limit_week', 'pro', 190_000), 'en')).toBe('You have used up the weekly allowance of your Pro plan. It renews in 2 d 4 h. Upgrade at https://locaith.ai/#upgrade for more — or pick another model with your own API key.');
+    expect(gatewayErrorText(mk('limit_week', 'ultra', 3600, false), 'en')).toBe('You have used up the weekly allowance of your Ultra plan. It renews in 1 h. Wait for it to renew — or pick another model with your own API key.');
+    expect(gatewayErrorText(mk('limit_session', 'free', undefined), 'en')).toBe('You have used up the 5-hour allowance of your free account. Upgrade at https://locaith.ai/#upgrade for more — or pick another model with your own API key.');
+    for (const e of [mk('limit_session', 'plus', 7800), mk('limit_week', 'pro', 190_000)]) {
+      expect(gatewayErrorText(e, 'en')).not.toMatch(/\$|usd|dollar/i);
+    }
   });
   it('giới hạn tốc độ → nhắc chờ rồi «Thử lại» / “Retry”', () => {
     const e = gw('locaith_rate_limited', 429, '');

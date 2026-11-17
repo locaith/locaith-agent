@@ -3,8 +3,9 @@
 import { LOCAITH_UPGRADE_URL, LocaithGatewayClient, type AccountPayload } from '../core/providers/locaithGateway';
 import type { ModelInfo } from '../core/types';
 import type { BrowserLoginOptions, BrowserLoginResult } from './browserLogin';
-import { t } from './i18n';
+import { getLang, t, type Lang as UsageLang } from './i18n';
 import './strings';
+import { percentText, planName, spanText } from '../shared/usageFormat';
 
 /** Cách giao diện nhận thông báo / cho dán địa chỉ khi đăng nhập qua trình duyệt (onboarding của TUI dùng hộp thoại; `locaith login` dùng dòng lệnh). */
 export type BrowserLoginHooks = Pick<BrowserLoginOptions, 'notify' | 'askPaste' | 'onPasteInvalid' | 'open'>;
@@ -102,42 +103,61 @@ export async function loginCmd(d: AccountDeps): Promise<number> {
 }
 
 /**
- * Một dòng nói tài khoản dùng Locaith-v5 thế nào: gói đang hoạt động / đang dùng thử còn bao lâu / hết dùng thử (kèm nơi mua gói)…
- * Dựng từ khối `entitlement` của `/account` bằng chuỗi của CLI (vi/en) — không in lại câu tiếng Việt của máy chủ để bản en đọc được.
- * Trả `undefined` khi cổng cũ chưa có khối này.
+ * Vài dòng nói tài khoản dùng Locaith-v5 thế nào (kiểu Anthropic): gói nào, đã dùng bao nhiêu % hạn mức phiên 5 giờ và hạn mức tuần và khi nào làm mới; hoặc token miễn phí
+ * một lần đã dùng bao nhiêu %; hoặc đã hết hạn mức và nâng cấp ở đâu. Dựng từ khối `entitlement` của `/account` bằng chuỗi của CLI (vi/en) — không in lại câu tiếng Việt của
+ * máy chủ để bản en đọc được; chỉ phần trăm và giờ làm mới, không bao giờ số tiền. Trả `undefined` khi cổng cũ chưa có khối này (hoặc trạng thái lạ).
  */
-export function describeAccess(ent: NonNullable<AccountPayload['entitlement']> | undefined, plan: string | undefined): string | undefined {
+export function describeAccess(ent: NonNullable<AccountPayload['entitlement']> | undefined, plan: string | undefined, lang: UsageLang = getLang()): string[] | undefined {
   const state = ent?.state;
   if (!ent || !state) return undefined;
   const url = typeof ent.upgrade_url === 'string' && ent.upgrade_url ? ent.upgrade_url : LOCAITH_UPGRADE_URL;
-  const hours = typeof ent.trial_hours === 'number' && ent.trial_hours > 0 ? ent.trial_hours : 24;
-  const span = hours >= 24 && Math.abs(hours / 24 - Math.round(hours / 24)) < 1e-9 ? t('cli.acct.who.span.days', { n: Math.round(hours / 24) }) : t('cli.acct.who.span.hours', { n: Number(hours.toFixed(1)) });
+  const hours = typeof ent.session_hours === 'number' && ent.session_hours > 0 ? Number(ent.session_hours.toFixed(1)) : 5;
+  const name = planName(ent.plan ?? plan);
+  const who = name ? t('cli.acct.who.ent.plan', { plan: name }) : t('cli.acct.who.ent.freeacct');
+  const what5h = t('cli.acct.who.ent.what5h', { hours });
+  const whatWeek = t('cli.acct.who.ent.whatWeek');
+  const win = (w: { percent?: number; resets_in_s?: number } | undefined, what: string): string | undefined =>
+    w && typeof w.percent === 'number'
+      ? t('cli.acct.who.ent.win', {
+          what,
+          pct: percentText(w.percent),
+          resets: typeof w.resets_in_s === 'number' ? t('cli.acct.who.ent.resets', { span: spanText(w.resets_in_s, lang) }) : t('cli.acct.who.ent.notStarted'),
+        })
+      : undefined;
   switch (state) {
-    case 'paid': {
-      const end = ent.plan_expires_at ? new Date(ent.plan_expires_at) : null;
-      const until = end && Number.isFinite(end.getTime()) ? t('cli.acct.who.ent.until', { date: end.toISOString().slice(0, 10) }) : '';
-      return t('cli.acct.who.ent.paid', { plan: (ent.plan ?? plan ?? '').toString() || '—', until });
+    case 'ok':
+    case 'limit_session':
+    case 'limit_week': {
+      const out = [who];
+      const s5 = win(ent.usage?.session, what5h);
+      const wk = win(ent.usage?.week, whatWeek);
+      if (s5) out.push(s5);
+      if (wk) out.push(wk);
+      if (state !== 'ok') {
+        const w = state === 'limit_week' ? ent.usage?.week : ent.usage?.session;
+        const left = typeof w?.resets_in_s === 'number' ? spanText(w.resets_in_s, lang) : '—';
+        out.push(t('cli.acct.who.ent.limit', { what: state === 'limit_week' ? whatWeek : what5h, span: left }) + (ent.can_upgrade !== false ? `; ${t('cli.acct.who.ent.upgrade', { url })}` : ''));
+      }
+      return out;
     }
-    case 'trial': {
-      const secs = Math.max(0, Math.floor(typeof ent.trial_seconds_left === 'number' ? ent.trial_seconds_left : 0));
-      return t('cli.acct.who.ent.trial', { left: t('cli.acct.who.left', { h: Math.floor(secs / 3600), m: Math.floor((secs % 3600) / 60) }), url });
+    case 'free': {
+      const c = ent.usage?.credit;
+      return [who, ...(typeof c?.percent === 'number' ? [t('cli.acct.who.ent.credit', { pct: percentText(c.percent) })] : []), t('cli.acct.who.ent.buy', { url })];
     }
-    case 'trial_unused':
-      return t('cli.acct.who.ent.trial_unused', { span, url });
-    case 'trial_ended':
-      return t('cli.acct.who.ent.trial_ended', { url });
+    case 'free_exhausted':
+      return [who, t('cli.acct.who.ent.exhausted', { url })];
     case 'staff':
     case 'internal':
     case 'open':
     case 'unverified':
-      return t(`cli.acct.who.ent.${state}`);
+      return [t(`cli.acct.who.ent.${state}`)];
     default:
       return undefined;
   }
 }
 
 /**
- * Xem tài khoản đang dùng. Gói (free/pro/plus), quyền dùng Locaith-v5 (gói / dùng thử 1 ngày / hết dùng thử) và hạn mức lấy từ `/account`;
+ * Xem tài khoản đang dùng. Gói (free/plus/pro/ultra), mức đã dùng của Locaith-v5 (hạn mức phiên 5 giờ và tuần, hoặc token miễn phí một lần) và hạn mức lấy từ `/account`;
  * cổng cũ chưa có endpoint đó thì nói thẳng "xem trên locaith.ai" thay vì đoán.
  */
 export async function whoamiCmd(d: AccountDeps): Promise<number> {
@@ -167,10 +187,12 @@ export async function whoamiCmd(d: AccountDeps): Promise<number> {
     d.out(`${t('cli.acct.who.account')}: ${authOk ? t('cli.acct.who.loggedIn', { prefix: key.slice(0, 4) + '…' }) : t('cli.acct.who.invalid')}`);
     if (card?.name) d.out(`${t('cli.acct.who.account')}: ${card.name}${card.email_masked ? ' · ' + card.email_masked : ''}`);
     d.out(`${t('cli.acct.who.plan')}: ${plan ?? t(unsupported ? 'cli.acct.who.planUnsupported' : 'cli.acct.who.planUnknown')}`);
-    // Cổng từ 17/11/2026 nói rõ quyền dùng (gói / dùng thử / hết dùng thử); cổng cũ chỉ có cờ `unlimited` của giai đoạn mở.
+    // Cổng từ 17/11/2026 nói rõ mức đã dùng (% và lúc làm mới của phiên 5 giờ / tuần, hoặc token miễn phí); cổng cũ chỉ có cờ `unlimited` của giai đoạn mở.
     const access = acct.ok ? describeAccess(acct.account.entitlement, plan ?? undefined) : undefined;
-    if (access) d.out(`${t('cli.acct.who.access')}: ${access}`);
-    else if (acct.ok && acct.account.limits?.unlimited) d.out(`${t('cli.acct.who.limits')}: ${t('cli.acct.who.unlimited')}`);
+    if (access?.length) {
+      d.out(`${t('cli.acct.who.access')}: ${access[0]}`);
+      for (const line of access.slice(1)) d.out(`  ${line}`);
+    } else if (acct.ok && acct.account.limits?.unlimited) d.out(`${t('cli.acct.who.limits')}: ${t('cli.acct.who.unlimited')}`);
     if (consent.ok) d.out(`${t('cli.acct.who.consent')}: ${consent.state.accepted ? t('cli.acct.who.consentYes') : t('cli.acct.who.consentNo')}`);
     if (models) d.out(`${t('cli.acct.who.models')}: ${models.join(', ')}`);
   }

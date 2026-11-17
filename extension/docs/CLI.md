@@ -122,7 +122,7 @@ locaith --remote   # bật ngay khi mở CLI · lần sau mở lại ở cùng t
 | `locaith -p "việc"` · `locaith ask "việc"` | in một lần (`ask` là tên cũ, vẫn chạy) |
 | `locaith doctor [--json]` | kiểm Node, git, ffmpeg, khoá, kết nối thật tới cổng, bản mới — và nói cách sửa |
 | `locaith keytest` | ghi lại từng gói phím terminal + bộ gõ (Vietkey, UniKey, EVKey…) gửi tới CLI và cho biết ô nhập sẽ hiện gì; lưu `~/.locaith/keytest.txt` để đính kèm khi báo lỗi gõ tiếng Việt. Gõ vài từ có dấu rồi nhấn Backspace vài lần để xoá chúng; nhấn Ctrl+C khi xong |
-| `locaith login [--no-browser]` · `logout` · `whoami` | đăng nhập / xoá khoá đã lưu / xem tài khoản, gói, model |
+| `locaith login [--no-browser]` · `logout` · `whoami` | đăng nhập / xoá khoá đã lưu / xem tài khoản, gói, mức đã dùng của hạn mức 5 giờ và tuần (hoặc token miễn phí), model |
 | `locaith consent --yes` | ghi nhận đồng ý thông báo dữ liệu (một lần, bởi chủ tài khoản) |
 | `locaith provider [add\|key\|list\|test\|remove]` | nhà cung cấp mô hình: thêm API tuỳ chỉnh (OpenRouter, Ollama…), lưu khoá hãng khác, thử kết nối — xem mục «Nhà cung cấp mô hình» |
 | `locaith sessions [--all]` | liệt kê phiên đã lưu (mở lại bằng `-r` / `-r <số|từ khoá|id>` / `-c`) |

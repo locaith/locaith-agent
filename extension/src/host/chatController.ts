@@ -818,6 +818,7 @@ export class ChatController implements vscode.Disposable {
     if (this.d.locaith) await this.d.locaith.refresh().catch(() => undefined);
     if (this.disposed) return;
     this.patch({ provider: this.view.provider, model: this.view.model, locaith: this.locaithView(), skills: this.skillSummaries(), context: this.contextInfo() });
+    this.refreshLocaithUsage({ always: true }); // (0.7.9) vừa đăng nhập: đọc mức đã dùng một lần
     void this.d.providers
       .refresh([LOCAITH_PROVIDER_ID], true)
       .then(async () => {
@@ -1741,6 +1742,7 @@ export class ChatController implements vscode.Disposable {
       onQueue: (q) => this.setModelQueue(q),
       onConsentRequired: () => this.onConsentRequired(),
       onAccountInvalid: () => void this.d.account?.recheck?.(),
+      onUsageLimit: () => this.refreshLocaithUsage({ force: true }), // (0.7.9) vừa hết hạn mức: khung Cài đặt phải hiện đúng ngay
       loadInstructions: (names) => loadProjectInstructions(this.host, names),
       loadMemory: () => this.loadMemory(),
       // Các tính năng gắn quanh vòng lặp (xem core/engine/seams.ts): dùng chung mọi bề mặt + riêng VS Code.
@@ -1797,6 +1799,7 @@ export class ChatController implements vscode.Disposable {
     this.emit({ t: 'run_state', running });
     if (!running) {
       this.setModelQueue(null);
+      this.refreshLocaithUsage(); // (0.7.9) lượt xong: cập nhật mức đã dùng của hạn mức (chỉ khi đang dùng mô hình Locaith; giãn cách 15 giây)
       this.flushNow();
       void this.saveNow().then(async () => {
         const extra = { ...(await this.listings()), context: this.contextInfo(), ...this.meterPatch() }; // (lane:sessions-ux) + meter
@@ -2035,6 +2038,7 @@ export class ChatController implements vscode.Disposable {
 
   async showScreen(screen: 'chat' | 'settings' | 'history' | 'market'): Promise<void> {
     await this.sendInit(screen);
+    if (screen === 'settings') this.refreshLocaithUsage({ always: true }); // (0.7.9) thẻ «Mô hình Locaith» có mức dùng — đọc mới khi mở
     if (screen === 'market') await this.sendMarket();
   }
 
@@ -2144,6 +2148,7 @@ export class ChatController implements vscode.Disposable {
   private locaithView(): LocaithView | undefined {
     const c = this.d.locaith;
     if (!c) return undefined;
+    const usage = c.usage?.(); // (0.7.9) hạn mức 5 giờ / tuần — chỉ phần trăm và giờ làm mới
     return {
       noticeVersion: LOCAITH_NOTICE_VERSION,
       accepted: c.accepted(),
@@ -2151,7 +2156,24 @@ export class ChatController implements vscode.Disposable {
       ...(this.consentSaving ? { saving: true } : {}),
       ...(this.consentError ? { error: this.consentError } : {}),
       ...(c.outdated() ? { outdated: true } : {}),
+      ...(usage ? { usage } : {}),
     };
+  }
+
+  /**
+   * (0.7.9) Đọc lại mức đã dùng của hạn mức (GET /account) rồi cập nhật khung Cài đặt. Mặc định chỉ khi phiên đang dùng mô hình Locaith (lượt xong, đổi model);
+   * `always` cho chỗ người dùng chủ động xem (mở Cài đặt) và `force` cho lúc vừa bị từ chối vì hạn mức (không chờ giãn cách 15 giây).
+   */
+  private refreshLocaithUsage(opts: { force?: boolean; always?: boolean } = {}): void {
+    const c = this.d.locaith;
+    if (!c?.refreshUsage || this.disposed) return;
+    if (!opts.always && !opts.force && this.session.provider !== LOCAITH_PROVIDER_ID) return;
+    void c
+      .refreshUsage(opts.force === true)
+      .then(() => {
+        if (!this.disposed) this.patch({ locaith: this.locaithView() });
+      })
+      .catch(() => undefined);
   }
 
   /** Cổng báo đang xếp hàng (có `q`) hoặc đã được nhận / dừng (`null`): cập nhật dải đếm ngược ngay trong khung chat. */

@@ -277,7 +277,7 @@ export type ABlock =
   | ({ type: 'artifact'; id: string; state: 'writing' | 'ready'; sizeChars?: number } & ArtifactRef)
   | { type: 'notice'; id: string; level: 'info' | 'warn' | 'error'; text: string; compact?: CompactInfo; verify?: VerifyInfo /* (lane:blind-verifier) */; link?: NoticeLink };
 
-/** (0.7.8) Nút kèm thông báo — hiện nay: «Mua gói» khi tài khoản hết lượt dùng thử miễn phí. Bản webview cũ (Chrome) bỏ qua; địa chỉ vẫn nằm trong `text`. */
+/** (0.7.8) Nút kèm thông báo — hiện nay: «Nâng cấp» khi gói trả phí hết hạn mức, «Mua gói» khi tài khoản miễn phí hết token. Bản webview cũ (Chrome) bỏ qua; địa chỉ vẫn nằm trong `text`. */
 export interface NoticeLink {
   url: string;
   label: string;
@@ -352,7 +352,7 @@ export interface NoticeItem {
   text: string;
   ts: number;
   compact?: CompactInfo;
-  /** (0.7.8) Nút «Mua gói» (hết dùng thử miễn phí). */
+  /** (0.7.8) Nút «Nâng cấp» / «Mua gói» (hết hạn mức của gói, hoặc hết token miễn phí). */
   link?: NoticeLink;
   /** (lane:blind-verifier) Kết quả kiểm tra độc lập chạy tay (/verify) — thông báo độc lập. */
   verify?: VerifyInfo;
@@ -911,6 +911,27 @@ export interface LocaithView {
   error?: string;
   /** Máy chủ đòi phiên bản thông báo mới hơn bản tiện ích này biết: cần cập nhật tiện ích mới đồng ý được. */
   outdated?: boolean;
+  /** (0.7.9) Mức đã dùng của hạn mức 5 giờ / tuần (hoặc token miễn phí) — kiểu Anthropic. Chỉ phần trăm và giờ làm mới; không có số tiền. Vắng = chưa đọc / cổng không tính hạn mức. */
+  usage?: LocaithUsageView;
+}
+
+/** (0.7.9) Xem `LocaithView.usage`. `resetsInS` tính từ lúc `at` (cổng trả lời); chưa có khi cửa sổ chưa bắt đầu (tính từ lần dùng đầu tiên). */
+export interface LocaithUsageView {
+  /** free | plus | pro | ultra. */
+  plan: string;
+  /** ok | free | limit_session | limit_week | free_exhausted | staff | internal | open | unverified. */
+  state: string;
+  session?: { percent: number; resetsInS?: number };
+  week?: { percent: number; resetsInS?: number };
+  /** Chỉ tài khoản miễn phí: phần trăm token miễn phí (một lần, không làm mới) đã dùng. */
+  credit?: { percent: number };
+  /** Độ dài cửa sổ (giờ) theo cổng (mặc định 5 và 168). */
+  sessionHours?: number;
+  weekHours?: number;
+  canUpgrade: boolean;
+  upgradeUrl: string;
+  /** Lúc đọc (ms). */
+  at: number;
 }
 
 export interface ViewState {

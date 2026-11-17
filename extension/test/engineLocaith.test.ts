@@ -151,25 +151,45 @@ describe('engine — lời của cổng hiện nguyên văn; token tài khoản 
     expect(h.provider.requests).toHaveLength(1);
   });
 
-  it('hết dùng thử miễn phí (402 + entitlement): lời cổng nguyên văn kèm nút «Mua gói» → địa chỉ locaith.ai; dừng lượt, không gọi lại; hạn mức NGÀY thì KHÔNG có nút', async () => {
-    const msg = 'Bạn đã dùng hết 1 ngày dùng thử miễn phí Locaith-v5 của tài khoản này. Hãy mua gói tại https://locaith.ai/#upgrade để dùng tiếp.';
-    const need = new ProviderError(msg, { kind: 'rate_limit', providerId: 'locaith', status: 402, retryable: false, verbatim: true, gatewayCode: 'locaith_quota', entitlement: { state: 'trial_ended', trialHours: 24, upgradeUrl: 'https://locaith.ai/#upgrade' } });
-    const h = makeHarness(failWith(need), { sessionProvider: 'locaith' });
-    const r = await h.run('xin chào');
-    expect(r.stopReason).toBe('error');
-    const last = eventsOf(h.events, 'notice').at(-1)!;
-    expect(last).toMatchObject({ level: 'error', text: msg, link: { url: 'https://locaith.ai/#upgrade', label: 'Mua gói' } });
-    expect(h.provider.requests).toHaveLength(1);
-    // en: câu chuẩn có địa chỉ + nhãn nút tiếng Anh
-    const en = makeHarness(failWith(need), { sessionProvider: 'locaith', settings: { language: 'en' } });
-    await en.run('hi');
-    const last2 = eventsOf(en.events, 'notice').at(-1)!;
-    expect(last2).toMatchObject({ level: 'error', link: { url: 'https://locaith.ai/#upgrade', label: 'Buy a plan' } });
-    expect(last2.text).toContain('https://locaith.ai/#upgrade');
-    // hạn mức ngày (không có khối entitlement): chỉ chữ, không nút
-    const day = makeHarness(failWith(new ProviderError('Hết hạn mức hôm nay.', { kind: 'rate_limit', providerId: 'locaith', status: 429, retryable: false, verbatim: true, gatewayCode: 'locaith_quota' })), { sessionProvider: 'locaith' });
+  it('hết hạn mức theo gói: lời cổng nguyên văn kèm nút («Mua gói» khi hết token miễn phí, «Nâng cấp» khi hết phiên 5 giờ / tuần) → locaith.ai; gói cao nhất chỉ có chữ; dừng lượt, không gọi lại, host được báo', async () => {
+    const err = (msg: string, status: number, entitlement: NonNullable<ProviderError['entitlement']>) => new ProviderError(msg, { kind: 'rate_limit', providerId: 'locaith', status, retryable: false, verbatim: true, gatewayCode: 'locaith_quota', entitlement });
+    const URL = 'https://locaith.ai/#upgrade';
+    const cases: { e: ProviderError; label: string; en: string; link: boolean }[] = [
+      { e: err('Hết token miễn phí. Mua gói tại ' + URL, 402, { state: 'free_exhausted', plan: 'free', scope: 'credit', canUpgrade: true, upgradeUrl: URL }), label: 'Mua gói', en: 'Buy a plan', link: true },
+      { e: err('Hết hạn mức 5 giờ của gói Plus.', 429, { state: 'limit_session', plan: 'plus', scope: 'session', resetsInS: 7800, canUpgrade: true, upgradeUrl: URL }), label: 'Nâng cấp', en: 'Upgrade', link: true },
+      { e: err('Hết hạn mức tuần của gói Pro.', 429, { state: 'limit_week', plan: 'pro', scope: 'week', resetsInS: 190_000, canUpgrade: true, upgradeUrl: URL }), label: 'Nâng cấp', en: 'Upgrade', link: true },
+      { e: err('Hết hạn mức tuần của gói Ultra.', 429, { state: 'limit_week', plan: 'ultra', scope: 'week', resetsInS: 3600, canUpgrade: false, upgradeUrl: URL }), label: '', en: '', link: false },
+    ];
+    for (const c of cases) {
+      let hits = 0;
+      const h = makeHarness(failWith(c.e), { sessionProvider: 'locaith', engineDeps: { onUsageLimit: () => void hits++ } });
+      const r = await h.run('xin chào');
+      expect(r.stopReason).toBe('error');
+      expect(h.provider.requests).toHaveLength(1); // không gọi lại
+      expect(hits).toBe(1); // host được báo để đọc lại mức dùng
+      const last = eventsOf(h.events, 'notice').at(-1)!;
+      expect(last).toMatchObject({ level: 'error', text: c.e.message });
+      if (c.link) expect(last).toMatchObject({ link: { url: URL, label: c.label } });
+      else expect(last).not.toHaveProperty('link');
+      // en: câu chuẩn dựng từ khối + nhãn nút tiếng Anh
+      let hitsEn = 0;
+      const en = makeHarness(failWith(c.e), { sessionProvider: 'locaith', settings: { language: 'en' }, engineDeps: { onUsageLimit: () => void hitsEn++ } });
+      await en.run('hi');
+      const lastEn = eventsOf(en.events, 'notice').at(-1)!;
+      expect(lastEn.text).toMatch(/allowance|free tokens/);
+      expect(lastEn.text).not.toMatch(/[ạăâđêôơưáàảãéèẻẽíìỉĩóòỏõúùủũýỳỷỹ]/i); // en: không lộ lời tiếng Việt của cổng
+      if (c.link) expect(lastEn).toMatchObject({ link: { url: URL, label: c.en } });
+      else expect(lastEn).not.toHaveProperty('link');
+    }
+    // hạn mức NGÀY (không có khối entitlement): chỉ chữ, không nút, host không bị báo
+    let dayHits = 0;
+    const day = makeHarness(failWith(new ProviderError('Hết hạn mức hôm nay.', { kind: 'rate_limit', providerId: 'locaith', status: 429, retryable: false, verbatim: true, gatewayCode: 'locaith_quota' })), {
+      sessionProvider: 'locaith',
+      engineDeps: { onUsageLimit: () => void dayHits++ },
+    });
     await day.run('hi');
     expect(eventsOf(day.events, 'notice').at(-1)).not.toHaveProperty('link');
+    expect(dayHits).toBe(0);
   });
 
   it('locaith_rate_limited (chờ quá lâu) và locaith_model_not_found cũng hiện nguyên lời cổng', async () => {

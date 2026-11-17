@@ -251,6 +251,18 @@ export interface QueueInfo {
   waiting?: number;
 }
 
+/** (0.7.9) Vì sao cổng Locaith từ chối theo HẠN MỨC; xem `ProviderError.entitlement`. Không bao giờ có số tiền — chỉ phần trăm và giờ làm mới. */
+export interface EntitlementRefusal {
+  state: 'free_exhausted' | 'limit_session' | 'limit_week';
+  /** Gói đang áp dụng (free | plus | pro | ultra) nếu cổng nói. */
+  plan?: string;
+  scope: 'credit' | 'session' | 'week';
+  /** Còn bao nhiêu giây tới khi cửa sổ hạn mức làm mới (không có với token miễn phí: không làm mới). */
+  resetsInS?: number;
+  canUpgrade: boolean;
+  upgradeUrl: string;
+}
+
 export class ProviderError extends Error {
   readonly kind: ProviderErrorKind;
   readonly status?: number;
@@ -273,10 +285,11 @@ export class ProviderError extends Error {
   /** (lane:gateway-client) Mã lỗi của cổng Locaith (`locaith_quota`, `locaith_rate_limited`…) để chọn đúng nhóm thông điệp. */
   readonly gatewayCode?: string;
   /**
-   * (0.7.8) Cổng Locaith từ chối vì tài khoản KHÔNG có gói và đã dùng hết lượt dùng thử miễn phí (402 `locaith_quota` + khối `entitlement`).
-   * `upgradeUrl` đã được kiểm (https, tên miền Locaith) để engine đặt nút «Mua gói» cạnh thông báo.
+   * (0.7.9) Cổng Locaith từ chối vì HẠN MỨC (429/402 `locaith_quota` + khối `entitlement`): gói trả phí hết hạn mức phiên 5 giờ (`limit_session`) hoặc
+   * tuần (`limit_week`) — làm mới sau `resetsInS` giây —, hoặc tài khoản miễn phí hết token miễn phí một lần (`free_exhausted`, không làm mới).
+   * `upgradeUrl` đã được kiểm (https, tên miền Locaith); `canUpgrade` false khi đã ở gói cao nhất (không còn gì để nâng cấp).
    */
-  readonly entitlement?: { state: 'trial_ended'; trialHours?: number; upgradeUrl: string };
+  readonly entitlement?: EntitlementRefusal;
 
   constructor(
     message: string,
@@ -292,7 +305,7 @@ export class ProviderError extends Error {
       accountAuth?: boolean;
       retryLimit?: number;
       gatewayCode?: string;
-      entitlement?: { state: 'trial_ended'; trialHours?: number; upgradeUrl: string };
+      entitlement?: EntitlementRefusal;
       cause?: unknown;
     },
   ) {

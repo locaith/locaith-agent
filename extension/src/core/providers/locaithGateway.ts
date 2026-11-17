@@ -48,7 +48,11 @@ export const CONSENT_MESSAGE = 'Cần đồng ý thông báo dữ liệu của L
 export const QUOTA_DEFAULT_MESSAGE = 'Bạn đã dùng hết hạn mức mô hình Locaith của hôm nay. Hạn mức được làm mới vào ngày mai.';
 /** Trang mua gói trên locaith.ai (mở bảng «Gói cước» sau khi đăng nhập). Cổng gửi kèm địa chỉ của nó trong `entitlement.upgrade_url`. */
 export const LOCAITH_UPGRADE_URL = 'https://locaith.ai/#upgrade';
-export const PLAN_REQUIRED_DEFAULT_MESSAGE = `Bạn đã dùng hết thời gian dùng thử miễn phí Locaith-v5 của tài khoản này. Hãy mua gói tại ${LOCAITH_UPGRADE_URL} để dùng tiếp — hoặc chọn mô hình khác bằng API riêng của bạn.`;
+/** Tài khoản miễn phí hết token miễn phí MỘT LẦN (không làm mới): chỉ còn cách mua gói. Cổng soạn câu này; đây là câu dự phòng khi cổng không kèm lời. */
+export const FREE_EXHAUSTED_DEFAULT_MESSAGE = `Bạn đã dùng hết token miễn phí của tài khoản này. Hãy mua gói Plus, Pro hoặc Ultra tại ${LOCAITH_UPGRADE_URL} để dùng tiếp — hoặc chọn mô hình khác bằng API riêng của bạn.`;
+/** Gói trả phí hết hạn mức phiên 5 giờ / tuần: câu dự phòng khi cổng không kèm lời. */
+export const LIMIT_SESSION_DEFAULT_MESSAGE = 'Bạn đã dùng hết hạn mức 5 giờ của gói hiện tại. Hạn mức sẽ làm mới sau ít phút đến vài giờ — hoặc nâng cấp gói, hoặc chọn mô hình khác bằng API riêng của bạn.';
+export const LIMIT_WEEK_DEFAULT_MESSAGE = 'Bạn đã dùng hết hạn mức tuần của gói hiện tại. Hạn mức làm mới khi hết tuần — hoặc nâng cấp gói, hoặc chọn mô hình khác bằng API riêng của bạn.';
 export const RATE_LIMITED_DEFAULT_MESSAGE = 'Bạn đang gửi quá nhiều yêu cầu tới mô hình Locaith cùng lúc. Hãy chờ một lát rồi thử lại.';
 export const UNAVAILABLE_DEFAULT_MESSAGE = 'Dịch vụ mô hình Locaith đang bảo trì. Hãy thử lại sau ít phút.';
 export const MODEL_NOT_FOUND_DEFAULT_MESSAGE = 'Mô hình Locaith này không tồn tại hoặc đã ngừng cung cấp. Hãy chọn một model khác trong danh sách.';
@@ -78,15 +82,33 @@ export function safeUpgradeUrl(v: unknown): string {
   return LOCAITH_UPGRADE_URL;
 }
 
-/** Khối `entitlement` của 402 `locaith_quota`: «hết dùng thử, cần gói». Chỉ trạng thái `trial_ended` mới là lỗi; khối thiếu/lạ → undefined. */
-function planRequiredOf(v: unknown, status: number | undefined): ProviderError['entitlement'] | undefined {
+const REFUSAL_STATES = new Set(['free_exhausted', 'limit_session', 'limit_week']);
+const SCOPE_OF: Record<string, 'credit' | 'session' | 'week'> = { free_exhausted: 'credit', limit_session: 'session', limit_week: 'week' };
+
+/**
+ * Khối `entitlement` của `locaith_quota` khi bị từ chối theo HẠN MỨC (từ 17/11/2026): `limit_session` / `limit_week` (429, gói trả phí) hoặc `free_exhausted`
+ * (402, token miễn phí một lần). Khối thiếu/lạ → undefined; riêng HTTP 402 không có khối vẫn là «hết token miễn phí, cần gói» (cổng chỉ dùng 402 cho việc này).
+ * `trial_ended` là tên cũ của chính việc đó (bản cổng 17/11 buổi chiều, đã thay) nên vẫn được nhận.
+ */
+function entitlementOf(v: unknown, status: number | undefined, headerRetryMs: number | undefined): ProviderError['entitlement'] | undefined {
   const e = v && typeof v === 'object' && !Array.isArray(v) ? (v as Record<string, unknown>) : undefined;
-  if (e?.state === 'trial_ended') {
-    const hours = num(e.trial_hours);
-    return { state: 'trial_ended', ...(hours !== undefined && hours >= 0 && hours <= 24 * 365 ? { trialHours: hours } : {}), upgradeUrl: safeUpgradeUrl(e.upgrade_url) };
+  const state = e?.state === 'trial_ended' ? 'free_exhausted' : e?.state;
+  if (typeof state === 'string' && REFUSAL_STATES.has(state)) {
+    const scope = SCOPE_OF[state];
+    const usage = e?.usage && typeof e.usage === 'object' ? (e.usage as Record<string, unknown>) : undefined;
+    const win = usage?.[scope] && typeof usage[scope] === 'object' ? (usage[scope] as Record<string, unknown>) : undefined;
+    const fromBody = num(win?.resets_in_s);
+    const secs = fromBody !== undefined ? fromBody : headerRetryMs !== undefined && scope !== 'credit' ? headerRetryMs / 1000 : undefined;
+    return {
+      state: state as 'free_exhausted' | 'limit_session' | 'limit_week',
+      ...(typeof e?.plan === 'string' && /^[a-z]{1,12}$/.test(e.plan) ? { plan: e.plan } : {}),
+      scope,
+      ...(secs !== undefined && secs >= 0 && secs <= 40 * 86400 ? { resetsInS: Math.round(secs) } : {}),
+      canUpgrade: e?.can_upgrade !== false,
+      upgradeUrl: safeUpgradeUrl(e?.upgrade_url),
+    };
   }
-  // Cổng chỉ dùng HTTP 402 cho việc này (hết nhà cung cấp bên trên được đổi thành 429): thiếu khối thì vẫn là «cần gói».
-  return status === 402 ? { state: 'trial_ended', upgradeUrl: LOCAITH_UPGRADE_URL } : undefined;
+  return status === 402 ? { state: 'free_exhausted', scope: 'credit', canUpgrade: true, upgradeUrl: LOCAITH_UPGRADE_URL } : undefined;
 }
 
 /** Lời của cổng hiện nguyên văn cho người dùng: bỏ ký tự điều khiển, cắt độ dài. */
@@ -137,14 +159,15 @@ export function classifyGatewayError(providerId: string, status: number | undefi
     // Token đăng nhập bị thu hồi/hết hạn: không bảo người dùng "nhập khoá API" — engine nhờ host kiểm tra lại tài khoản (accountAuth).
     return new ProviderError(AUTH_MESSAGE, { kind: 'auth', providerId, status: 401, retryable: false, accountAuth: true, gatewayCode: code });
   }
-  // Hết hạn mức chi tiêu trong NGÀY: Retry-After có thể là nhiều GIỜ (tới nửa đêm) — không bao giờ thử lại, hiện nguyên lời cổng rồi dừng lượt.
-  // Cùng mã này, HTTP 402 + khối `entitlement` (từ 17/11/2026): tài khoản không có gói và đã dùng hết lượt dùng thử miễn phí → cần mua gói.
+  // Hết hạn mức: chi tiêu trong NGÀY (429, Retry-After tới nửa đêm), hạn mức phiên 5 giờ / tuần của gói (429 + khối `entitlement`, Retry-After tới hết cửa sổ — có thể nhiều
+  // NGÀY) hoặc token miễn phí một lần (402 + khối `entitlement`) — không bao giờ thử lại, hiện nguyên lời cổng rồi dừng lượt.
   if (code === 'locaith_quota') {
-    const need = planRequiredOf(root.entitlement, status);
-    return new ProviderError(message ?? (need ? PLAN_REQUIRED_DEFAULT_MESSAGE : QUOTA_DEFAULT_MESSAGE), {
+    const need = entitlementOf(root.entitlement, status, headerRetryMs);
+    const fallback = need ? (need.state === 'limit_session' ? LIMIT_SESSION_DEFAULT_MESSAGE : need.state === 'limit_week' ? LIMIT_WEEK_DEFAULT_MESSAGE : FREE_EXHAUSTED_DEFAULT_MESSAGE) : QUOTA_DEFAULT_MESSAGE;
+    return new ProviderError(message ?? fallback, {
       kind: 'rate_limit',
       providerId,
-      status: status ?? (need ? 402 : 429),
+      status: status ?? (need?.state === 'free_exhausted' ? 402 : 429),
       retryable: false,
       ...(headerRetryMs !== undefined ? { retryAfterMs: headerRetryMs } : {}),
       verbatim: true,
@@ -199,10 +222,77 @@ export interface AccountPayload {
   plan?: string;
   limits?: { unlimited?: boolean; note?: string };
   /**
-   * (cổng từ 17/11/2026) Quyền dùng mô hình: `state` = paid | trial | trial_unused | trial_ended | staff | internal | open | unverified.
-   * Cổng cũ không có khối này.
+   * (cổng từ 17/11/2026) Hạn mức dùng mô hình, kiểu Anthropic: `state` = ok | free | limit_session | limit_week | free_exhausted | staff | internal | open | unverified.
+   * `usage`: gói trả phí có `session` (phiên 5 giờ) và `week`; tài khoản miễn phí có `credit` (token miễn phí một lần, không làm mới). Mỗi mục chỉ có phần trăm đã dùng
+   * và giờ làm mới (`resets_in_s` = giây còn lại tính từ lúc cổng trả lời; chưa có nếu cửa sổ chưa bắt đầu) — KHÔNG có số tiền. Cổng cũ không có khối này.
    */
-  entitlement?: { state?: string; plan?: string; trial_hours?: number; trial_ends_at?: string; trial_seconds_left?: number; plan_expires_at?: string; upgrade_url?: string };
+  entitlement?: {
+    state?: string;
+    plan?: string;
+    scope?: string;
+    usage?: { session?: UsageWindowPayload; week?: UsageWindowPayload; credit?: UsageWindowPayload };
+    session_hours?: number;
+    week_hours?: number;
+    plan_expires_at?: string;
+    can_upgrade?: boolean;
+    upgrade_url?: string;
+  };
+}
+export interface UsageWindowPayload {
+  percent?: number;
+  resets_at?: string;
+  resets_in_s?: number;
+}
+
+/** (0.7.9) Mức đã dùng của hạn mức, đã chuẩn hoá để hiện ra: phần trăm 0–100 và còn bao lâu thì làm mới. Không chứa số tiền. */
+export interface LocaithUsage {
+  plan: string;
+  /** ok | free | limit_session | limit_week | free_exhausted | staff | internal | open | unverified. */
+  state: string;
+  session?: { percent: number; resetsInS?: number };
+  week?: { percent: number; resetsInS?: number };
+  /** Chỉ tài khoản miễn phí: phần trăm token miễn phí (một lần) đã dùng. */
+  credit?: { percent: number };
+  /** Độ dài cửa sổ (giờ) theo cổng — mặc định 5 và 168; để nhãn «Phiên 5 giờ» đúng khi chủ cổng đổi. */
+  sessionHours?: number;
+  weekHours?: number;
+  canUpgrade: boolean;
+  upgradeUrl: string;
+  /** Lúc đọc (ms) — để giao diện nói «cập nhật … trước» và để host biết khi nào nên đọc lại. */
+  at: number;
+}
+
+const pctOf = (v: unknown): number | undefined => {
+  const n = num(v);
+  return n === undefined ? undefined : Math.min(100, Math.max(0, n));
+};
+
+/** Chuẩn hoá khối `entitlement` của GET /account thành `LocaithUsage`; thiếu khối (cổng cũ) hoặc trạng thái không tính hạn mức (staff/internal/open/unverified) → undefined. */
+export function parseUsage(payload: AccountPayload | undefined, now: number = Date.now()): LocaithUsage | undefined {
+  const e = payload?.entitlement;
+  if (!e || typeof e.state !== 'string' || !e.usage) return undefined;
+  const win = (w: UsageWindowPayload | undefined) => {
+    const percent = pctOf(w?.percent);
+    if (percent === undefined) return undefined;
+    const secs = num(w?.resets_in_s);
+    return { percent, ...(secs !== undefined && secs >= 0 ? { resetsInS: Math.round(secs) } : {}) };
+  };
+  const session = win(e.usage.session);
+  const week = win(e.usage.week);
+  const creditPct = pctOf(e.usage.credit?.percent);
+  if (!session && !week && creditPct === undefined) return undefined;
+  return {
+    plan: typeof e.plan === 'string' && /^[a-z]{1,12}$/.test(e.plan) ? e.plan : typeof payload?.plan === 'string' ? payload.plan.slice(0, 12) : 'free',
+    state: e.state.slice(0, 24),
+    ...(session ? { session } : {}),
+    ...(week ? { week } : {}),
+    ...(creditPct !== undefined ? { credit: { percent: creditPct } } : {}),
+    ...(num(e.session_hours) !== undefined && num(e.session_hours)! > 0 && num(e.session_hours)! <= 72 ? { sessionHours: num(e.session_hours)! } : {}),
+    ...(num(e.week_hours) !== undefined && num(e.week_hours)! > 0 && num(e.week_hours)! <= 24 * 31 ? { weekHours: num(e.week_hours)! } : {}),
+    canUpgrade: e.can_upgrade !== false,
+    upgradeUrl: safeUpgradeUrl(e.upgrade_url),
+    at: now,
+  };
 }
 export type AccountResult = { ok: true; account: AccountPayload } | { ok: false; error: 'unauthorized' | 'unsupported' | 'network' | 'server' };
 

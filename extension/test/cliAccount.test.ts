@@ -170,7 +170,7 @@ describe('locaith whoami', () => {
     }
   });
 
-  describe('cổng mới (từ 17/11/2026): quyền dùng Locaith-v5 = gói hoặc 1 lượt dùng thử miễn phí 1 ngày', () => {
+  describe('cổng mới (từ 17/11/2026): hạn mức kiểu Anthropic — phiên 5 giờ + tuần cho gói, token miễn phí một lần cho tài khoản miễn phí', () => {
     const accountWith = (entitlement: Record<string, unknown>, plan = 'free'): AccountOut =>
       ({ ok: true, account: { ok: true, account: { name: 'Nguyễn Văn A', plan }, plan, limits: { unlimited: false, note: 'x' }, entitlement } }) as never;
     const run = async (entitlement: Record<string, unknown>, plan?: string) => {
@@ -183,52 +183,70 @@ describe('locaith whoami', () => {
         restore();
       }
     };
+    const URL = 'https://locaith.ai/#upgrade';
 
-    it('đang dùng thử: còn bao lâu + nơi mua gói; KHÔNG còn «không giới hạn» / «giai đoạn mở»', async () => {
-      const text = await run({ state: 'trial', plan: 'free', trial_hours: 24, trial_seconds_left: 3600 * 23 + 60 * 59 + 30, upgrade_url: 'https://locaith.ai/#upgrade' });
-      expect(text).toContain('Dùng Locaith-v5: đang dùng thử miễn phí — còn 23 giờ 59 phút');
-      expect(text).toContain('https://locaith.ai/#upgrade');
-      expect(text).not.toMatch(/không giới hạn|giai đoạn mở|không thu phí/);
+    it('gói trả phí trong hạn mức: gói, % đã dùng và còn bao lâu làm mới của phiên 5 giờ và tuần; KHÔNG còn «không giới hạn» / «dùng thử»', async () => {
+      const text = await run({ state: 'ok', plan: 'plus', session_hours: 5, usage: { session: { percent: 37.5, resets_in_s: 7800 }, week: { percent: 12, resets_in_s: 5 * 86400 + 3 * 3600 } }, can_upgrade: true, upgrade_url: URL }, 'plus');
+      expect(text).toContain('Dùng Locaith-v5: gói Plus');
+      expect(text).toContain('hạn mức 5 giờ: đã dùng 37% (làm mới sau 2 giờ 10 phút)');
+      expect(text).toContain('hạn mức tuần: đã dùng 12% (làm mới sau 5 ngày 3 giờ)');
+      expect(text).not.toMatch(/không giới hạn|dùng thử|giai đoạn mở|không thu phí/);
+      expect(text).not.toMatch(/\$|usd/i);
     });
 
-    it('chưa gọi lần nào: nói thời gian dùng thử tính từ lần dùng đầu; hết dùng thử: nói mua gói ở đâu', async () => {
-      expect(await run({ state: 'trial_unused', plan: 'free', trial_hours: 24 })).toContain('dùng thử miễn phí 1 ngày, tính từ lần dùng đầu tiên');
-      const ended = await run({ state: 'trial_ended', plan: 'free', trial_hours: 24, upgrade_url: 'https://locaith.ai/#upgrade' });
-      expect(ended).toContain('Dùng Locaith-v5: đã hết dùng thử miễn phí — mua gói tại https://locaith.ai/#upgrade');
-      expect(ended).toContain('Gói: free');
+    it('cửa sổ chưa bắt đầu: nói «tính từ lần dùng đầu tiên»; độ dài phiên theo cổng', async () => {
+      const text = await run({ state: 'ok', plan: 'pro', session_hours: 2, usage: { session: { percent: 0 }, week: { percent: 0 } } }, 'pro');
+      expect(text).toContain('gói Pro');
+      expect(text).toContain('hạn mức 2 giờ: đã dùng 0% (chưa bắt đầu — tính từ lần dùng đầu tiên)');
+      expect(text).toContain('hạn mức tuần: đã dùng 0% (chưa bắt đầu — tính từ lần dùng đầu tiên)');
     });
 
-    it('gói trả phí: nêu gói và ngày hết hạn (nếu có); tài khoản nội bộ / chưa xác minh có câu riêng', async () => {
-      expect(await run({ state: 'paid', plan: 'plus', plan_expires_at: '2026-12-13T10:13:26Z' }, 'plus')).toContain('gói plus đang hoạt động (đến 2026-12-13)');
-      expect(await run({ state: 'paid', plan: 'pro' }, 'pro')).toMatch(/gói pro đang hoạt động$/m);
-      expect(await run({ state: 'staff', plan: 'staff' })).toContain('không cần gói (tài khoản nội bộ)');
+    it('hết hạn mức phiên / tuần: nói HẾT, làm mới sau bao lâu và nâng cấp ở đâu; gói cao nhất thì không mời nâng cấp', async () => {
+      const s = await run({ state: 'limit_session', plan: 'plus', usage: { session: { percent: 100, resets_in_s: 3600 }, week: { percent: 70, resets_in_s: 400000 } }, can_upgrade: true, upgrade_url: URL }, 'plus');
+      expect(s).toContain('ĐÃ HẾT hạn mức 5 giờ — làm mới sau 1 giờ; nâng cấp tại ' + URL + ' để có thêm hạn mức');
+      const w = await run({ state: 'limit_week', plan: 'ultra', usage: { session: { percent: 10, resets_in_s: 100 }, week: { percent: 100, resets_in_s: 2 * 86400 } }, can_upgrade: false }, 'ultra');
+      expect(w).toContain('gói Ultra');
+      expect(w).toContain('ĐÃ HẾT hạn mức tuần — làm mới sau 2 ngày');
+      expect(w).not.toContain('nâng cấp tại');
+    });
+
+    it('tài khoản miễn phí: token miễn phí đã dùng bao nhiêu % (một lần, không làm mới) và mua gói ở đâu; hết hẳn thì nói ĐÃ HẾT', async () => {
+      const free = await run({ state: 'free', plan: 'free', usage: { credit: { percent: 40 } }, upgrade_url: URL });
+      expect(free).toContain('Dùng Locaith-v5: tài khoản miễn phí');
+      expect(free).toContain('token miễn phí: đã dùng 40% (một lần, không làm mới)');
+      expect(free).toContain('hết thì mua gói Plus, Pro hoặc Ultra tại ' + URL);
+      const out = await run({ state: 'free_exhausted', plan: 'free', usage: { credit: { percent: 100 } }, upgrade_url: URL });
+      expect(out).toContain('ĐÃ HẾT token miễn phí — mua gói Plus, Pro hoặc Ultra tại ' + URL);
+    });
+
+    it('tài khoản nội bộ / chưa xác minh có câu riêng; trạng thái lạ → không in dòng (không đoán); địa chỉ thiếu → địa chỉ chuẩn', async () => {
+      expect(await run({ state: 'staff', plan: 'staff' })).toContain('không bị tính hạn mức (tài khoản nội bộ)');
       expect(await run({ state: 'unverified', plan: 'unknown' })).toContain('chưa xác minh được gói');
-    });
-
-    it('địa chỉ mua gói thiếu → dùng địa chỉ chuẩn; trạng thái lạ → không in dòng (không đoán)', async () => {
-      expect(await run({ state: 'trial_ended' })).toContain('https://locaith.ai/#upgrade');
       expect(await run({ state: 'weird_future_state' })).not.toContain('Dùng Locaith-v5');
+      expect(await run({ state: 'free_exhausted', usage: { credit: { percent: 100 } } })).toContain(URL);
     });
 
     it('bản tiếng Anh dùng chuỗi của CLI, không lặp lại câu tiếng Việt của máy chủ', async () => {
       setLang('en');
       try {
-        const text = await run({ state: 'trial', plan: 'free', trial_hours: 24, trial_seconds_left: 5400 });
-        expect(text).toContain('Locaith-v5 access: free trial — 1 h 30 min left');
-        expect(text).not.toMatch(/dùng thử|còn/);
+        const text = await run({ state: 'ok', plan: 'plus', session_hours: 5, usage: { session: { percent: 60.2, resets_in_s: 5400 }, week: { percent: 20, resets_in_s: 3 * 86400 } } }, 'plus');
+        expect(text).toContain('Locaith-v5 access: Plus plan');
+        expect(text).toContain('5-hour allowance: 60% used (renews in 1 h 30 min)');
+        expect(text).toContain('weekly allowance: 20% used (renews in 3 d)');
+        expect(text).not.toMatch(/dùng|làm mới|hạn mức/);
       } finally {
         setLang('vi');
       }
     });
 
     it('--json: thêm khối entitlement, các trường cũ (plan/limits/account/consentAccepted) giữ nguyên', async () => {
-      const restore = stub({ account: accountWith({ state: 'trial', plan: 'free', trial_seconds_left: 10 }), consent: { ok: true, state: { accepted: true, version: 1, current: 1 } } });
+      const restore = stub({ account: accountWith({ state: 'ok', plan: 'plus', usage: { session: { percent: 1 } } }, 'plus'), consent: { ok: true, state: { accepted: true, version: 1, current: 1 } } });
       try {
         const { deps, state } = rig();
         deps.json = true;
         expect(await whoamiCmd(deps)).toBe(0);
         const j = JSON.parse(state.out.join('\n'));
-        expect(j).toMatchObject({ ok: true, plan: 'free', limits: { unlimited: false }, consentAccepted: true, entitlement: { state: 'trial', trial_seconds_left: 10 } });
+        expect(j).toMatchObject({ ok: true, plan: 'plus', limits: { unlimited: false }, consentAccepted: true, entitlement: { state: 'ok', usage: { session: { percent: 1 } } } });
       } finally {
         restore();
       }

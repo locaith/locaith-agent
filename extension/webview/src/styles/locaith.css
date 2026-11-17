@@ -196,6 +196,93 @@
   font-size: var(--nd-fs-sm);
 }
 
+/* (0.7.9) Hạn mức dùng mô hình Locaith — kiểu Anthropic: phiên 5 giờ + tuần (gói trả phí) hoặc token miễn phí một lần. Chỉ phần trăm và giờ làm mới. */
+.lcu {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  background: var(--surface-2);
+}
+.lcu-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 10px;
+}
+.lcu-title {
+  font-weight: 600;
+  font-size: var(--nd-fs-sm);
+}
+.lcu-plan {
+  flex: 1;
+  min-width: 0;
+  font-size: var(--nd-fs-sm);
+  color: var(--fg-muted);
+}
+.lcu-up {
+  font-size: var(--nd-fs-sm);
+}
+.lcu-row {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.lcu-line {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  font-size: var(--nd-fs-sm);
+}
+.lcu-pct {
+  font-variant-numeric: tabular-nums;
+  color: var(--fg-muted);
+}
+.lcu-bar {
+  height: 6px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--fg) 12%, transparent);
+  overflow: hidden;
+}
+.lcu-fill {
+  display: block;
+  height: 100%;
+  min-width: 2px;
+  border-radius: inherit;
+  background: var(--accent);
+  transition: width 0.25s ease;
+}
+.lcu-fill.is-high {
+  background: var(--warn);
+}
+.lcu-fill.is-full {
+  background: var(--danger);
+}
+.lcu-note {
+  font-size: var(--nd-fs-xs, 11px);
+  color: var(--fg-faint);
+}
+.lcu .set-hint {
+  margin: 0;
+}
+body.vscode-high-contrast .lcu,
+body.vscode-high-contrast-light .lcu {
+  border-color: var(--fg);
+  background: transparent;
+}
+body.vscode-high-contrast .lcu-bar,
+body.vscode-high-contrast-light .lcu-bar {
+  outline: 1px solid var(--fg);
+  background: transparent;
+}
+@media (prefers-reduced-motion: reduce) {
+  .lcu-fill {
+    transition: none;
+  }
+}
+
 /* Lời chào khi đang dùng mô hình Locaith (không cần API key) */
 .welcome-locaith {
   margin: 0;

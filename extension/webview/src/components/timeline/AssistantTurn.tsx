@@ -44,7 +44,7 @@ export function NoticeView({
   text: string;
   compact?: CompactInfo;
   onRetry?: () => void;
-  /** (0.7.8) Nút kèm thông báo — «Mua gói» khi hết lượt dùng thử miễn phí. Chỉ nhận địa chỉ https. */
+  /** (0.7.8) Nút kèm thông báo — «Nâng cấp» khi gói hết hạn mức, «Mua gói» khi hết token miễn phí. Chỉ nhận địa chỉ https. */
   link?: NoticeLink;
 }) {
   const { t } = useApp();

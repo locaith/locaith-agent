@@ -92,7 +92,7 @@ async function assertPlanEnded(p) {
     };
   });
   if (r.missing) throw new Error('không thấy thông báo có nút (.notice-has-link)');
-  if (r.labels.length !== 2 || !/^(Mua gói|Buy a plan)$/.test(r.labels[0]) || !/(Thử lại|Retry)/.test(r.labels[1])) throw new Error(`nút sai: ${JSON.stringify(r.labels)}`);
+  if (r.labels.length !== 2 || !/^(Mua gói|Buy a plan|Nâng cấp|Upgrade)$/.test(r.labels[0]) || !/(Thử lại|Retry)/.test(r.labels[1])) throw new Error(`nút sai: ${JSON.stringify(r.labels)}`);
   if (!r.below) throw new Error('các nút phải nằm dưới chữ');
   if (!r.aligned) throw new Error('các nút phải thẳng hàng với chữ');
   if (r.overflowX > 1) throw new Error(`tràn ngang ${r.overflowX}px ở bề ngang ${r.width}px`);
@@ -101,6 +101,54 @@ async function assertPlanEnded(p) {
   await wait(150);
   const sent = await p.evaluate(() => (window.__ND_LOG__ || []).filter((m) => m.type === 'open_external').map((m) => m.url));
   if (sent.length !== 1 || sent[0] !== 'https://locaith.ai/#upgrade') throw new Error(`bấm «Mua gói» phải gửi đúng một open_external tới https://locaith.ai/#upgrade: ${JSON.stringify(sent)}`);
+}
+
+/** (0.7.9) Thông báo hết hạn mức của gói cao nhất: chỉ chữ, KHÔNG có nút «Mua gói» / «Nâng cấp». */
+async function assertNoPlanButton(p) {
+  const r = await p.evaluate(() => ({
+    notice: !!document.querySelector('.notice-error'),
+    linked: !!document.querySelector('.notice-has-link'),
+    labels: [...document.querySelectorAll('.notice .btn')].map((b) => b.textContent.trim()),
+  }));
+  if (!r.notice) throw new Error('không thấy thông báo lỗi');
+  if (r.linked || r.labels.some((l) => /Mua gói|Nâng cấp|Buy a plan|Upgrade/.test(l))) throw new Error(`gói cao nhất không được có nút mua / nâng cấp: ${JSON.stringify(r)}`);
+}
+
+/**
+ * (0.7.9) Khối hạn mức trong thẻ «Mô hình Locaith» của Cài đặt: đúng số thanh, mỗi thanh có role=progressbar và giá trị, chữ cần có, màu thanh theo mức
+ * (≥80 % cam, 100 % đỏ), nút nâng cấp / mua gói có hay không theo gói và bấm gửi ĐÚNG MỘT open_external; không có số tiền; không tràn ngang.
+ */
+async function assertUsage(p, want) {
+  const r = await p.evaluate(() => {
+    const u = document.querySelector('[data-testid="locaith-usage"]');
+    if (!u) return { missing: true };
+    const bars = [...u.querySelectorAll('.lcu-bar')];
+    const root = document.querySelector('.app');
+    window.__ND_LOG__ = [];
+    return {
+      text: u.textContent || '',
+      bars: bars.length,
+      ariaOk: bars.every((b) => b.getAttribute('role') === 'progressbar' && b.getAttribute('aria-valuenow') !== null),
+      full: u.querySelectorAll('.lcu-fill.is-full').length,
+      high: u.querySelectorAll('.lcu-fill.is-high').length,
+      upgrade: !!u.querySelector('.lcu-up'),
+      overflowX: root ? root.scrollWidth - root.clientWidth : 0,
+    };
+  });
+  if (r.missing) throw new Error('không thấy khối hạn mức [data-testid=locaith-usage]');
+  if (r.bars !== want.bars || !r.ariaOk) throw new Error(`số thanh / aria sai: ${JSON.stringify(r)}`);
+  for (const t of want.texts) if (!r.text.includes(t)) throw new Error(`thiếu chữ «${t}» trong khối hạn mức: ${r.text}`);
+  if (/\$|usd|dollar/i.test(r.text)) throw new Error(`khối hạn mức không được có số tiền: ${r.text}`);
+  if (want.full !== undefined && r.full !== want.full) throw new Error(`số thanh đỏ (hết) phải là ${want.full}: ${JSON.stringify(r)}`);
+  if (want.high !== undefined && r.high !== want.high) throw new Error(`số thanh cam (≥80 %) phải là ${want.high}: ${JSON.stringify(r)}`);
+  if (r.upgrade !== want.upgrade) throw new Error(`nút nâng cấp / mua gói: cần ${want.upgrade}, thấy ${r.upgrade}`);
+  if (r.overflowX > 1) throw new Error(`tràn ngang ${r.overflowX}px`);
+  if (want.upgrade) {
+    await p.click('.lcu-up');
+    await wait(150);
+    const sent = await p.evaluate(() => (window.__ND_LOG__ || []).filter((m) => m.type === 'open_external').map((m) => m.url));
+    if (sent.length !== 1 || sent[0] !== 'https://locaith.ai/#upgrade') throw new Error(`bấm nút phải gửi đúng một open_external tới https://locaith.ai/#upgrade: ${JSON.stringify(sent)}`);
+  }
 }
 
 async function assertCcCollapsed(p) {
@@ -508,6 +556,17 @@ const SHOTS = [
   { name: 'plan-ended-dark-420', q: { scenario: 'plan-ended', theme: 'dark' }, w: 420, h: 520, act: assertPlanEnded },
   { name: 'plan-ended-en-light-320', q: { scenario: 'plan-ended', theme: 'light', lang: 'en' }, w: 320, h: 520, act: assertPlanEnded },
   { name: 'plan-ended-hc-420', q: { scenario: 'plan-ended', theme: 'hc' }, w: 420, h: 520, act: assertPlanEnded },
+  // (0.7.9) hết hạn mức 5 giờ của gói Plus → «Nâng cấp»; hết tuần của gói cao nhất → chỉ chữ, không nút
+  { name: 'plan-limit-session-dark-420', q: { scenario: 'plan-limit-session', theme: 'dark' }, w: 420, h: 560, act: assertPlanEnded },
+  { name: 'plan-limit-session-en-light-320', q: { scenario: 'plan-limit-session', theme: 'light', lang: 'en' }, w: 320, h: 600, act: assertPlanEnded },
+  { name: 'plan-limit-top-dark-420', q: { scenario: 'plan-limit-top', theme: 'dark' }, w: 420, h: 520, act: assertNoPlanButton },
+  // (0.7.9) thẻ «Mô hình Locaith» có mức dùng: gói trả phí (phiên + tuần), hết phiên, gói cao nhất, tài khoản miễn phí (token miễn phí một lần)
+  { name: 'locaith-usage-plus-dark-420', q: { scenario: 'locaith-usage-plus', theme: 'dark' }, w: 420, h: 900, full: true, act: (p) => assertUsage(p, { bars: 2, texts: ['Gói Plus', '37%', '12%', 'làm mới sau 2 giờ 10 phút', 'làm mới sau 5 ngày 3 giờ'], upgrade: true }) },
+  { name: 'locaith-usage-plus-en-light-320', q: { scenario: 'locaith-usage-plus', theme: 'light', lang: 'en' }, w: 320, h: 1000, full: true, act: (p) => assertUsage(p, { bars: 2, texts: ['Plus plan', '5-hour session', 'renews in 2 h 10 min'], upgrade: true }) },
+  { name: 'locaith-usage-limit-dark-420', q: { scenario: 'locaith-usage-limit', theme: 'dark' }, w: 420, h: 900, full: true, act: (p) => assertUsage(p, { bars: 2, texts: ['Gói Pro', '100%', '84%'], full: 1, high: 1, upgrade: true }) },
+  { name: 'locaith-usage-ultra-hc-420', q: { scenario: 'locaith-usage-ultra', theme: 'hc' }, w: 420, h: 900, full: true, act: (p) => assertUsage(p, { bars: 2, texts: ['Gói Ultra', '8%', '3%', 'bắt đầu tính từ lần dùng đầu tiên'], upgrade: false }) },
+  { name: 'locaith-usage-free-dark-420', q: { scenario: 'locaith-usage-free', theme: 'dark' }, w: 420, h: 900, full: true, act: (p) => assertUsage(p, { bars: 1, texts: ['Tài khoản miễn phí', 'Token miễn phí', '60%', 'dùng một lần, không làm mới'], upgrade: true }) },
+  { name: 'locaith-usage-free-out-light-300', q: { scenario: 'locaith-usage-free-out', theme: 'light' }, w: 300, h: 1100, full: true, act: (p) => assertUsage(p, { bars: 1, texts: ['100%'], full: 1, upgrade: true }) },
   { name: 'verify-fail-dark-420', q: { scenario: 'verify', theme: 'dark' }, w: 420, h: 820, act: async (p) => { await p.click('[data-testid="verify-row"] .tool-head'); await wait(200); } },
   { name: 'verify-fail-collapsed-dark-420', q: { scenario: 'verify', theme: 'dark' }, w: 420, h: 820 },
   { name: 'verify-pass-dark-420', q: { scenario: 'verify-pass', theme: 'dark' }, w: 420, h: 820 },
