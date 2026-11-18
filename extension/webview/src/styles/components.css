@@ -2175,6 +2175,15 @@ button.chip-main:hover {
   margin-top: -4px;
   overflow-wrap: anywhere; /* địa chỉ dài (redirect URI…) không được tràn ra ngoài thẻ */
 }
+/* (0.7.12) danh sách trang đã cho phép của cầu nối VS Code */
+.link-pages {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
 .prov-card {
   display: flex;
   flex-direction: column;

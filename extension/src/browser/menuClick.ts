@@ -11,6 +11,8 @@ import { PENDING_KEY, type PendingAction } from './pending';
 export const MENU_ASK = 'nd-ask-selection';
 export const MENU_EXPLAIN = 'nd-explain-selection';
 export const MENU_SUMMARIZE = 'nd-summarize-page';
+/** Mục trên biểu tượng tiện ích: mở khung chat tới Cài đặt → Kết nối với VS Code (không mang dữ liệu của trang). */
+export const MENU_LINK = 'nd-link-menu';
 export { PENDING_KEY };
 
 export interface MenuInfo {
@@ -37,7 +39,7 @@ export interface MenuDeps {
 export type MenuResult = 'ignored' | 'saved' | 'blocked';
 
 export async function handleMenuClick(info: MenuInfo, tab: MenuTab | undefined, deps: MenuDeps): Promise<MenuResult> {
-  const kind: PendingAction['kind'] | null = info.menuItemId === MENU_ASK ? 'ask' : info.menuItemId === MENU_EXPLAIN ? 'explain' : info.menuItemId === MENU_SUMMARIZE ? 'summarize' : null;
+  const kind: PendingAction['kind'] | null = info.menuItemId === MENU_ASK ? 'ask' : info.menuItemId === MENU_EXPLAIN ? 'explain' : info.menuItemId === MENU_SUMMARIZE ? 'summarize' : info.menuItemId === MENU_LINK ? 'link' : null;
   if (!kind || !tab) return 'ignored';
   // sidePanel.open phải được gọi ĐỒNG BỘ trong cử chỉ người dùng (menu chuột phải) — không await trước nó, kể cả việc đọc cờ đồng ý bên dưới.
   const opening = tab.windowId !== undefined ? deps.openPanel(tab.windowId) : Promise.resolve();

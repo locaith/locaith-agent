@@ -332,6 +332,11 @@ export class BrowserBridge {
     // Ghép đôi KHÔNG MÃ — không cần token (chưa có), nhưng chỉ extension (Origin chrome-extension://) và cần người dùng bấm Cho phép trong VS Code.
     if (url.pathname === '/v1/pair/request' && req.method === 'POST') return this.pairRequestHttp(req, res, em?.[1]);
     if (url.pathname === '/v1/pair/status' && req.method === 'GET') return this.pairStatusHttp(req, res, em?.[1], url.searchParams.get('id') ?? '');
+    // Bản POST (từ bản Chrome 0.7.12): Chrome không gắn Origin vào GET gửi từ extension nên GET ở trên không bao giờ biết extension nào đang hỏi; POST luôn có Origin.
+    if (url.pathname === '/v1/pair/status' && req.method === 'POST') {
+      const b = (await this.readBody(req)) as { id?: unknown } | null | undefined;
+      return this.pairStatusHttp(req, res, em?.[1], typeof b?.id === 'string' ? b.id : '');
+    }
     if (url.pathname === '/v1/pair/cancel' && req.method === 'POST') return this.pairCancelHttp(req, res, em?.[1]);
 
     const auth = /^Bearer (\S+)$/.exec(String(req.headers.authorization ?? ''))?.[1];

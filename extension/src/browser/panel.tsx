@@ -12,6 +12,7 @@ import { ChromeBrowserApi } from './api';
 import { BrowserAccount, kvMemento } from './account';
 import { BrowserConfig } from './config';
 import { BrowserController } from './controller';
+import { chromeLinkHost } from './link/host';
 import { ChromeKv } from './kv';
 import { BrowserLogger } from './logger';
 import { PENDING_KEY, type PendingAction } from './pending';
@@ -179,6 +180,7 @@ async function main(): Promise<void> {
     version,
     account,
     locaith: consent,
+    link: chromeLinkHost(), // (0.7.12) cầu nối VS Code: công tắc trong Cài đặt, engine ở dịch vụ nền (link/linkSw.ts)
     extractDocument,
     // Đánh giá một chạm gửi về Locaith (xem rating.ts); host_permissions của manifest cho phép máy chủ này.
     sendFeedback: (payload) => postRating(payload),
@@ -232,10 +234,11 @@ async function main(): Promise<void> {
     // Đoạn bôi đen là chữ của trang web (có thể chứa lời dụ) và được gửi đi mà không qua mắt người dùng → bọc thành dữ liệu không đáng tin.
     const quoted = p.text ? wrapPage(p.url ?? '', p.title ?? '', p.text) : '';
     // Người dùng bấm menu trên MỘT tab cụ thể: việc họ hỏi là về trang đó → gắn trợ lý vào đúng tab này (kể cả khi trước đó đang bám tab khác).
-    if (p.tabId !== undefined) await controller.pinTab(p.tabId);
+    if (p.tabId !== undefined && p.kind !== 'link') await controller.pinTab(p.tabId);
     if (p.kind === 'summarize') await controller.ask(vi ? 'Tóm tắt trang tôi đang xem: ý chính, số liệu quan trọng và những điểm cần lưu ý.' : 'Summarize the page I am viewing: key points, important figures and caveats.');
     else if (p.kind === 'explain' && p.text) await controller.ask(vi ? `Giải thích giúp tôi đoạn này trong ngữ cảnh của trang đang xem:\n\n${quoted}` : `Explain this passage in the context of the page I am viewing:\n\n${quoted}`);
     // "Hỏi về đoạn đã chọn" đi qua ô nhập: người dùng thấy đúng chữ (đã bỏ ký tự ẩn) và tự quyết định gửi.
+    else if (p.kind === 'link') await controller.showScreen('settings'); // chuột phải biểu tượng → «Kết nối với VS Code…»
     else if (p.kind === 'ask' && p.text) controller.insert(`"${cleanText(p.text)}"\n\n`);
   };
   chrome.storage.onChanged.addListener((changes, area) => {

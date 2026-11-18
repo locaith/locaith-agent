@@ -649,6 +649,25 @@ export interface ChromePairView {
   rePair?: boolean;
 }
 
+/**
+ * (0.7.12) Cầu nối VS Code của bản Chrome / Edge — công tắc «Kết nối với VS Code» trong Cài đặt. Chỉ bản trình duyệt; vắng = chưa đọc được trạng thái.
+ * Việc ghép đôi diễn ra ở VS Code (thẻ «Cho phép / Từ chối» hiện trong khung chat của VS Code — xem ChromePairView).
+ */
+export interface VscodeLinkView {
+  /** Đã có token ghép đôi với một VS Code. */
+  paired: boolean;
+  /** Công tắc đang bật (đang nối hoặc đang tìm VS Code). */
+  on: boolean;
+  /** Một VS Code vừa trả lời hợp lệ (trong 45 giây qua). */
+  connected: boolean;
+  /** Tiến trình xin ghép đôi: 'asking' (đang hỏi các cổng) · 'waiting' (chờ bấm Cho phép trong VS Code) · 'denied' · 'expired' · 'not_found' · 'busy' · 'old' · 'consent' · 'idle'. */
+  pairing: 'idle' | 'asking' | 'waiting' | 'denied' | 'expired' | 'not_found' | 'busy' | 'old' | 'consent';
+  /** Trang đã «Luôn cho phép». */
+  allowed: string[];
+  /** Trang chỉ cho phép trong phiên này. */
+  session: string[];
+}
+
 export interface BioStatus {
   state: 'none' | 'installing' | 'ready' | 'error';
   enabled: boolean;
@@ -991,6 +1010,8 @@ export interface ViewState {
   memory?: MemoryView;
   /** Extension Chrome đang xin kết nối (ghép đôi không mã) — thẻ Cho phép / Từ chối trong khung chat (chỉ bản VS Code). */
   chromePair?: ChromePairView;
+  /** (0.7.12) Cầu nối VS Code của bản Chrome / Edge: trạng thái công tắc + danh sách trang đã cho phép (chỉ bản trình duyệt). */
+  vscodeLink?: VscodeLinkView;
   /** Mô hình Locaith: đồng ý thông báo dữ liệu + thẻ thông báo + mức dùng (VS Code; bản trình duyệt từ 0.7.10). */
   locaith?: LocaithView;
   // ── (lane:cc-timeline-ui) ──
@@ -1219,6 +1240,10 @@ export type WebviewMessage =
   | { type: 'bio_install' }
   | { type: 'chrome_pair_allow'; id: string }
   | { type: 'chrome_pair_deny'; id: string }
+  /** (0.7.12, bản trình duyệt) công tắc «Kết nối với VS Code», thu hồi một trang đã cho phép, đọc lại trạng thái. */
+  | { type: 'vscode_link_toggle'; on: boolean }
+  | { type: 'vscode_link_forget'; origin: string }
+  | { type: 'vscode_link_refresh' }
   /** Lời mời đánh giá: chạm sao = gửi ngay (`rating_submit`); nhận xét chữ tuỳ chọn (`rating_comment`); đóng lời cảm ơn; «Không hiện lại»; và đánh giá cả trên cửa hàng (`rating_rate`, lựa chọn thêm). */
   | { type: 'rating_submit'; stars: number }
   | { type: 'rating_comment'; text: string }

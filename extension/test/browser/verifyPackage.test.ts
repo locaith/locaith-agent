@@ -190,8 +190,17 @@ describe('bộ kiểm BẮT được từng lỗi của sự cố 0.6.27', () =>
   });
 
   it('quyền «tabs», và quyền khai báo mà mã không dùng', () => {
-    rejects(mutated((d) => editManifest(d, (m) => m.optional_permissions.push('tabs'))), /không khai báo quyền «tabs»/);
+    rejects(mutated((d) => editManifest(d, (m) => m.permissions.push('tabs'))), /quyền «tabs» KHÔNG nằm trong quyền bắt buộc/);
     rejects(mutated((d) => editManifest(d, (m) => m.permissions.push('history'))), /quyền «history» có chỗ dùng trong mã/);
+  });
+
+  it('cầu nối VS Code (0.7.12): mất cầu nối, mất cửa sổ hỏi duyệt, dịch vụ nền chạm máy chủ Locaith, hỏi ghép đôi bằng GET, quyền máy chủ 127.0.0.1', () => {
+    rejects(mutated((d) => edit(d, 'background.js', (s) => s.split('/v1/pair/request').join('/v1/pair/gone'))), /dịch vụ nền có cầu nối VS Code/);
+    rejects(mutated((d) => fs.rmSync(path.join(d, 'bridge-approve.js'))), /có cửa sổ hỏi duyệt từng trang của cầu nối VS Code/);
+    rejects(mutated((d) => edit(d, 'bridge-approve.html', (s) => s.replace('</body>', '<script>alert(1)</script></body>'))), /bridge-approve.html chỉ nạp bridge-approve.js/);
+    rejects(mutated((d) => edit(d, 'background.js', (s) => s + ';fetch("https://studio-api.locaith.com/api/llm/v1/chat");')), /dịch vụ nền KHÔNG có đường nào tới máy chủ Locaith/);
+    rejects(mutated((d) => editManifest(d, (m) => m.host_permissions.push('http://127.0.0.1/*'))), /không xin quyền máy chủ cho 127.0.0.1/);
+    rejects(mutated((d) => edit(d, 'panel.js', (s) => s.split('"set.link.hint"').join('"set.link.hint.removed"'))), /panel.js có chuỗi set.link.hint/);
   });
 
   it('chuỗi khoá API lại nói «kho bí mật của VS Code» (hoặc mất chuỗi riêng của bản trình duyệt)', () => {
@@ -246,7 +255,7 @@ describe('bộ kiểm BẮT được từng lỗi của sự cố 0.6.27', () =>
   it('báo MỌI mục hỏng cùng lúc, không dừng ở mục đầu', () => {
     const dir = mutated((d) => {
       messages(d, 'en', (m) => (m.extDescription.message = 'Claude'));
-      editManifest(d, (m) => m.optional_permissions.push('tabs'));
+      editManifest(d, (m) => m.permissions.push('tabs'));
       fs.rmSync(path.join(d, 'store-consent.js'));
     });
     let msg = '';
@@ -256,7 +265,7 @@ describe('bộ kiểm BẮT được từng lỗi của sự cố 0.6.27', () =>
       msg = (e as Error).message;
     }
     expect(msg).toMatch(/mô tả ngắn \(en\) không chứa tên hãng/);
-    expect(msg).toMatch(/quyền «tabs»/);
+    expect(msg).toMatch(/quyền «tabs» KHÔNG nằm trong quyền bắt buộc/);
     expect(msg).toMatch(/có store-consent\.js/);
   });
 });

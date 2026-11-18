@@ -66,14 +66,15 @@ function manifest() {
     action: { default_title: '__MSG_actionTitle__', default_icon: { 16: 'icons/16.png', 32: 'icons/32.png' } },
     side_panel: { default_path: 'sidepanel.html' },
     background: { service_worker: 'background.js' },
-    permissions: ['sidePanel', 'storage', 'unlimitedStorage', 'scripting', 'activeTab', 'contextMenus', 'tabGroups'],
+    // `alarms`: nhịp 30 giây dựng lại vòng hỏi của cầu nối VS Code khi dịch vụ nền bị trình duyệt tắt (src/browser/link/linkSw.ts); không có cảnh báo quyền.
+    permissions: ['sidePanel', 'storage', 'unlimitedStorage', 'scripting', 'activeTab', 'contextMenus', 'tabGroups', 'alarms'],
     // PROVIDER_HOSTS: nhà cung cấp AI + tìm web. SERVICE_HOSTS: gửi đánh giá một chạm (POST /api/feedback) và — chỉ khi người dùng kết nối tài khoản Locaith — cổng mô hình Locaith (/api/llm/v1).
     host_permissions: [...PROVIDER_HOSTS, ...SERVICE_HOSTS],
     // Quyền đọc/điều khiển mọi trang xin lúc chạy, khi người dùng bấm nút trong Cài đặt (có thể rút lại bất cứ lúc nào).
     // identity: chỉ xin khi người dùng bấm "Đăng nhập" (OAuth) — cần để mở cửa sổ đăng nhập do trình duyệt quản lý.
-    // KHÔNG khai báo `tabs`: mã không bao giờ xin quyền này (URL/tiêu đề tab có được nhờ quyền trang do người dùng cấp),
-    // và Chrome Web Store bắt khai lý do cho mọi quyền khai báo mà không dùng — đúng lỗi "cần lý do sử dụng quyền tabs".
-    optional_permissions: ['identity'],
+    // tabs (từ 0.7.12): chỉ xin khi người dùng BẬT công tắc «Kết nối với VS Code» — để cầu nối thấy địa chỉ/tên của tab trước khi hỏi duyệt từng trang.
+    // (Bản 0.6.27–0.7.11 không khai `tabs` vì mã không xin nó và cửa hàng bắt khai lý do cho quyền khai mà không dùng; nay mã có xin: permissions.request({ permissions: ['tabs'] }).)
+    optional_permissions: ['identity', 'tabs'],
     // Phải đúng chuỗi "<all_urls>": chrome.tabs.captureVisibleTab chỉ chấp nhận `<all_urls>` hoặc activeTab (không chấp nhận https://*/* + http://*/*).
     optional_host_permissions: ['<all_urls>'],
     content_security_policy: { extension_pages: "script-src 'self'; object-src 'self'", sandbox: SANDBOX_CSP },
@@ -105,6 +106,7 @@ const LOCALES = {
     menuAskSelection: { message: 'Hỏi Locaith AI về đoạn đã chọn' },
     menuExplainSelection: { message: 'Giải thích đoạn đã chọn' },
     menuSummarizePage: { message: 'Tóm tắt trang này' },
+    menuConnectVscode: { message: 'Kết nối với VS Code…' },
   },
   en: {
     extName: { message: 'Locaith AI — Browser agent' },
@@ -116,6 +118,7 @@ const LOCALES = {
     menuAskSelection: { message: 'Ask Locaith AI about the selection' },
     menuExplainSelection: { message: 'Explain the selection' },
     menuSummarizePage: { message: 'Summarize this page' },
+    menuConnectVscode: { message: 'Connect to VS Code…' },
   },
 };
 
@@ -163,6 +166,8 @@ const common = {
 const targets = {
   panel: { ...common, entryPoints: { panel: at('src/browser/panel.tsx') } },
   background: { ...common, entryPoints: { background: at('src/browser/background.ts') } },
+  // Cửa sổ hỏi duyệt từng trang của cầu nối VS Code (static/bridge-approve.html nạp bridge-approve.js).
+  approve: { ...common, entryPoints: { 'bridge-approve': at('src/browser/link/approvePage.ts') } },
   runtime: { ...common, entryPoints: { 'page-runtime': at('src/browser/page/runtime.ts') } },
   artifact: { ...common, entryPoints: { artifact: at('src/browser/artifactViewer.ts'), 'artifact-sandbox': at('src/browser/artifactSandbox.ts') } },
   // Bộ đọc tệp tải lên (PDF/Word/Excel…): ESM riêng, panel.js nạp lười bằng import() ở lần tải tệp đầu tiên (pdf.js nặng, không nhét vào panel.js).

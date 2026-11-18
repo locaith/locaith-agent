@@ -1,6 +1,7 @@
 /** Phần Cài đặt chỉ có ở bản trình duyệt: biểu mẫu thêm API tuỳ chỉnh, quyền truy cập trang web, hành vi và hướng dẫn riêng. */
-import { useRef, useState } from 'preact/hooks';
-import type { BrowserSettings, CustomProviderInput, PermissionMode, ViewState } from '../../../src/shared/protocol';
+import { useEffect, useRef, useState } from 'preact/hooks';
+import type { BrowserSettings, CustomProviderInput, PermissionMode, ViewState, VscodeLinkView } from '../../../src/shared/protocol';
+import type { I18nKey } from '../i18n';
 import { CUSTOM_PRESETS } from '../../../src/core/providers/presets';
 import { useApp } from '../ctx';
 import { post } from '../vscode';
@@ -179,6 +180,64 @@ export function AddProviderForm({ onDone }: { onDone: () => void }) {
   );
 }
 
+
+/**
+ * (0.7.12) Công tắc «Kết nối với VS Code»: bật thì xin ghép đôi (VS Code hiện thẻ Cho phép / Từ chối), sau đó VS Code điều khiển được các trang bạn duyệt từng trang.
+ * Làm mới trạng thái mỗi 4 giây khi mục này còn hiện (dịch vụ nền không đẩy mọi thay đổi như «đã nối»).
+ */
+function VscodeLinkSection({ link, siteAccess }: { link: VscodeLinkView; siteAccess: boolean }) {
+  const { t } = useApp();
+  useEffect(() => {
+    post({ type: 'vscode_link_refresh' });
+    const id = setInterval(() => post({ type: 'vscode_link_refresh' }), 4000);
+    return () => clearInterval(id);
+  }, []);
+  const state: string = !link.on
+    ? link.pairing === 'idle' || link.pairing === 'asking' || link.pairing === 'waiting'
+      ? 'off'
+      : link.pairing
+    : link.connected
+      ? 'connected'
+      : link.pairing === 'asking' || link.pairing === 'waiting'
+        ? link.pairing
+        : link.paired
+          ? 'paired'
+          : 'asking';
+  const pages = [...new Set([...link.allowed, ...link.session])];
+  return (
+    <section class="set-section" data-testid="vscode-link">
+      <h2 class="set-title">{t('set.link')}</h2>
+      <p class="set-hint">{t('set.link.hint')}</p>
+      <div class="field field-inline">
+        <span class="field-label">{t('set.link.toggle')}</span>
+        <Switch checked={link.on} label={t('set.link.toggle')} onChange={(v) => post({ type: 'vscode_link_toggle', on: v })} />
+      </div>
+      <div class="field-hint" role="status" data-testid="vscode-link-state">
+        {t(`set.link.state.${state}` as I18nKey)}
+      </div>
+      {link.on && !siteAccess && <div class="field-hint">{t('set.link.shot')}</div>}
+      <div class="field-label">{t('set.link.allowed')}</div>
+      {pages.length === 0 ? (
+        <div class="field-hint">{t('set.link.allowed.none')}</div>
+      ) : (
+        <ul class="link-pages">
+          {pages.map((o) => (
+            <li key={o} class="field field-inline">
+              <span class="field-label" style="word-break:break-all">
+                {o}
+                {link.allowed.includes(o) ? '' : ` (${t('set.link.session')})`}
+              </span>
+              <Button variant="outline" small onClick={() => post({ type: 'vscode_link_forget', origin: o })}>
+                {t('set.link.forget')}
+              </Button>
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
+  );
+}
+
 const MODES: PermissionMode[] = ['default', 'acceptEdits', 'plan'];
 
 /** Quyền truy cập trang web + hành vi + hướng dẫn riêng. */
@@ -210,6 +269,8 @@ export function BrowserSettingsSections({ view }: { view: ViewState }) {
           </Button>
         )}
       </section>
+
+      {view.vscodeLink && <VscodeLinkSection link={view.vscodeLink} siteAccess={b.siteAccess} />}
 
       <section class="set-section">
         <h2 class="set-title">{t('set.browser')}</h2>

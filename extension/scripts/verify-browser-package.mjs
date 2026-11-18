@@ -152,7 +152,8 @@ export function verifyBrowserPackage(dir, opts = {}) {
   // ── quyền: không `tabs`; quyền nào khai báo thì phải được dùng trong mã (Chrome Web Store bắt khai lý do cho quyền thừa)
   const perms = manifest.permissions ?? [];
   const optPerms = manifest.optional_permissions ?? [];
-  check(![...perms, ...optPerms].includes('tabs'), 'không khai báo quyền «tabs» (mã không bao giờ xin; cửa hàng đòi lý do cho quyền không dùng)');
+  // (0.7.12) `tabs` chỉ là quyền TUỲ CHỌN, xin lúc người dùng bật công tắc «Kết nối với VS Code» (để cầu nối thấy địa chỉ/tên tab). Bản 0.6.27–0.7.11 không khai nó vì mã không xin; nay mã xin thật.
+  check(!perms.includes('tabs'), 'quyền «tabs» KHÔNG nằm trong quyền bắt buộc (chỉ tuỳ chọn, xin khi người dùng bật cầu nối VS Code)');
   const codeFiles = files.filter((f) => /\.(js|mjs)$/.test(f) && f !== 'store-consent.js');
   const code = codeFiles.map(text).join('\n');
   const used = {
@@ -169,7 +170,27 @@ export function verifyBrowserPackage(dir, opts = {}) {
     const re = used[p] ?? new RegExp(`chrome\\.${p}\\.`);
     check(re.test(code) || (p === 'activeTab' && !!manifest.action), `quyền «${p}» có chỗ dùng trong mã`, `khai báo trong manifest nhưng mã không gọi API tương ứng — gỡ khỏi manifest hoặc thêm lý do`);
   }
+  if (optPerms.includes('tabs')) check(/permissions\s*:\s*\[\s*["']tabs["']\s*\]/.test(code), 'mã có xin quyền «tabs» lúc chạy (khai tuỳ chọn mà không xin là quyền thừa)');
   if (optPerms.includes('identity')) check(/permissions\s*:\s*\[\s*["']identity["']\s*\]/.test(code), 'mã có xin quyền «identity» lúc chạy');
+
+  // ── (0.7.12) cầu nối VS Code (src/browser/link): tính năng TẮT mặc định, chỉ nói chuyện với VS Code trên CHÍNH máy này; mỗi trang web hỏi duyệt riêng trong trình duyệt.
+  {
+    const bgFile = manifest.background?.service_worker;
+    const bgCode = files.includes(bgFile) ? text(bgFile) : '';
+    check(files.includes('bridge-approve.html') && files.includes('bridge-approve.js'), 'có cửa sổ hỏi duyệt từng trang của cầu nối VS Code (bridge-approve.html + bridge-approve.js)', 'thiếu → lệnh của VS Code trên trang chưa duyệt sẽ không bao giờ được hỏi người dùng');
+    const approve = files.includes('bridge-approve.html') ? text('bridge-approve.html') : '';
+    check(/<script src="bridge-approve\.js"><\/script>/.test(approve) && !/<script(?![^>]*\ssrc=)/i.test(approve), 'bridge-approve.html chỉ nạp bridge-approve.js (không có script nội tuyến — CSP của trang tiện ích)');
+    check(/\/v1\/pair\/request/.test(bgCode) && /127\.0\.0\.1/.test(bgCode) && /nd-link-toggle/.test(bgCode), 'dịch vụ nền có cầu nối VS Code (xin ghép đôi tới 127.0.0.1)', 'mất cầu nối VS Code của bản Chrome — đã từng rơi khỏi bản dựng lại 0.6.27–0.7.11');
+    check(/\/v1\/pair\/status/.test(bgCode) && /method:\s*["']POST["']/.test(bgCode), 'cầu nối hỏi kết quả ghép đôi bằng POST (Chrome không gắn Origin vào GET từ extension)');
+    check(!/studio-api\.locaith|\/api\/llm\/v1|\/api\/feedback|locaith\.ai/.test(bgCode), 'dịch vụ nền KHÔNG có đường nào tới máy chủ Locaith (cầu nối chỉ nói chuyện với VS Code trên máy này)', 'nội dung trang đi qua cầu nối không được tới máy chủ Locaith');
+    check((manifest.host_permissions ?? []).every((h) => !/127\.0\.0\.1|localhost/.test(h)), 'không xin quyền máy chủ cho 127.0.0.1 (máy chủ cầu cấp CORS cho origin tiện ích)');
+    for (const key of ['set.link', 'set.link.hint', 'set.link.toggle']) {
+      const v = readBundledString(panel, key);
+      check(typeof v === 'string' && v.length > 0, `panel.js có chuỗi ${key} (mục «Kết nối với VS Code» trong Cài đặt)`, 'không thấy khoá — người dùng sẽ không thấy chỗ bật cầu nối VS Code');
+    }
+    const linkHint = readBundledString(panel, 'set.link.hint');
+    if (typeof linkHint === 'string') check(/TẮT mặc định/.test(linkHint) && /không tới máy chủ Locaith/.test(linkHint), 'mô tả cầu nối nói rõ: tắt mặc định, dữ liệu chỉ tới VS Code trên máy này (không tới máy chủ Locaith)', linkHint);
+  }
 
   // ── đánh giá một chạm (src/browser/rating.ts): mã gửi sao tới `<máy chủ>/api/feedback`. Máy chủ đó PHẢI nằm trong host_permissions
   //    (backend không cho CORS với origin tiện ích → thiếu quyền là mọi lần chạm sao đều lỗi âm thầm), và thông báo đồng ý phải nói việc đó.

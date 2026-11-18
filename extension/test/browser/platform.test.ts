@@ -168,13 +168,13 @@ describe('manifest và gói build sản phẩm (nguyên tắc ít quyền nhất
 
   it('Manifest V3, quyền bắt buộc tối thiểu, quyền đọc mọi trang chỉ là TUỲ CHỌN', () => {
     expect(manifest.manifest_version).toBe(3);
-    expect(manifest.permissions.slice().sort()).toEqual(['activeTab', 'contextMenus', 'scripting', 'sidePanel', 'storage', 'tabGroups', 'unlimitedStorage']);
+    expect(manifest.permissions.slice().sort()).toEqual(['activeTab', 'alarms', 'contextMenus', 'scripting', 'sidePanel', 'storage', 'tabGroups', 'unlimitedStorage']);
     for (const dangerous of ['tabs', 'debugger', 'cookies', 'history', 'downloads', 'webRequest', 'webNavigation', 'nativeMessaging', 'management', 'bookmarks', 'clipboardRead', 'declarativeNetRequest']) {
       expect(manifest.permissions, dangerous).not.toContain(dangerous);
     }
     expect(manifest.optional_host_permissions).toEqual(['<all_urls>']);
-    // `tabs` đã bị gỡ: mã không bao giờ xin/dùng, và Chrome Web Store bắt khai lý do cho quyền khai báo mà không dùng.
-    expect(manifest.optional_permissions).toEqual(['identity']);
+    // `tabs` chỉ là quyền TUỲ CHỌN từ 0.7.12: xin lúc người dùng bật «Kết nối với VS Code» (src/browser/link/host.ts). Không nằm trong quyền bắt buộc (kiểm ở vòng lặp `dangerous` trên).
+    expect(manifest.optional_permissions).toEqual(['identity', 'tabs']);
     expect(manifest.host_permissions).not.toContain('<all_urls>');
     for (const h of manifest.host_permissions) expect(h, h).toMatch(/^https:\/\/[a-z0-9.-]+\/\*$/);
     expect(manifest.host_permissions).toEqual(expect.arrayContaining(['https://api.anthropic.com/*', 'https://api.openai.com/*', 'https://generativelanguage.googleapis.com/*', 'https://api.deepseek.com/*', 'https://api.x.ai/*']));

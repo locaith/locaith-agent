@@ -7,7 +7,8 @@
  */
 
 import { consentGate } from './consent';
-import { handleMenuClick, MENU_ASK, MENU_EXPLAIN, MENU_SUMMARIZE, PENDING_KEY } from './menuClick';
+import { installLink } from './link/linkSw';
+import { handleMenuClick, MENU_ASK, MENU_EXPLAIN, MENU_LINK, MENU_SUMMARIZE, PENDING_KEY } from './menuClick';
 
 declare const __ND_TEST__: boolean;
 declare function importScripts(...urls: string[]): void;
@@ -21,6 +22,9 @@ if (!__ND_TEST__) {
   }
 }
 
+// Cầu nối VS Code (src/browser/link): TẮT cho đến khi người dùng bật công tắc trong Cài đặt; chưa đồng ý thông báo dữ liệu thì không nối.
+installLink({ testBuild: __ND_TEST__ });
+
 chrome.runtime.onInstalled.addListener(() => {
   void chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true }).catch(() => undefined);
   chrome.contextMenus.removeAll(() => {
@@ -28,6 +32,8 @@ chrome.runtime.onInstalled.addListener(() => {
     chrome.contextMenus.create({ id: MENU_ASK, title: msg('menuAskSelection'), contexts: ['selection'] });
     chrome.contextMenus.create({ id: MENU_EXPLAIN, title: msg('menuExplainSelection'), contexts: ['selection'] });
     chrome.contextMenus.create({ id: MENU_SUMMARIZE, title: msg('menuSummarizePage'), contexts: ['page', 'frame'] });
+    // Chuột phải vào biểu tượng tiện ích → «Kết nối với VS Code…»: mở khung chat thẳng tới phần Cài đặt tương ứng.
+    chrome.contextMenus.create({ id: MENU_LINK, title: msg('menuConnectVscode'), contexts: ['action'] });
   });
 });
 

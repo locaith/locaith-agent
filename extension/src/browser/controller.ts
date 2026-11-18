@@ -34,6 +34,7 @@ import type {
   TItem,
   UiEvent,
   ViewState,
+  VscodeLinkView,
   WebviewMessage,
 } from '../shared/protocol';
 import { PERMISSION_MODES, THINKING_LEVELS } from '../shared/protocol';
@@ -48,6 +49,7 @@ import { browserContextBlock, buildBrowserUserContent, withFreshContext } from '
 import type { AcceptResult, LocaithGate } from '../host/locaith';
 import { extractDeviceToken, type BrowserAccountGate } from './account';
 import { BrowserToolHost } from './host';
+import type { BrowserLinkHost } from './link/host';
 import type { BrowserLogger } from './logger';
 import { clip } from './page/pure';
 import { OAuthError, validateSpec, type OAuthManager } from './oauth';
@@ -94,6 +96,10 @@ export interface BrowserControllerDeps {
   account?: BrowserAccountGate;
   /** (0.7.10) Đồng ý thông báo dữ liệu theo tài khoản + mức đã dùng của hạn mức (cùng bộ với bản VS Code). Vắng = không có thẻ đồng ý. */
   locaith?: LocaithGate;
+  /**
+   * (0.7.12) Cầu nối VS Code: công tắc + danh sách trang đã cho phép (service worker giữ trạng thái — xem src/browser/link/linkSw.ts). Vắng = không có phần «Kết nối với VS Code» trong Cài đặt.
+   */
+  link?: BrowserLinkHost;
   /** Gửi một đánh giá về Locaith (mặc định ở panel.tsx = `postRating`). Bỏ trống = không gửi gì (kiểm thử / chạy không mạng): đánh giá vẫn được ghi nhận và chờ gửi. */
   sendFeedback?: (payload: RatingPayload) => Promise<RatingSendResult>;
 }
@@ -236,6 +242,8 @@ export class BrowserController {
   /** Lúc bắt đầu đứng trong hàng chờ của cổng Locaith (0 = không xếp hàng). */
   private modelQueueSince = 0;
   private accountWasUsable = false;
+  /** Trạng thái cầu nối VS Code đọc lần gần nhất (thẻ Cài đặt). */
+  private linkView: VscodeLinkView | undefined;
   /** Chế độ demo do TA tự chọn lúc chưa có gì (khác với người dùng tự chọn): được thay khi có chỗ tốt hơn (vừa đăng nhập Locaith, vừa nhập khoá). */
   private autoPickedDemo = false;
   private readonly offs: (() => void)[] = [];
@@ -262,6 +270,8 @@ export class BrowserController {
         }),
       );
     }
+    // Cầu nối VS Code đổi trạng thái (ghép đôi xong, bị từ chối, thu hồi trang…) → cập nhật thẻ trong Cài đặt.
+    if (d.link) this.offs.push(d.link.onChange(() => void this.refreshLink()));
     // Đồng ý thông báo dữ liệu đổi (đồng ý, rút lại, máy chủ đòi lại, khung chat khác đã đồng ý…) → cập nhật thẻ và cờ «cần đồng ý» của nhà cung cấp.
     if (d.locaith) {
       const sub = d.locaith.onChange(() => {
@@ -430,6 +440,7 @@ export class BrowserController {
       browser: this.browserState(),
       ...(this.d.account ? { account: this.d.account.view() } : {}),
       ...(this.d.locaith ? { locaith: this.locaithView() } : {}),
+      ...(this.linkView ? { vscodeLink: this.linkView } : {}),
     };
   }
 
@@ -501,8 +512,10 @@ export class BrowserController {
       rating: shouldAskRating(rating) ? { sends: rating.sends } : undefined,
       ...(this.d.account ? { account: this.d.account.view() } : {}),
       ...(this.d.locaith ? { locaith: this.locaithView() } : {}),
+      ...(this.linkView ? { vscodeLink: this.linkView } : {}),
     };
     this.post({ type: 'init', state: this.view });
+    void this.refreshLink(); // (0.7.12) đọc trạng thái cầu nối VS Code để thẻ trong Cài đặt đúng ngay khi mở
     this.refreshLocaithUsage(); // (0.7.10) đang dùng mô hình Locaith: đọc mức đã dùng (giãn cách 15 giây)
     void this.d.config.promptHistory().then((items) => {
       if (!this.disposed) this.post({ type: 'prompt_history', items: [...items] }); // (0.7.4) ↑/↓ ở ô nhập
@@ -723,6 +736,15 @@ export class BrowserController {
         return this.enterAccountCode(typeof m.code === 'string' ? m.code : '');
       case 'account_manage':
         return void (await this.d.account?.manage());
+      // ── (0.7.12) cầu nối VS Code ──
+      case 'vscode_link_toggle':
+        await this.d.link?.toggle(m.on === true);
+        return void (await this.refreshLink());
+      case 'vscode_link_forget':
+        await this.d.link?.forget(typeof m.origin === 'string' ? m.origin : '');
+        return void (await this.refreshLink());
+      case 'vscode_link_refresh':
+        return void (await this.refreshLink());
       case 'locaith_consent':
         return this.onLocaithConsent(m.action);
       case 'locaith_refresh':
@@ -1389,6 +1411,20 @@ export class BrowserController {
         if (!this.disposed) this.patch({ locaith: this.locaithView() });
       });
     }
+  }
+
+  /** Đọc lại trạng thái cầu nối VS Code từ dịch vụ nền và đẩy lên giao diện (chỉ khi đổi, để khung Cài đặt không nhấp nháy). */
+  private async refreshLink(): Promise<void> {
+    if (!this.d.link || this.disposed) return;
+    let v: VscodeLinkView;
+    try {
+      v = await this.d.link.view();
+    } catch {
+      return; // dịch vụ nền đang khởi động lại: lần làm mới sau sẽ đọc được
+    }
+    if (this.disposed || JSON.stringify(v) === JSON.stringify(this.linkView)) return;
+    this.linkView = v;
+    this.patch({ vscodeLink: v });
   }
 
   async showScreen(screen: 'chat' | 'settings' | 'history'): Promise<void> {

@@ -231,6 +231,22 @@ describe('cầu nối Chrome — ghép đôi KHÔNG MÃ (Chrome xin, VS Code hi�
     expect(changes).toBeGreaterThanOrEqual(2);
   });
 
+  it('hỏi kết quả bằng POST /v1/pair/status (Chrome không gắn Origin vào GET từ extension): cùng quy tắc như GET — đúng extension, token giao MỘT lần', async () => {
+    const { b, port } = await mk();
+    const post = (id: string, ext = EXT, origin = true) => raw(port, 'POST', '/v1/pair/status', { headers: origin ? { origin: `chrome-extension://${ext}` } : {}, body: JSON.stringify({ id }) });
+    const q = await ask(port);
+    expect((await post(q.json.id)).json.state).toBe('pending');
+    expect((await post(q.json.id, EXT2)).json).toEqual({ state: 'expired' }); // extension khác không đọc được
+    expect((await post(q.json.id, EXT, false)).status).toBe(403); // thiếu Origin (như GET từ Chrome): không biết ai hỏi → từ chối, KHÔNG lộ trạng thái
+    expect(await b.approvePair(q.json.id)).toBe(true);
+    expect((await post(q.json.id, EXT2)).json).toEqual({ state: 'expired' }); // vẫn không lấy được token của người khác
+    const got = await post(q.json.id);
+    expect(got.json.state).toBe('approved');
+    expect(got.json.token).toMatch(/^[A-Za-z0-9_-]{43}$/);
+    expect((await post(q.json.id)).json).toEqual({ state: 'expired' }); // giao một lần
+    expect((await raw(port, 'POST', '/v1/pair/status', { headers: { origin: 'https://evil.example' }, body: '{}' })).status).toBe(403);
+  });
+
   it('Từ chối: extension nhận "denied" một lần, không có token, chưa ghép đôi', async () => {
     const { b, port, store } = await mk();
     const q = await ask(port);

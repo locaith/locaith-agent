@@ -2,7 +2,7 @@
 export const PENDING_KEY = 'nd.pending';
 
 export interface PendingAction {
-  kind: 'ask' | 'explain' | 'summarize';
+  kind: 'ask' | 'explain' | 'summarize' | 'link';
   text?: string;
   url?: string;
   title?: string;
