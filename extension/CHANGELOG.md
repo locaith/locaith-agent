@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.7.16 - 2026-11-24
+
+- **Three claims in the 0.7.15 notes were not backed by code; now they are.** An independent read of the shipped source found them, and this release makes each one true.
+- **The 300 ms coalescing now exists.** `USAGE_DEBOUNCE_MS` was declared and never used, so a turn ending plus a permission-mode change plus a compact were three separate gateway calls. A new `UsageCoalescer` collapses every request inside the window into ONE read; strong triggers (`manual`, `window-reset`) win the merge because the user is waiting on those numbers, and `force` is kept if any request asked for it. Clock and reader are injected, so the behaviour is tested with a fake clock (`test/usageCoalescer.test.ts`).
+- **`/usage` prints fresh numbers.** It used to call a fire-and-forget refresh and then read the view before the network read finished (on the first run it also said "no data yet" while the read was still in flight). `requestUsage()` now returns a promise that resolves once the read has completed and the view is patched; the `/usage` branch awaits it before reading `this.view.locaith?.usage`.
+- **Expired windows no longer show a stale percentage.** `dropExpiredWindows()` existed but production never called it, so a sleeping tab, a machine waking up, or one failed read left the old percentage on screen. The host filters the view before sending it down, and the webview filters against the live clock *and* schedules a redraw at the next reset moment — render only runs on a patch, and the allowance does not change while the user sits still. With both windows gone the line hides instead of drawing 0%. The `{...u}` spread keeps `canUpgrade` / `upgradeUrl`, so the upgrade link survives.
+- **Guard:** `test/usageWiring.test.ts` pins this at the real source (the constant must be used as the default, the coalescer must be constructed, `/usage` must `await` before reading the view, host and webview must both call `dropExpiredWindows`), so none of the three can silently regress.
+
+Tests: 4052 passing across 271 files; `npm run typecheck` green on all three configs; `ND_TEST_ONLY=usage node test/vscode/runTest.mjs` green inside a real VS Code window, screenshots `xx-usage-strip` and `xx-usage-strip-limit`. Details: `docs/changes/usage-accounting-hardening.md`.
+
 ## 0.7.15 - 2026-11-24
 
 - **The allowance lives in the prompt box now, and `/usage` shows the detail.** The strip under the chat is gone: one thin line sits inside the composer (plan + 5-hour window + week, percentages only, amber at 80%, red at 100%), and `/usage` prints the full breakdown — each window with its reset countdown and a link to the plans — in the conversation transcript where you are already looking. `usageInlineText` / `usageLevel` live in `src/shared/usageFormat.ts` so the extension and the web page word it identically.

@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import {
+  USAGE_DEBOUNCE_MS,
   USAGE_MIN_GAP_MS,
+  UsageCoalescer,
   dropExpiredWindows,
   msUntilNextReset,
   shouldRefresh,

@@ -44,10 +44,12 @@ export function planName(plan: string | undefined): string {
 export interface UsageShape {
   plan?: string;
   state: string;
-  session?: { percent: number } | null;
-  week?: { percent: number } | null;
+  session?: { percent: number; resetsInS?: number } | null;
+  week?: { percent: number; resetsInS?: number } | null;
   credit?: { percent: number } | null;
   sessionHours?: number;
+  /** Lúc số liệu được đọc (ms) — cần để biết cửa sổ nào đã qua mốc làm mới. */
+  at?: number;
 }
 
 /**

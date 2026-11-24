@@ -20,7 +20,7 @@ import { openExternalOnce } from '../core/host/openOnce'; // (lane:customer-bugs
 import { findToolImage } from '../shared/toolImages'; // (lane:customer-bugs)
 import { loadProjectInstructions } from '../core/engine/instructions';
 import { resumeInstruction } from '../core/engine/resume';
-import { msUntilNextReset, shouldRefresh, type UsageTrigger } from '../core/account/usageRefresh';
+import { UsageCoalescer, dropExpiredWindows, msUntilNextReset, shouldRefresh, type UsageTrigger } from '../core/account/usageRefresh';
 import { planName, spanText } from '../shared/usageFormat';
 import { MEMORY_DIR, MEMORY_INDEX, type MemoryScope, type MemorySnapshot } from '../core/engine/memory';
 import { t, type Lang } from '../core/engine/strings';
@@ -243,6 +243,8 @@ export class ChatController implements vscode.Disposable {
   /** (0.7.15) Lần đọc hạn mức gần nhất + hẹn giờ lúc cửa sổ làm mới. */
   private usageReadAt = 0;
   private usageResetTimer: ReturnType<typeof setTimeout> | undefined;
+  /** Gộp các yêu cầu đọc hạn mức dồn dập trong 300 ms thành một lần (như Claude Code). */
+  private readonly usageCoalescer = new UsageCoalescer({ read: (trigger, force) => this.readUsageNow(trigger, force) });
   /** Số lượt đang chạy hoặc đang chờ khoá (để hạ cờ `starting`/`agentBusy` đúng lúc, không sớm). */
   private pendingTurns = 0;
   /** Kết cục của lần chạy gần nhất ('error' = chưa có lần nào kết thúc bình thường): quyết định giao hay trả lại hàng đợi. */
@@ -2166,7 +2168,10 @@ export class ChatController implements vscode.Disposable {
   private locaithView(): LocaithView | undefined {
     const c = this.d.locaith;
     if (!c) return undefined;
-    const usage = c.usage?.(); // (0.7.9) hạn mức 5 giờ / tuần — chỉ phần trăm và giờ làm mới
+    const raw = c.usage?.(); // (0.7.9) hạn mức 5 giờ / tuần — chỉ phần trăm và giờ làm mới
+    // (0.7.15) Cửa sổ đã qua mốc làm mới thì BỎ khỏi view: nếu không, dải vẫn hiện phần trăm đã hết hiệu lực
+    // cho tới khi timer reset kịp chạy (tab bị ngủ, máy vừa thức, hoặc lượt đọc lỗi mạng).
+    const usage = raw ? dropExpiredWindows(raw, typeof raw.at === "number" ? raw.at : Date.now()) : undefined;
     return {
       noticeVersion: LOCAITH_NOTICE_VERSION,
       accepted: c.accepted(),
@@ -2183,23 +2188,41 @@ export class ChatController implements vscode.Disposable {
    * `always` cho chỗ người dùng chủ động xem (mở Cài đặt) và `force` cho lúc vừa bị từ chối vì hạn mức (không chờ giãn cách 15 giây).
    */
   private refreshLocaithUsage(opts: { trigger?: UsageTrigger; force?: boolean; always?: boolean } = {}): void {
+    void this.requestUsage(opts);
+  }
+
+  /**
+   * Yêu cầu đọc lại hạn mức và CHỜ được kết quả (dùng cho /usage: phải in số MỚI, không phải bản cũ).
+   *
+   * - Quyết định có đọc hay không bằng `shouldRefresh` (lịch Claude Code + khoảng chặn 5 giây).
+   * - Nếu đọc: đưa vào `UsageCoalescer` — nhiều sự kiện dồn dập trong 300 ms chỉ thành MỘT lần gọi cổng,
+   *   kích hoạt mạnh (manual / window-reset) thắng khi gộp.
+   * - Promise xong khi lần đọc đã hoàn tất và view đã được cập nhật.
+   */
+  private requestUsage(opts: { trigger?: UsageTrigger; force?: boolean; always?: boolean } = {}): Promise<void> {
     const c = this.d.locaith;
-    if (!c?.refreshUsage || this.disposed) return;
+    if (!c?.refreshUsage || this.disposed) return Promise.resolve();
     const trigger: UsageTrigger = opts.trigger ?? (opts.force ? 'manual' : 'turn-end');
     const signedIn = this.d.account ? this.d.account.view().status === 'signedIn' : false;
-    const now = Date.now();
     const usingLocaith = this.session.provider === LOCAITH_PROVIDER_ID;
-    if (!shouldRefresh({ trigger, now, lastAt: this.usageReadAt, signedIn, usingLocaith, always: opts.always })) return;
-    this.usageReadAt = now;
-    const forced = opts.force === true || trigger === 'manual' || trigger === 'window-reset';
-    void c
-      .refreshUsage(forced)
-      .then(() => {
-        if (this.disposed) return;
-        this.patch({ locaith: this.locaithView() });
-        this.scheduleUsageReset();
-      })
-      .catch(() => undefined);
+    if (!shouldRefresh({ trigger, now: Date.now(), lastAt: this.usageReadAt, signedIn, usingLocaith, always: opts.always })) return Promise.resolve();
+    return this.usageCoalescer.request(trigger, { force: opts.force === true });
+  }
+
+  /** Lần đọc THẬT SỰ ra mạng (do coalescer gọi, sau khi đã gộp 300 ms). */
+  private async readUsageNow(trigger: UsageTrigger, force: boolean): Promise<void> {
+    const c = this.d.locaith;
+    if (!c?.refreshUsage || this.disposed) return;
+    this.usageReadAt = Date.now();
+    const forced = force || trigger === 'manual' || trigger === 'window-reset';
+    try {
+      await c.refreshUsage(forced);
+    } catch {
+      return; // lỗi mạng: giữ số cũ, lần sau đọc lại
+    }
+    if (this.disposed) return;
+    this.patch({ locaith: this.locaithView() });
+    this.scheduleUsageReset();
   }
 
   /**
@@ -2401,8 +2424,9 @@ export class ChatController implements vscode.Disposable {
         await vscode.commands.executeCommand('locaithAgent.initProjectFile');
         return true;
       case 'usage': {
-        // Đọc mới rồi in ra hội thoại: đây là chỗ người dùng đang nhìn, không phải thẻ trong Cài đặt.
-        this.refreshLocaithUsage({ force: true, always: true, trigger: 'manual' });
+        // Đọc MỚI rồi mới in: `await` là bắt buộc — trước đây hàm đọc là fire-and-forget nên số in ra là bản CŨ
+        // (và lần đầu còn báo "chưa có số liệu" trong khi lần đọc vẫn đang bay).
+        await this.requestUsage({ force: true, always: true, trigger: 'manual' });
         const u = this.view.locaith?.usage;
         if (!u) {
           info(

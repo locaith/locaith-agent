@@ -64,6 +64,77 @@ export function msUntilNextReset(u: UsageWindows, at: number): number | null {
 
 export type UsageTrigger = 'session-start' | 'turn-end' | 'compact' | 'permission-mode' | 'window-reset' | 'timer' | 'manual';
 
+/** Kích hoạt "mạnh": người dùng đang chờ số mới nên không được gộp mất. */
+function isStrong(t: UsageTrigger): boolean {
+  return t === 'manual' || t === 'window-reset';
+}
+
+export interface CoalescerDeps {
+  /** Gọi THẬT để đọc số liệu (đã bao gồm việc bỏ qua nếu không cần). */
+  read: (trigger: UsageTrigger, force: boolean) => Promise<void>;
+  setTimer?: (fn: () => void, ms: number) => unknown;
+  clearTimer?: (handle: unknown) => void;
+}
+
+/**
+ * Gộp các lần "muốn đọc lại hạn mức" xảy ra dồn dập trong `USAGE_DEBOUNCE_MS` thành ĐÚNG MỘT lần đọc —
+ * đúng hành vi Claude Code mô tả (mọi cập nhật của dải được gộp trong 300 ms).
+ *
+ * Vì sao cần lớp riêng: một lượt trả lời có thể kết thúc, đổi chế độ quyền và nén ngữ cảnh gần như cùng lúc;
+ * không gộp thì mỗi sự kiện là một lần gọi cổng, còn gộp thì chỉ một. Kích hoạt mạnh hơn (`manual`,
+ * `window-reset`) thắng khi gộp, và `force` được giữ nếu bất kỳ lần nào yêu cầu.
+ *
+ * Có thể test được: đồng hồ và hàm đọc đều được tiêm từ ngoài.
+ */
+export class UsageCoalescer {
+  private timer: unknown;
+  private pending: { trigger: UsageTrigger; force: boolean } | undefined;
+  private waiters: Array<() => void> = [];
+
+  constructor(
+    private readonly deps: CoalescerDeps,
+    private readonly delayMs = USAGE_DEBOUNCE_MS,
+  ) {}
+
+  /** Yêu cầu đọc; trả về promise xong khi lần đọc (đã gộp) hoàn tất. */
+  request(trigger: UsageTrigger, opts: { force?: boolean } = {}): Promise<void> {
+    const cur = this.pending;
+    const merged: { trigger: UsageTrigger; force: boolean } = {
+      trigger: !cur ? trigger : isStrong(trigger) ? trigger : isStrong(cur.trigger) ? cur.trigger : trigger,
+      force: opts.force === true || cur?.force === true,
+    };
+    this.pending = merged;
+    const done = new Promise<void>((resolve) => this.waiters.push(resolve));
+    const setTimer = this.deps.setTimer ?? ((fn: () => void, ms: number) => setTimeout(fn, ms));
+    const clearTimer = this.deps.clearTimer ?? ((h: unknown) => clearTimeout(h as ReturnType<typeof setTimeout>));
+    if (this.timer !== undefined) clearTimer(this.timer);
+    this.timer = setTimer(() => {
+      this.timer = undefined;
+      void this.flush();
+    }, this.delayMs);
+    return done;
+  }
+
+  /** Có lần đọc đang chờ trong cửa sổ gộp (dùng cho test/chẩn đoán). */
+  hasPending(): boolean {
+    return this.pending !== undefined;
+  }
+
+  private async flush(): Promise<void> {
+    const pend = this.pending;
+    this.pending = undefined;
+    const waiters = this.waiters;
+    this.waiters = [];
+    try {
+      if (pend) await this.deps.read(pend.trigger, pend.force);
+    } catch {
+      // Lỗi mạng: không nuốt sự kiện kế tiếp, chỉ bỏ lần đọc này.
+    } finally {
+      for (const w of waiters) w();
+    }
+  }
+}
+
 /**
  * Quyết định có nên đọc lại NGAY bây giờ không.
  *

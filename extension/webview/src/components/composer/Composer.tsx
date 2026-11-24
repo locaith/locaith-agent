@@ -16,6 +16,7 @@ import { persistableAttachments } from '../../draftState';
 import { NO_NAV, historyKey, navDetached, type HistoryNav } from '../../../../src/shared/promptHistory'; // (0.7.4) ↑/↓ duyệt lại tin đã gõ
 import { getPromptHistory, recordPrompt } from '../../promptHistory';
 import { cx, readFileAsBase64 } from '../../util';
+import { dropExpiredWindows } from '../../../../src/core/account/usageRefresh';
 import { usageInlineText, usageLevel, type UsageShape } from '../../../../src/shared/usageFormat';
 import { openExternalLink } from '../../externalLink';
 import { makeThumb, shrinkImage } from '../../imageShrink';
@@ -180,10 +181,24 @@ function QueueList({ items }: { items: QueuedInfo[] }) {
  * Chỉ phần trăm — không số tiền. Bấm: gần cạn thì mở trang gói, bình thường mở trang giá để xem cho biết.
  * Không tự vẽ thanh tiến trình ở đây để ô nhập không cao thêm; mức cảnh báo thể hiện bằng màu chữ + icon.
  */
-function UsageInline({ usage }: { usage: UsageShape & { canUpgrade?: boolean; upgradeUrl?: string } }) {
+function UsageInline({ usage }: { usage: UsageShape & { canUpgrade?: boolean; upgradeUrl?: string; at?: number } }) {
   const { t } = useApp();
-  const level = usageLevel(usage);
-  const canBuy = level >= 1 && usage.canUpgrade && usage.upgradeUrl;
+  // Cửa sổ đã qua mốc làm mới thì không vẽ (không hiện phần trăm đã hết hiệu lực). Tự vẽ lại đúng lúc mốc đó tới,
+  // vì render chỉ chạy khi có patch còn hạn mức thì không đổi nếu người dùng ngồi im.
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const at = usage.at ?? now;
+    const left = [usage.session, usage.week]
+      .map((w) => (w && typeof w.resetsInS === 'number' ? w.resetsInS * 1000 - (now - at) : undefined))
+      .filter((x): x is number => typeof x === 'number' && x > 0);
+    if (left.length === 0) return;
+    const id = setTimeout(() => setNow(Date.now()), Math.min(...left) + 1000);
+    return () => clearTimeout(id);
+  }, [usage, now]);
+  const live = usage.at ? dropExpiredWindows(usage, usage.at, now) : usage;
+  if (!live.session && !live.week && !live.credit) return null;
+  const level = usageLevel(live);
+  const canBuy = level >= 1 && live.canUpgrade && live.upgradeUrl;
   return (
     <button
       type="button"
@@ -192,10 +207,10 @@ function UsageInline({ usage }: { usage: UsageShape & { canUpgrade?: boolean; up
       aria-label={t('usage.titleFull')}
       data-testid="usage-inline"
       data-level={level}
-      onClick={() => openExternalLink(canBuy ? usage.upgradeUrl! : 'https://locaith.ai/pricing')}
+      onClick={() => openExternalLink(canBuy ? live.upgradeUrl! : 'https://locaith.ai/pricing')}
     >
       <Icon name="gauge" size={12} />
-      <span class="cu-text">{usageInlineText(usage, t)}</span>
+      <span class="cu-text">{usageInlineText(live, t)}</span>
     </button>
   );
 }
