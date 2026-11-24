@@ -2957,3 +2957,62 @@ button.chip-main:hover {
 .media-lite {
   font-size: var(--nd-fs-xs);
 }
+
+/* ── Hạn mức tài khoản Locaith: MỘT dòng gọn dưới cuộc trò chuyện ── */
+.usage-strip {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin: 0 12px 4px;
+  padding: 3px 8px;
+  border-radius: 8px;
+  color: var(--fg-faint);
+  font-size: var(--nd-fs-xs);
+}
+.usage-strip.is-limit {
+  color: var(--danger);
+  background: color-mix(in srgb, var(--danger) 10%, transparent);
+}
+.us-plan {
+  font-weight: 600;
+  color: var(--fg-muted, var(--fg));
+  white-space: nowrap;
+}
+.us-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+}
+.us-label {
+  white-space: nowrap;
+}
+.us-bar {
+  display: inline-block;
+  width: 54px;
+  height: 4px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--fg) 14%, transparent);
+  overflow: hidden;
+}
+.us-fill {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--accent-text);
+  transition: width 0.25s ease;
+}
+.us-fill.is-high {
+  background: var(--nd-working, #f5b301);
+}
+.us-fill.is-full {
+  background: var(--danger);
+}
+.us-pct {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.us-buy {
+  margin-left: auto;
+}

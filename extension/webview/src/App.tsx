@@ -16,6 +16,7 @@ import { BgTasksStrip } from './components/BgTasksStrip'; // (lane:bg-tasks)
 import { ChromePairStrip } from './components/ChromePairStrip';
 import { MemoryStrip } from './components/MemoryStrip';
 import { RatingStrip } from './components/RatingStrip';
+import { UsageStrip } from './components/UsageStrip';
 import { RemoteStrip } from './components/RemoteView';
 import { Toasts, type ToastItem } from './components/Toasts';
 import { AccountGate } from './components/AccountGate';
@@ -260,6 +261,7 @@ export function App() {
           {view.remote && <RemoteStrip remote={view.remote} />}
           {view.chromePair && <ChromePairStrip pair={view.chromePair} />}
           {view.memory && <MemoryStrip memory={view.memory} />}
+          {view.locaith?.usage && <UsageStrip usage={view.locaith.usage} />}
           {view.platform === 'browser' && view.rating && <RatingStrip sends={view.rating.sends} picked={view.rating.picked} sent={view.rating.sent} />}
           {view.bgTasks && view.bgTasks.length > 0 && <BgTasksStrip tasks={view.bgTasks} />} {/* (lane:bg-tasks) */}
           <Composer view={view} />

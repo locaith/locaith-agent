@@ -836,6 +836,8 @@ export class ChatController implements vscode.Disposable {
     for (const n of this.pendingLocal.splice(0)) void this.webview?.postMessage({ type: 'toast', level: n.level, text: n.text } satisfies HostMessage);
     // Làm mới danh sách model ở nền (bộ đệm 1 giờ nên rất rẻ), rồi cập nhật giao diện.
     void this.refreshProvidersInBackground();
+    // Hạn mức tài khoản Locaith: đọc ngay khi mở khung chat để dải «đã dùng» có số thật, không chờ tới lượt đầu.
+    this.refreshLocaithUsage({ always: true });
     this.maybeAutoSetupBio();
   }
 
