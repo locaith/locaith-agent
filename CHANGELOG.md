@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.7.14 - 2026-11-24
+
+- **The account allowance strip now has regression coverage.** `test/webview/chatStrips.test.ts` pins the contract (attached to the chat footer when signed in, the three allowance kinds, the 80% / 100% colour thresholds, percentages only — never money, the upgrade link, both languages, and the `sendInit` refresh call), and `ND_TEST_ONLY=usage node test/vscode/runTest.mjs` drives it inside a REAL VS Code window: it pushes a plan plus two allowances into the view, finds `[data-testid="usage-strip"]` in the live webview, checks 42% / 85% with the amber class, asserts there is no currency, then pushes a 100% limit and waits for the red bar and `data-state="limit_week"`. Screenshots: `xx-usage-strip`, `xx-usage-strip-limit`.
+- **Two harness fixes found while writing that test:** `test/vscode/runTest.mjs` now forwards `ND_TEST_ONLY` and `LOCAITH_TEST_BACKEND_URL` to the extension host (before, `ND_TEST_ONLY=usage` silently ran the whole suite and died on the fake-backend account gate), and the account gate is skipped for the steps that do not need a login.
+- **Correction of the 0.7.13 entry below:** it was first dated 2026-11-07 — eleven days before the release it follows — and credited 0.7.13 with changes that had shipped in 0.6.31 and 0.7.4. Both are fixed; 0.7.13 itself only adds the allowance strip.
+
+## 0.7.13 - 2026-11-24
+
+- **Your Locaith account usage is visible while you chat.** A single thin line under the conversation shows the plan and how much of the 5-hour window and the weekly window you have used (free accounts: the one-off free tokens), with a bar that turns amber at 80% and red at 100% and the reset countdown in the tooltip. Percentages only — never an amount of money. At or near the limit a link opens the plan page. It reads the same `GET /account` the Settings card already used, is refreshed when the chat opens (not only after the first turn) and after every turn while you use a Locaith model.
+
+The task-panel removal, the `[turn N/M]` budget line and the "continue" fix shipped in 0.6.31; restart restoring your conversation shipped in 0.7.4.
+
 ## 0.7.12 - 2026-11-18
 
 - **Chrome / Edge: the VS Code connection is back.** The Chrome Web Store builds 0.6.27–0.7.11 were rebuilt from `src/browser` and silently lost the link to the VS Code extension that the 0.4.x package had (it only ever existed as a patch on a built bundle). It is now real source code with tests: **Settings → Connect to VS Code** (or right-click the toolbar icon → **Connect to VS Code…**) lets the assistant in VS Code read and control the pages you allow in your own browser — pages that are already signed in, like Gmail, Zalo or an admin panel. It is **off by default** and talks only to VS Code on this computer (127.0.0.1; nothing goes to a Locaith server). Turn it on and VS Code shows an **Allow / Deny** card in its chat; no code to type. Every page the assistant wants to act on is asked about in the browser first (**Allow this time** / **Always allow this site** / **Deny**), pages you have not approved show only their domain, and you revoke a page in the same Settings section. Commands: list tabs, open / activate / close a tab, read, snapshot, click, type, press a key, scroll, wait, screenshot. It needs the 0.7.12 VS Code extension (or newer) on the other side; with an older one you get a clear “update the extension in VS Code” message.
@@ -224,10 +236,6 @@ The "work like Claude Code" release: fourteen workstreams, each built on its own
 
 - **Memory is now always in context — for every model, not just Locaith.** The persistent memory index (`.locaith/memory/MEMORY.md` for the project, `~/.locaith/memory/MEMORY.md` for you) is re-read from disk on every turn and injected as a `<memory>` block, so it survives any number of compactions and does not depend on the model deciding to call a tool. A new `remember` tool writes one dated line (`user` / `feedback` / `project` / `reference`), refuses secrets, skips duplicates, and works across providers; the `ghi-nho-memory` skill is no longer limited to Locaith models.
 - **Collapse at the bottom, not only at the top.** Opening a group (the work summary, a command or edit group, a tool body, a thinking block, the task group) now puts a "Collapse" row right under the content, so you close it where you are instead of scrolling back to the header.
-- **Chrome: a rating prompt that asks once, at the right moment.** After 3 real messages the chat shows a compact strip — five stars plus a "Rate it" button that opens the Chrome Web Store listing, and an X that turns it off for good. Nothing is gated behind a review, panel opens and slash commands are not counted, and the state lives under its own storage key so changing settings never makes it ask again.
-- **Store upload fix:** the localized description was 188 characters and Chrome rejects the whole package when any locale exceeds 132 ("Bản dịch description trong ngôn ngữ vi quá dài"). The Vietnamese and English descriptions are now 130 and 124 characters, and the browser build fails loudly if any locale string goes over the limit again.
-- **Removed the unused `tabs` permission.** Chrome refused to publish with "Bạn cần đưa ra lý do sử dụng quyền tabs": the permission was declared as optional but no code ever requested it (tab URLs and titles come from the site access the user grants). The manifest now declares only `identity` as optional, so the review no longer has to justify a permission the extension does not use.
-
 ## 0.6.26 - 2026-11-07
 
 - **A request now runs to the end, and "done" has to be proven.** The engine gained a completion gate instead of a reminder: while the task list still has unfinished work it names the remaining items and keeps going (at most twice), and a run that edited files without running anything that can fail is sent back to run the real check (tests / typecheck / build / the product) before it may report success. It never fires after you press Stop and never loops forever.
@@ -235,6 +243,13 @@ The "work like Claude Code" release: fourteen workstreams, each built on its own
 - **Options are buttons now, not a "next steps" paragraph.** The agent calls `offer_options` with 2–4 self-contained choices; they render under the conversation, and clicking one sends that instruction and does the whole job. The prompt forbids closing a reply with a prose list of next steps. The "remaining steps" panel is collapsed to one line by default — open it only if you want to pick a step.
 - **The plan survives compaction.** The live task list is re-attached to the summary on every compaction, so a long run does not forget what is left after the context is trimmed.
 - **Default loop budget 30 → 60 turns**, so a multi-part request finishes in one run instead of stopping to be restarted.
+## 0.6.21 - 2026-11-06
+
+- **The full answer is never hidden behind "Worked for" again.** A finished turn collapsed everything before its *last* text block, so a short closing line stayed visible while the whole answer above it went into the collapsed summary. The answer region is now the whole trailing run of text: everything before it still folds into the turn summary, the answer never does.
+- **Expanded groups no longer break on a narrow pane.** Opening a task, command or edit group put its body as a column beside the header, so around 400 px the body shrank to one character per line. Group bodies now stack under their header at every width.
+- **Task rows carry their state.** A task row with a failed step turns red — border, background and label — instead of leaving the word "Error" in the same grey as the rest of the meta.
+- **The agent panel opens in the centre of the screen.** It used to sit on the bottom edge, so reaching it meant leaving the chip, and leaving the chip closed it. It now opens centred, waits 260 ms before closing, and each row shows what that agent is working on, with the full detail on hover.
+- **Consecutive thinking blocks are grouped.** Six "Thinking · 517 tokens" rows in a row became one "Thinking · 6 parts" row; expanding it keeps every part, numbered.
 
 ## 0.6.20 - 2026-11-06
 

@@ -36,7 +36,15 @@ try {
     extensionDevelopmentPath: root,
     extensionTestsPath: path.join(root, 'test', 'vscode', 'suite.cjs'),
     launchArgs: [workspace, '--disable-extensions', '--disable-workspace-trust', '--skip-welcome', '--remote-debugging-port=9339', '--skip-release-notes', '--user-data-dir', path.join(tmp, 'user'), '--extensions-dir', path.join(tmp, 'ext')],
-    extensionTestsEnv: { ...emptyKeys, ND_AGENT_TEST: '1', ND_TEST_SHOTS: process.env.ND_TEST_SHOTS ?? '', ND_TEST_DEBUG_FILE: process.env.ND_TEST_DEBUG_FILE ?? '' },
+    // ND_TEST_ONLY / LOCAITH_TEST_BACKEND_URL phải được CHUYỂN TIẾP: trước đây chúng bị bỏ quên nên ND_TEST_ONLY=usage vẫn chạy cả bộ (và chết vì thiếu backend giả).
+    extensionTestsEnv: {
+      ...emptyKeys,
+      ND_AGENT_TEST: '1',
+      ND_TEST_SHOTS: process.env.ND_TEST_SHOTS ?? '',
+      ND_TEST_DEBUG_FILE: process.env.ND_TEST_DEBUG_FILE ?? '',
+      ...(process.env.ND_TEST_ONLY ? { ND_TEST_ONLY: process.env.ND_TEST_ONLY } : {}),
+      ...(process.env.LOCAITH_TEST_BACKEND_URL ? { LOCAITH_TEST_BACKEND_URL: process.env.LOCAITH_TEST_BACKEND_URL } : {}),
+    },
   });
   console.log('✔ Kiểm thử tích hợp VS Code thành công');
 } catch (err) {

@@ -1,12 +1,16 @@
 # Changelog
 
-## 0.7.13 - 2026-11-07
+## 0.7.14 - 2026-11-24
 
-- **Your Locaith account usage is visible while you chat.** A single thin line under the conversation shows the plan and how much of the 5-hour window and the weekly window you have used (free accounts: the one-off free tokens), with a bar that turns amber at 80% and red at 100%; the tooltip carries the reset countdown. Percentages only — never an amount of money. When the limit is reached (or you are close) a link opens the plan page. It refreshes when the chat opens, after every turn while you use a Locaith model, and the data comes from the same `GET /account` the Settings card already used.
-- **The Tasks panel is gone.** Everyone automates end to end now, so the extra panel under the chat was removed; the assistant still keeps its own task list internally (that is what drives the completion gate and the one-line process summary), it just no longer asks you to babysit it.
-- **Fixed: "stop, then type continue" no longer runs in two places.** A stopped run could leave an assistant message with tool calls that never got results; the next turn then replayed those exact commands while the new turn also ran. Orphaned calls are now closed off as cancelled before any new message is added, and runs are serialized so two turns can never write to one history at the same time. Typing just "continue" now also carries an explicit instruction: resume exactly where you stopped, finish every outstanding item, do not re-run cancelled calls.
-- **The harness now tells the model its budget.** Every request ends with a `[turn N/M · X turns left]` line (a separate synthetic message, so the user's own words are untouched and the prompt prefix stays cacheable), and with ≤3 turns left it turns into "WRAP UP, DO NOT START NEW WORK". Reminders about unfinished work are now counted and labelled (`[nhắc lần 2]`); on the third one the gate stops reminding and tells you instead of burning turns forever.
-- Long-run operating rules were folded into the constitution: read the budget line, do not start new exploration when the budget is nearly gone, answer in three parts when stopped mid-task, keep the task list truthful, never cut a sentence at the output limit, make the final turn stand on its own, use PowerShell 5.1 syntax on Windows, and change strategy after three identical tool results.
+- **The account allowance strip now has regression coverage.** `test/webview/chatStrips.test.ts` pins the contract (attached to the chat footer when signed in, the three allowance kinds, the 80% / 100% colour thresholds, percentages only — never money, the upgrade link, both languages, and the `sendInit` refresh call), and `ND_TEST_ONLY=usage node test/vscode/runTest.mjs` drives it inside a REAL VS Code window: it pushes a plan plus two allowances into the view, finds `[data-testid="usage-strip"]` in the live webview, checks 42% / 85% with the amber class, asserts there is no currency, then pushes a 100% limit and waits for the red bar and `data-state="limit_week"`. Screenshots: `xx-usage-strip`, `xx-usage-strip-limit`.
+- **Two harness fixes found while writing that test:** `test/vscode/runTest.mjs` now forwards `ND_TEST_ONLY` and `LOCAITH_TEST_BACKEND_URL` to the extension host (before, `ND_TEST_ONLY=usage` silently ran the whole suite and died on the fake-backend account gate), and the account gate is skipped for the steps that do not need a login.
+- **Correction of the 0.7.13 entry below:** it was first dated 2026-11-07 — eleven days before the release it follows — and credited 0.7.13 with changes that had shipped in 0.6.31 and 0.7.4. Both are fixed; 0.7.13 itself only adds the allowance strip.
+
+## 0.7.13 - 2026-11-24
+
+- **Your Locaith account usage is visible while you chat.** A single thin line under the conversation shows the plan and how much of the 5-hour window and the weekly window you have used (free accounts: the one-off free tokens), with a bar that turns amber at 80% and red at 100% and the reset countdown in the tooltip. Percentages only — never an amount of money. At or near the limit a link opens the plan page. It reads the same `GET /account` the Settings card already used, is refreshed when the chat opens (not only after the first turn) and after every turn while you use a Locaith model.
+
+The task-panel removal, the `[turn N/M]` budget line and the "continue" fix shipped in 0.6.31; restart restoring your conversation shipped in 0.7.4.
 
 ## 0.7.12 - 2026-11-18
 

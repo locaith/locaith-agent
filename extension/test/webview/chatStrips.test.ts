@@ -73,3 +73,61 @@ describe('khung chat: các lối tắt không cần Cài đặt', () => {
     expect(read('App.tsx')).toContain('<div class="pane pane-fill">');
   });
 });
+
+/**
+ * (0.7.13) Dai "han muc tai khoan Locaith" duoi khung chat: nguoi dung dang chat phai thay minh da dung bao nhieu.
+ * Kiem o muc ma nguon (nhu cac dai khac trong tep nay) vi test nay khong render Preact: no ghim hop dong
+ * "chuoi + class + khoa i18n + loi goi host" de mot lan sua vo tinh khong lam mat dai.
+ */
+describe('dai han muc tai khoan Locaith (0.7.13)', () => {
+  const strip = read('components/UsageStrip.tsx');
+
+  it('duoc gan vao chan khung chat khi dang nhap Locaith, va chi khi co so lieu', () => {
+    expect(read('App.tsx')).toContain('{view.locaith?.usage && <UsageStrip usage={view.locaith.usage} />}');
+    expect(read('App.tsx')).toContain("import { UsageStrip } from './components/UsageStrip';");
+    // Bang Tasks da bo han khoi giao dien (0.7.x): khong con duong nao render no.
+    expect(read('App.tsx')).not.toContain('TodoPanel');
+  });
+
+  it('ba loai han muc (phien 5 gio, tuan, token mien phi) + nhan goi', () => {
+    expect(strip).toContain("usage.session");
+    expect(strip).toContain("usage.week");
+    expect(strip).toContain("usage.credit");
+    expect(strip).toContain('planName(usage.plan)');
+    expect(strip).toContain('usage.sessionHours ?? 5');
+  });
+
+  it('thanh do dung nguong: >=80% vang, 100% do; co role=progressbar', () => {
+    expect(strip).toContain("p >= 100 ? 'is-full' : p >= 80 ? 'is-high' : ''");
+    expect(strip).toContain('role="progressbar"');
+    const css = read('styles/components.css');
+    expect(css).toMatch(/\.usage-strip\s*\{/);
+    expect(css).toMatch(/\.us-fill\.is-high/);
+    expect(css).toMatch(/\.us-fill\.is-full/);
+  });
+
+  it('chi phan tram, khong bao gio hien so tien', () => {
+    expect(strip).toContain('percentText(r.percent)');
+    // ` ${p} ` trong template literal khong phai tien: chi bat ki hieu tien di kem CHU SO, hoac API dinh dang tien.
+    expect(strip).not.toMatch(/[$€₫]\s?\d/);
+    expect(strip).not.toMatch(/Intl\.NumberFormat|toLocaleString|currency/i);
+  });
+
+  it('can han muc thi co duong mo trang goi', () => {
+    expect(strip).toContain('openExternalLink(usage.upgradeUrl)');
+    expect(strip).toContain("usage.state.startsWith('limit')");
+    expect(strip).toContain("usage.state === 'free_exhausted'");
+  });
+
+  it('moi khoa i18n co du hai ngon ngu', () => {
+    for (const k of ['usage.title', 'usage.plan', 'usage.free', 'usage.session', 'usage.week', 'usage.credit', 'usage.creditNote', 'usage.resets', 'usage.buy', 'usage.upgrade']) {
+      expect(defs(k), k).toBe(2);
+    }
+  });
+
+  it('doc so lieu ngay khi mo khung chat, khong cho luot dau', () => {
+    const ctl = fs.readFileSync(path.resolve(__dirname, '../../src/host/chatController.ts'), 'utf8');
+    const init = ctl.slice(ctl.indexOf('async sendInit('));
+    expect(init.slice(0, 1500)).toContain('this.refreshLocaithUsage({ always: true });');
+  });
+});

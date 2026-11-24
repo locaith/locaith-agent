@@ -50,12 +50,17 @@ exports.run = async function run() {
   await vscode.commands.executeCommand('locaithAgent.chatView.focus');
   await waitFor(() => api.sidebar.stats.ready > 0, 30000, 'webview gửi tin nhắn "ready" (script giao diện chưa chạy?)');
 
-  // 2b. (0.5.2) CỔNG TÀI KHOẢN: chưa đăng nhập thì mọi thứ bị khoá; đăng nhập đầy đủ bằng luồng OAuth/PKCE thật (URI handler của VS Code thật)
-  await testAccountGate(api);
+  // 2b. (0.5.2) CỔNG TÀI KHOẢN: chưa đăng nhập thì mọi thứ bị khoá; đăng nhập đầy đủ bằng luồng OAuth/PKCE thật (URI handler của VS Code thật).
+  // Khi chạy MỘT bước bằng ND_TEST_ONLY mà bước đó không cần tài khoản (vd. `usage`), bỏ qua cổng: cổng cần backend giả
+  // (LOCAITH_TEST_BACKEND_URL) nên máy không có backend sẽ chết ở đây trước khi tới bước cần kiểm.
+  const NEEDS_ACCOUNT = new Set(['remote', 'relay', 'queue']);
+  const only = process.env.ND_TEST_ONLY ?? '';
+  if (!only || NEEDS_ACCOUNT.has(only)) await testAccountGate(api);
+  else console.log(`ND_TEST_ONLY=${only}: bỏ qua cổng tài khoản (bước này không cần đăng nhập)`);
 
   // ND_TEST_ONLY=<tên>: chỉ chạy MỘT bước (đã đăng nhập) để chẩn đoán nhanh — remote · relay · bypass · bio · queue
   if (process.env.ND_TEST_ONLY) {
-    const fn = { remote: testRemote, relay: testRelay, bypass: testBypassMode, bio: testBioAutoSetup, queue: testQueueFlow, media: testMediaPreview, openfile: testOpenFileOutside }[process.env.ND_TEST_ONLY];
+    const fn = { remote: testRemote, relay: testRelay, bypass: testBypassMode, bio: testBioAutoSetup, queue: testQueueFlow, media: testMediaPreview, openfile: testOpenFileOutside, usage: testUsageStrip }[process.env.ND_TEST_ONLY];
     if (!fn) throw new Error('ND_TEST_ONLY không hợp lệ: ' + process.env.ND_TEST_ONLY);
     await fn(api);
     return;
@@ -345,7 +350,26 @@ async function testMediaPreview(api) {
         }
         if (!frame) await sleep(400);
       }
-      assert.ok(frame, 'Không thấy khung chat (webview) có dòng nhóm «N lệnh gọi công cụ» của lượt đã xong trong VS Code thật');
+      if (!frame) {
+      // Chẩn đoán: in ra những gì webview thật đang có, để biết dải không vẽ vì thiếu dữ liệu hay vì sai khung.
+      const dump = [];
+      for (const page of await browser.pages()) {
+        for (const f of page.frames()) {
+          try {
+            const info = await f.evaluate(() => ({
+              hasApp: !!document.querySelector('.app'),
+              cls: document.querySelector('.app') ? document.querySelector('.app').className : '',
+              text: (document.body ? document.body.innerText : '').slice(0, 300).replace(/\s+/g, ' '),
+            }));
+            dump.push({ url: f.url().slice(0, 90), ...info });
+          } catch {
+            /* khung đã đóng */
+          }
+        }
+      }
+      console.log('CHANDOAN locaith =', JSON.stringify(api.sidebar.snapshot().view.locaith));
+      console.log('CHANDOAN frames =', JSON.stringify(dump, null, 1).slice(0, 3000));
+    }    assert.ok(frame, 'Không thấy khung chat (webview) có dòng nhóm «N lệnh gọi công cụ» của lượt đã xong trong VS Code thật');
       await frame.waitForFunction(
         () => {
           const last = [...document.querySelectorAll('.turn-assistant')].pop();
@@ -1024,6 +1048,102 @@ async function signInFlow(api) {
   return via;
 }
 
+/**
+ * (0.7.13) Dải «hạn mức tài khoản Locaith» trong KHUNG CHAT THẬT của VS Code.
+ *
+ * Bộ kiểm này chạy trong VS Code thật với webview thật, nên nó trả lời đúng câu hỏi "tính năng đã LÊN GIAO DIỆN chưa",
+ * chứ không chỉ "mã có tồn tại". Cổng tài khoản đã qua bước đăng nhập ở trên; ở đây ta đẩy thẳng một bản `locaith.usage`
+ * vào view (máy kiểm không có tài khoản thật để gọi GET /account) rồi đọc DOM của webview để xác nhận:
+ * có dải, đủ 2 thanh 5 giờ + tuần, đúng phần trăm, đủ màu ngưỡng, KHÔNG có số tiền, có nút mở trang gói.
+ */
+async function testUsageStrip(api) {
+  const sb = api.sidebar;
+  // BẮT BUỘC trước khi tìm frame: webview chỉ tồn tại khi panel đã được focus (các ca khác trong tệp cũng làm vậy).
+  await vscode.commands.executeCommand('locaithAgent.chatView.focus');
+  await sb.showScreen('chat');
+  await sleep(800);
+  const usage = {
+    plan: 'plus',
+    state: 'ok',
+    session: { percent: 42, resetsInS: 3600 },
+    week: { percent: 85, resetsInS: 86400 },
+    sessionHours: 5,
+    canUpgrade: true,
+    upgradeUrl: 'https://locaith.ai/pricing',
+    at: Date.now(),
+  };
+  // `patch` là private của TS nhưng vẫn là phương thức thật lúc chạy — đúng đường mà chính controller dùng để đẩy view.
+  // LƯU Ý: `refreshLocaithUsage({always:true})` ở sendInit chạy BẤT ĐỒNG BỘ rồi `patch({locaith})`; chưa đăng nhập thì
+  // bản đó KHÔNG có usage nên nó xoá mất số ta vừa đẩy vào. Vì vậy đẩy lại mỗi vòng cho tới khi webview vẽ ra dải.
+  // Phải "đăng nhập" luôn: chưa signedIn thì App chỉ vẽ AccountGate, khung chat (và mọi dải dưới nó) không tồn tại.
+  const signedIn = { status: 'signedIn', user: { name: 'Test', email: 'test@locaith.ai' } };
+  const pushUsage = (extra) => sb.patch({ account: signedIn, locaith: { ...(sb.snapshot().view.locaith || {}), noticeVersion: 0, accepted: true, card: false, ...extra } });
+
+  const puppeteer = require('puppeteer-core');
+  const browser = await puppeteer.connect({ browserURL: 'http://127.0.0.1:9339', defaultViewport: null });
+  try {
+    let frame = null;
+    const t0 = Date.now();
+    while (!frame && Date.now() - t0 < 30000) {
+      pushUsage({ usage });
+      for (const page of await browser.pages()) {
+        for (const f of page.frames()) {
+          try {
+            if (await f.evaluate(() => !!document.querySelector('.app') && !!document.querySelector('[data-testid="usage-strip"]'))) frame = f;
+          } catch {
+            /* khung chưa sẵn sàng */
+          }
+          if (frame) break;
+        }
+        if (frame) break;
+      }
+      if (!frame) await sleep(400);
+    }
+    assert.ok(frame, 'Không thấy dải hạn mức [data-testid="usage-strip"] trong khung chat thật của VS Code');
+    await sleep(400);
+    const info = await frame.evaluate(() => {
+      const el = document.querySelector('[data-testid="usage-strip"]');
+      const bars = [...el.querySelectorAll('[role="progressbar"]')].map((b) => ({
+        label: b.getAttribute('aria-label'),
+        now: Number(b.getAttribute('aria-valuenow')),
+        cls: b.firstElementChild ? b.firstElementChild.className : '',
+      }));
+      return {
+        text: el.textContent.replace(/\s+/g, ' ').trim(),
+        state: el.getAttribute('data-state'),
+        bars,
+        hasBuy: [...el.querySelectorAll('button')].some((b) => /Nâng cấp|Mua gói|Upgrade|Buy/i.test(b.textContent || '')),
+        rect: { w: el.getBoundingClientRect().width, h: el.getBoundingClientRect().height },
+      };
+    });
+    assert.strictEqual(info.state, 'ok', `data-state phải là ok: ${JSON.stringify(info)}`);
+    assert.strictEqual(info.bars.length, 2, `Phải có 2 thanh (5 giờ + tuần): ${JSON.stringify(info.bars)}`);
+    assert.deepStrictEqual(info.bars.map((b) => b.now), [42, 85], `Phần trăm phải khớp dữ liệu: ${JSON.stringify(info.bars)}`);
+    assert.match(info.bars[1].cls, /is-high/, `85% phải ở mức cảnh báo (vàng): ${info.bars[1].cls}`);
+    assert.match(info.text, /42%/, 'Phải hiện 42%');
+    assert.match(info.text, /85%/, 'Phải hiện 85%');
+    // Chỉ phần trăm, không bao giờ có số tiền.
+    assert.doesNotMatch(info.text, /[$€₫]\s?\d|\b(USD|VND)\b/, `Không được hiện số tiền: ${info.text}`);
+    assert.ok(info.hasBuy, 'Đã ≥80% thì phải có nút mở trang gói');
+    assert.ok(info.rect.w > 100 && info.rect.h > 8, `Dải phải thật sự có kích thước: ${JSON.stringify(info.rect)}`);
+    await shot('xx-usage-strip');
+
+    // Chạm ngưỡng: 100% → thanh đỏ + cả dải chuyển trạng thái giới hạn.
+    pushUsage({ usage: { ...usage, state: 'limit_week', week: { percent: 100, resetsInS: 3600 } } });
+    await frame.waitForFunction(
+      () => {
+        const el = document.querySelector('[data-testid="usage-strip"]');
+        return el && el.getAttribute('data-state') === 'limit_week' && !!el.querySelector('.us-fill.is-full');
+      },
+      { timeout: 10000 },
+    );
+    await sleep(300);
+    await shot('xx-usage-strip-limit');
+  } finally {
+    browser.disconnect();
+  }
+  await sb.showScreen('chat');
+}
 async function testAccountGate(api) {
   const A = api.account;
   const cfg = vscode.workspace.getConfiguration('locaithAgent');
