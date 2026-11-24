@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.7.15 - 2026-11-24
+
+- **The allowance lives in the prompt box now, and `/usage` shows the detail.** The strip under the chat is gone: one thin line sits inside the composer (plan + 5-hour window + week, percentages only, amber at 80%, red at 100%), and `/usage` prints the full breakdown — each window with its reset countdown and a link to the plans — in the conversation transcript where you are already looking. `usageInlineText` / `usageLevel` live in `src/shared/usageFormat.ts` so the extension and the web page word it identically.
+- **Usage refresh now follows Claude Code's schedule** (`src/core/account/usageRefresh.ts`, mirrored in `locaith-ai-v2/src/screens/remote/usageLine.ts`): read at session start, after each assistant turn, after `/compact`, on a permission-mode change, and when a limit window reaches its reset moment — plus `/usage` on demand. There is no polling timer. Reads are coalesced (300 ms debounce) and floored at 5 s apart, a window past its reset is dropped instead of showing a stale percentage, and a single reset timer is rescheduled on each read (as Claude Code redraws at `resets_at`).
+- **locaith.ai Remote shows the same line.** The extension now sends `locaithUsage` in the remote snapshot and in every patch (`sanitizeLocaithUsage` clamps percentages, strips anything but an http(s) upgrade link, and never forwards an amount), and the web composer renders it above the input, live, without waiting for a reload.
+
+Tests: 4042 passing across 269 files in the extension (typecheck green on all three configs); the web helper was verified with a standalone smoke run (10/10 cases: both wordings, the three tones, the free plan, and dropping an expired window).
 ## 0.7.14 - 2026-11-24
 
 - **The account allowance strip now has regression coverage.** `test/webview/chatStrips.test.ts` pins the contract (attached to the chat footer when signed in, the three allowance kinds, the 80% / 100% colour thresholds, percentages only — never money, the upgrade link, both languages, and the `sendInit` refresh call), and `ND_TEST_ONLY=usage node test/vscode/runTest.mjs` drives it inside a REAL VS Code window: it pushes a plan plus two allowances into the view, finds `[data-testid="usage-strip"]` in the live webview, checks 42% / 85% with the amber class, asserts there is no currency, then pushes a 100% limit and waits for the red bar and `data-state="limit_week"`. Screenshots: `xx-usage-strip`, `xx-usage-strip-limit`.

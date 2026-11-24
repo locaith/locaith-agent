@@ -1,6 +1,7 @@
 /** Tên các biểu tượng SVG có sẵn (vẽ trong components/Icons.tsx). Tách riêng để module thuần túy dùng được. */
 export type IconName =
   | 'sparkle'
+  | 'gauge'
   | 'plus'
   | 'history'
   | 'sliders'

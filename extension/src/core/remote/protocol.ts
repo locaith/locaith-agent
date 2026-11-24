@@ -9,7 +9,7 @@
  * webview trong VS Code dùng, nên áp bằng cùng một reducer (shared/transcript.ts). Mất kết nối thì xin lại từ `seq` đã nhận; quá cũ thì nhận snapshot mới.
  */
 
-import type { AttachmentInfo, ContextInfo, PermissionMode, QueuedInfo, SessionMeterView, SessionSummary, SuggestionOption, ThinkingLevel, TItem, TodoItem, UiEvent, WebviewMessage } from '../../shared/protocol';
+import type { AttachmentInfo, ContextInfo, PermissionMode, QueuedInfo, SessionMeterView, SessionSummary, SuggestionOption, ThinkingLevel, TItem, TodoItem, UiEvent, WebviewMessage , LocaithUsageView } from '../../shared/protocol';
 import { PERMISSION_MODES, THINKING_LEVELS } from '../../shared/protocol';
 import type { CheckpointTurn, RewindView } from '../../shared/checkpoints'; // (lane:checkpoints-rewind)
 
@@ -74,6 +74,12 @@ export interface RemoteState {
   rewind?: RewindView | null;
   /** (lane:bg-tasks) Tác vụ nền của cuộc trò chuyện (tuỳ chọn — trang cũ bỏ qua). */
   bgTasks?: import('../../shared/bgTasks').BgTaskView[];
+
+  /**
+   * (0.7.15) Hạn mức tài khoản Locaith cho trang Remote (chỉ phần trăm, không số tiền).
+   * Tuỳ chọn: trang cũ bỏ qua. `null` = chưa đăng nhập / chưa có số liệu.
+   */
+  locaithUsage?: LocaithUsageView | null;
 }
 
 export type RemoteStreamMsg =

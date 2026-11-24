@@ -144,6 +144,11 @@ const vi = {
   'locaith.set.noticeToggle': 'Xem thông báo dữ liệu',
   'locaith.set.hint': 'Rút lại chỉ tắt mô hình Locaith trên máy này; bản ghi đồng ý cũ vẫn nằm ở máy chủ làm bằng chứng (muốn xoá dữ liệu đã lưu, hãy liên hệ hỗ trợ Locaith).',
   // (0.7.9) Hạn mức kiểu Anthropic: phiên 5 giờ + tuần cho gói trả phí, token miễn phí một lần cho tài khoản miễn phí. Chỉ phần trăm và giờ làm mới.
+  'usage.sessionShort': '{hours} giờ',
+  'usage.titleFull': 'Hạn mức tài khoản',
+  'usage.weekShort': 'tuần',
+  'usage.creditShort': 'token',
+
   'usage.title': 'Hạn mức',
   'usage.plan': 'Gói {plan}',
   'usage.free': 'Tài khoản miễn phí',
@@ -1302,6 +1307,11 @@ const en: Record<I18nKey, string> = {
   'locaith.set.withdraw': 'Withdraw consent',
   'locaith.set.noticeToggle': 'Show the data notice',
   'locaith.set.hint': 'Withdrawing only turns the Locaith model off on this machine; the earlier consent record stays on the server as an audit trail (to have stored data deleted, contact Locaith support).',
+  'usage.sessionShort': '{hours}-hour',
+  'usage.titleFull': 'Account allowance',
+  'usage.weekShort': 'week',
+  'usage.creditShort': 'tokens',
+
   'usage.title': 'Usage',
   'usage.plan': '{plan} plan',
   'usage.free': 'Free account',

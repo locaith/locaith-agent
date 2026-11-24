@@ -10,6 +10,13 @@ const SHAPES: Record<IconName, VNode> = {
     </>
   ),
   plus: <path d="M12 5v14M5 12h14" />,
+  gauge: (
+    <>
+      <path d="M3.5 17a9 9 0 1 1 17 0" />
+      <path d="M12 13.5 16 9.5" />
+      <circle cx="12" cy="14" r="1.4" />
+    </>
+  ),
   store: (
     <>
       <path d="M3 9l1.5-5h15L21 9" />

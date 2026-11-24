@@ -1,3 +1,4 @@
+import type { LocaithUsageView } from '../../shared/protocol';
 /**
  * Rút gọn trạng thái / sự kiện của khung chat trước khi gửi ra ngoài máy: bỏ ảnh thô, nội dung tệp tải lên, cài đặt, khoá; cắt các chuỗi dài
  * (kết quả công cụ, đối số, diff, suy luận). Thuần tuý, không import `vscode`.
@@ -333,6 +334,32 @@ export function sanitizeRewind(r: ViewState['rewind']): RewindView | null | unde
   };
 }
 
+/**
+ * (0.7.15) Hạn mức tài khoản Locaith gửi sang trang Remote.
+ * Chỉ những trường trang web cần: gói, trạng thái, hai cửa sổ (phần trăm + giây còn lại) và mốc đọc.
+ * KHÔNG bao giờ có số tiền hay thông tin tài khoản khác.
+ */
+function sanitizeLocaithUsage(u: LocaithUsageView | null | undefined): LocaithUsageView | null {
+  if (!u || typeof u !== "object") return null;
+  const url = typeof u.upgradeUrl === "string" ? u.upgradeUrl.slice(0, 300) : "";
+  // Chỉ giữ liên kết http(s): một trường do máy chủ điền cũng không được biến thành javascript: ở phía web.
+  return {
+    plan: typeof u.plan === "string" ? u.plan.slice(0, 20) : "",
+    state: typeof u.state === "string" && u.state ? u.state.slice(0, 30) : "unknown",
+    at: typeof u.at === "number" ? u.at : Date.now(),
+    canUpgrade: u.canUpgrade === true,
+    upgradeUrl: /^https?:\/\//i.test(url) ? url : "",
+    ...(typeof u.sessionHours === "number" ? { sessionHours: u.sessionHours } : {}),
+    ...(typeof u.weekHours === "number" ? { weekHours: u.weekHours } : {}),
+    ...(u.session && typeof u.session.percent === "number"
+      ? { session: { percent: Math.max(0, Math.min(100, u.session.percent)), ...(typeof u.session.resetsInS === "number" ? { resetsInS: Math.max(0, u.session.resetsInS) } : {}) } }
+      : {}),
+    ...(u.week && typeof u.week.percent === "number"
+      ? { week: { percent: Math.max(0, Math.min(100, u.week.percent)), ...(typeof u.week.resetsInS === "number" ? { resetsInS: Math.max(0, u.week.resetsInS) } : {}) } }
+      : {}),
+    ...(u.credit && typeof u.credit.percent === "number" ? { credit: { percent: Math.max(0, Math.min(100, u.credit.percent)) } } : {}),
+  };
+}
 export function toRemoteState(view: ViewState, host: RemoteHostInfo, opts: { canBypass: boolean }): RemoteState {
   const { transcript, omitted } = sanitizeTranscript(view.transcript);
   return {
@@ -360,6 +387,7 @@ export function toRemoteState(view: ViewState, host: RemoteHostInfo, opts: { can
     ...(view.checkpoints ? { checkpoints: sanitizeCheckpoints(view.checkpoints) } : {}),
     ...(view.rewind ? { rewind: sanitizeRewind(view.rewind) } : {}),
     ...(view.bgTasks?.length ? { bgTasks: capBgTasks(view.bgTasks) } : {}), // (lane:bg-tasks)
+    locaithUsage: sanitizeLocaithUsage(view.locaith?.usage), // (0.7.15) hạn mức tài khoản cho trang Remote
   };
 }
 
@@ -386,6 +414,7 @@ export function sanitizePatch(p: Partial<ViewState>): Partial<Omit<RemoteState, 
   if (p.checkpoints !== undefined) out.checkpoints = sanitizeCheckpoints(p.checkpoints);
   if (p.rewind !== undefined) out.rewind = sanitizeRewind(p.rewind);
   if ('bgTasks' in p) out.bgTasks = capBgTasks(p.bgTasks); // (lane:bg-tasks) vắng/undefined = hết tác vụ → []
+  if ('locaith' in p) out.locaithUsage = sanitizeLocaithUsage(p.locaith?.usage); // (0.7.15) hạn mức cập nhật realtime
   return Object.keys(out).length ? out : null;
 }
 

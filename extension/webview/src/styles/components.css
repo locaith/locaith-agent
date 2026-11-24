@@ -3016,3 +3016,86 @@ button.chip-main:hover {
 .us-buy {
   margin-left: auto;
 }
+
+/* ── (0.7.15) Hạn mức nằm trong ô nhập: một dòng chữ, không chiếm hàng riêng ── */
+.composer-usage {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  max-width: 100%;
+  padding: 1px 6px;
+  margin-right: auto;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--fg-faint);
+  font-size: var(--nd-fs-xs);
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.composer-usage .cu-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.composer-usage:hover {
+  color: var(--fg);
+  background: color-mix(in srgb, var(--fg) 8%, transparent);
+}
+/* Gần cạn: vàng. Đã cạn: đỏ. Chỉ đổi chữ + icon, không tô kín nền (giữ đúng ý chủ dự án). */
+.composer-usage.is-1 {
+  color: var(--nd-working, #f5b301);
+}
+.composer-usage.is-2 {
+  color: var(--danger);
+  font-weight: 600;
+}
+
+/* ── Hạn mức nằm trong ô nhập: một dòng chữ, không chiếm hàng riêng ── */
+.cu-usage {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+  max-width: 100%;
+  padding: 1px 6px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--fg-faint);
+  font: inherit;
+  font-size: var(--nd-fs-xs);
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+  overflow: hidden;
+  white-space: nowrap;
+}
+.cu-usage:hover {
+  color: var(--fg);
+  background: color-mix(in srgb, var(--fg) 8%, transparent);
+}
+.cu-usage .cu-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+/* Gần cạn: vàng. Đã cạn: đỏ. Chỉ đổi chữ + icon, không tô kín nền. */
+.cu-usage.is-1 {
+  color: var(--nd-working, #f5b301);
+}
+.cu-usage.is-2 {
+  color: var(--danger);
+  font-weight: 600;
+}
+
+/* (0.7.15) Dòng hạn mức riêng trong khung ô nhập — cách textarea 2px, không chiếm hàng của chip */
+.composer-usageline {
+  display: flex;
+  align-items: center;
+  padding: 0 2px 2px;
+  min-height: 16px;
+}
+.composer-usageline .cu-usage {
+  max-width: 100%;
+}

@@ -20,6 +20,8 @@ import { openExternalOnce } from '../core/host/openOnce'; // (lane:customer-bugs
 import { findToolImage } from '../shared/toolImages'; // (lane:customer-bugs)
 import { loadProjectInstructions } from '../core/engine/instructions';
 import { resumeInstruction } from '../core/engine/resume';
+import { msUntilNextReset, shouldRefresh, type UsageTrigger } from '../core/account/usageRefresh';
+import { planName, spanText } from '../shared/usageFormat';
 import { MEMORY_DIR, MEMORY_INDEX, type MemoryScope, type MemorySnapshot } from '../core/engine/memory';
 import { t, type Lang } from '../core/engine/strings';
 import { Summarizer } from '../core/engine/summarizer';
@@ -145,6 +147,7 @@ const SLASH: Record<Lang, SlashCommandInfo[]> = {
     { name: 'mode', description: 'Đổi chế độ quyền — /mode plan' },
     { name: 'thinking', description: 'Đổi mức suy luận — /thinking high' },
     { name: 'skills', description: 'Xem các kỹ năng có sẵn' },
+    { name: 'usage', description: 'Xem hạn mức tài khoản Locaith (đã dùng bao nhiêu, làm mới khi nào)' },
     { name: 'remote', description: 'Mở Remote trên locaith.ai — điều khiển chat này từ trình duyệt/điện thoại' },
     { name: 'retry', description: 'Chạy lại tin nhắn cuối' },
     { name: 'export', description: 'Xuất cuộc trò chuyện ra Markdown' },
@@ -159,6 +162,7 @@ const SLASH: Record<Lang, SlashCommandInfo[]> = {
     { name: 'mode', description: 'Change permission mode — /mode plan' },
     { name: 'thinking', description: 'Change reasoning level — /thinking high' },
     { name: 'skills', description: 'List available skills' },
+    { name: 'usage', description: 'Show your Locaith account allowance (how much is used, when it resets)' },
     { name: 'remote', description: 'Open Remote on locaith.ai — control this chat from a browser/phone' },
     { name: 'retry', description: 'Re-run the last message' },
     { name: 'export', description: 'Export the conversation to Markdown' },
@@ -236,6 +240,9 @@ export class ChatController implements vscode.Disposable {
   private queue: QueuedTurn[] = [];
   /** Hàng đợi tuần tự của các LƯỢT CHẠY: mỗi lượt chờ lượt trước nhả xong mới ghi vào lịch sử (xem runAgentTurn). Lời hứa này không bao giờ bị từ chối. */
   private turnLock: Promise<void> = Promise.resolve();
+  /** (0.7.15) Lần đọc hạn mức gần nhất + hẹn giờ lúc cửa sổ làm mới. */
+  private usageReadAt = 0;
+  private usageResetTimer: ReturnType<typeof setTimeout> | undefined;
   /** Số lượt đang chạy hoặc đang chờ khoá (để hạ cờ `starting`/`agentBusy` đúng lúc, không sớm). */
   private pendingTurns = 0;
   /** Kết cục của lần chạy gần nhất ('error' = chưa có lần nào kết thúc bình thường): quyết định giao hay trả lại hàng đợi. */
@@ -818,7 +825,7 @@ export class ChatController implements vscode.Disposable {
     if (this.d.locaith) await this.d.locaith.refresh().catch(() => undefined);
     if (this.disposed) return;
     this.patch({ provider: this.view.provider, model: this.view.model, locaith: this.locaithView(), skills: this.skillSummaries(), context: this.contextInfo() });
-    this.refreshLocaithUsage({ always: true }); // (0.7.9) vừa đăng nhập: đọc mức đã dùng một lần
+    this.refreshLocaithUsage({ always: true, trigger: 'session-start' }); // (0.7.9) vừa đăng nhập: đọc mức đã dùng một lần
     void this.d.providers
       .refresh([LOCAITH_PROVIDER_ID], true)
       .then(async () => {
@@ -837,7 +844,7 @@ export class ChatController implements vscode.Disposable {
     // Làm mới danh sách model ở nền (bộ đệm 1 giờ nên rất rẻ), rồi cập nhật giao diện.
     void this.refreshProvidersInBackground();
     // Hạn mức tài khoản Locaith: đọc ngay khi mở khung chat để dải «đã dùng» có số thật, không chờ tới lượt đầu.
-    this.refreshLocaithUsage({ always: true });
+    this.refreshLocaithUsage({ always: true, trigger: 'session-start' });
     this.maybeAutoSetupBio();
   }
 
@@ -1031,6 +1038,8 @@ export class ChatController implements vscode.Disposable {
         break;
       case 'mode':
         this.patch({ mode: ev.mode });
+        // Claude Code vẽ lại dải hạn mức khi đổi chế độ quyền; ở đây là một trong các mốc đọc lại.
+        this.refreshLocaithUsage({ trigger: 'permission-mode' });
         break;
       case 'options':
         // Lựa chọn hướng đi: hiện thành nút dưới cuộc trò chuyện (nguồn sự thật là phiên).
@@ -1107,7 +1116,7 @@ export class ChatController implements vscode.Disposable {
       case 'locaith_consent':
         return this.onLocaithConsent(m.action);
       case 'locaith_refresh': // (0.7.10) giao diện vừa mở Cài đặt: đọc lại mức đã dùng của hạn mức (tối đa 15 giây một lần)
-        this.refreshLocaithUsage({ always: true });
+        this.refreshLocaithUsage({ always: true, trigger: 'session-start' });
         return;
       case 'send': {
         this.recordPrompt(m.text); // (0.7.4) lịch sử ↑/↓: mọi tin người dùng gửi, kể cả tin vào hàng đợi và tin từ Remote
@@ -1742,7 +1751,11 @@ export class ChatController implements vscode.Disposable {
       takeQueued: () => this.takeForEngine(),
       mcpInstructions: () => this.d.mcp.instructions(),
       outputStyle: () => commandsOutputStyle(this), // (lane:commands-agents)
-      onCompacted: (info) => this.saveCompactionToMemory(info.session, info.summary),
+      onCompacted: (info) => {
+        // Nén xong = một mốc Claude Code cũng dùng để vẽ lại dải hạn mức.
+        this.refreshLocaithUsage({ trigger: 'compact' });
+        return this.saveCompactionToMemory(info.session, info.summary);
+      },
       beforeCompact: (info) => this.hookService().preCompact(info.trigger, info.signal), // (lane:hooks)
       onQueue: (q) => this.setModelQueue(q),
       onConsentRequired: () => this.onConsentRequired(),
@@ -1804,7 +1817,7 @@ export class ChatController implements vscode.Disposable {
     this.emit({ t: 'run_state', running });
     if (!running) {
       this.setModelQueue(null);
-      this.refreshLocaithUsage(); // (0.7.9) lượt xong: cập nhật mức đã dùng của hạn mức (chỉ khi đang dùng mô hình Locaith; giãn cách 15 giây)
+      this.refreshLocaithUsage({ trigger: 'turn-end' }); // lượt xong: đọc lại hạn mức (chỉ khi đang dùng mô hình Locaith, có khoảng chặn)
       this.flushNow();
       void this.saveNow().then(async () => {
         const extra = { ...(await this.listings()), context: this.contextInfo(), ...this.meterPatch() }; // (lane:sessions-ux) + meter
@@ -2043,7 +2056,7 @@ export class ChatController implements vscode.Disposable {
 
   async showScreen(screen: 'chat' | 'settings' | 'history' | 'market'): Promise<void> {
     await this.sendInit(screen);
-    if (screen === 'settings') this.refreshLocaithUsage({ always: true }); // (0.7.9) thẻ «Mô hình Locaith» có mức dùng — đọc mới khi mở
+    if (screen === 'settings') this.refreshLocaithUsage({ always: true, trigger: 'session-start' }); // (0.7.9) thẻ «Mô hình Locaith» có mức dùng — đọc mới khi mở
     if (screen === 'market') await this.sendMarket();
   }
 
@@ -2169,16 +2182,42 @@ export class ChatController implements vscode.Disposable {
    * (0.7.9) Đọc lại mức đã dùng của hạn mức (GET /account) rồi cập nhật khung Cài đặt. Mặc định chỉ khi phiên đang dùng mô hình Locaith (lượt xong, đổi model);
    * `always` cho chỗ người dùng chủ động xem (mở Cài đặt) và `force` cho lúc vừa bị từ chối vì hạn mức (không chờ giãn cách 15 giây).
    */
-  private refreshLocaithUsage(opts: { force?: boolean; always?: boolean } = {}): void {
+  private refreshLocaithUsage(opts: { trigger?: UsageTrigger; force?: boolean; always?: boolean } = {}): void {
     const c = this.d.locaith;
     if (!c?.refreshUsage || this.disposed) return;
-    if (!opts.always && !opts.force && this.session.provider !== LOCAITH_PROVIDER_ID) return;
+    const trigger: UsageTrigger = opts.trigger ?? (opts.force ? 'manual' : 'turn-end');
+    const signedIn = this.d.account ? this.d.account.view().status === 'signedIn' : false;
+    const now = Date.now();
+    const usingLocaith = this.session.provider === LOCAITH_PROVIDER_ID;
+    if (!shouldRefresh({ trigger, now, lastAt: this.usageReadAt, signedIn, usingLocaith, always: opts.always })) return;
+    this.usageReadAt = now;
+    const forced = opts.force === true || trigger === 'manual' || trigger === 'window-reset';
     void c
-      .refreshUsage(opts.force === true)
+      .refreshUsage(forced)
       .then(() => {
-        if (!this.disposed) this.patch({ locaith: this.locaithView() });
+        if (this.disposed) return;
+        this.patch({ locaith: this.locaithView() });
+        this.scheduleUsageReset();
       })
       .catch(() => undefined);
+  }
+
+  /**
+   * Hẹn MỘT lần đọc đúng lúc một cửa sổ hạn mức làm mới — Claude Code cũng vẽ lại dải của họ khi mốc resets_at tới.
+   * Luôn thay hẹn giờ cũ nên chỉ có tối đa một timer sống; cửa sổ đã qua mốc thì lần đọc sau tự bỏ đi.
+   */
+  private scheduleUsageReset(): void {
+    if (this.usageResetTimer) clearTimeout(this.usageResetTimer);
+    this.usageResetTimer = undefined;
+    const u = this.d.locaith?.usage?.();
+    if (!u) return;
+    const ms = msUntilNextReset(u, this.usageReadAt);
+    if (ms === null) return;
+    // Chặn trên 12 giờ (cửa sổ tuần dài): lúc đó lượt dùng kế tiếp sẽ đọc lại, khỏi giữ timer xa.
+    this.usageResetTimer = setTimeout(() => {
+      this.usageResetTimer = undefined;
+      this.refreshLocaithUsage({ trigger: 'window-reset' });
+    }, Math.min(Math.max(ms, 1_000), 12 * 60 * 60 * 1000));
   }
 
   /** Cổng báo đang xếp hàng (có `q`) hoặc đã được nhận / dừng (`null`): cập nhật dải đếm ngược ngay trong khung chat. */
@@ -2361,6 +2400,32 @@ export class ChatController implements vscode.Disposable {
       case 'init':
         await vscode.commands.executeCommand('locaithAgent.initProjectFile');
         return true;
+      case 'usage': {
+        // Đọc mới rồi in ra hội thoại: đây là chỗ người dùng đang nhìn, không phải thẻ trong Cài đặt.
+        this.refreshLocaithUsage({ force: true, always: true, trigger: 'manual' });
+        const u = this.view.locaith?.usage;
+        if (!u) {
+          info(
+            vi
+              ? 'Chưa có số liệu hạn mức: bạn chưa đăng nhập tài khoản Locaith, hoặc chưa dùng mô hình Locaith lần nào. Hạn mức tính từ tin nhắn đầu tiên (cửa sổ 5 giờ bắt đầu khi bạn dùng lần đầu).'
+              : 'No allowance data yet: you are not signed in to a Locaith account, or you have not used a Locaith model. Windows start with your first message.',
+          );
+          return true;
+        }
+        const name = planName(u.plan) || (vi ? 'Miễn phí' : 'Free');
+        const pct = (x?: { percent: number }) => (x ? `${Math.round(x.percent)}%` : '—');
+        const when = (s?: number) =>
+          s === undefined ? '' : vi ? ` · làm mới sau ${spanText(Math.max(0, s), 'vi')}` : ` · resets in ${spanText(Math.max(0, s), 'en')}`;
+        const rows: string[] = [`**${name}**`];
+        if (u.session) rows.push(`- ${vi ? `Cửa sổ ${u.sessionHours ?? 5} giờ` : `${u.sessionHours ?? 5}-hour window`}: **${pct(u.session)}**${when(u.session.resetsInS)}`);
+        if (u.week) rows.push(`- ${vi ? 'Tuần' : 'Week'}: **${pct(u.week)}**${when(u.week.resetsInS)}`);
+        if (u.credit) rows.push(`- ${vi ? 'Token miễn phí' : 'Free tokens'}: **${pct(u.credit)}**`);
+        info(
+          `${vi ? 'Hạn mức tài khoản Locaith' : 'Locaith account allowance'}:\n${rows.join('\n')}` +
+            (u.canUpgrade ? `\n\n${vi ? 'Xem các gói' : 'See plans'}: https://locaith.ai/pricing` : ''),
+        );
+        return true;
+      }
       case 'remote':
         // Không chờ lệnh xong mới trả lời khung chat: trang mở ở nền, rồi báo ĐÚNG cách đã mở (vào bằng tài khoản hay phải ghép đôi) khi biết kết quả.
         void this.d.remote?.openWeb().then((how) => {

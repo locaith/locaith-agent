@@ -1089,7 +1089,7 @@ async function testUsageStrip(api) {
       for (const page of await browser.pages()) {
         for (const f of page.frames()) {
           try {
-            if (await f.evaluate(() => !!document.querySelector('.app') && !!document.querySelector('[data-testid="usage-strip"]'))) frame = f;
+            if (await f.evaluate(() => !!document.querySelector('.app') && !!document.querySelector('[data-testid="usage-inline"]'))) frame = f;
           } catch {
             /* khung chưa sẵn sàng */
           }
@@ -1099,41 +1099,31 @@ async function testUsageStrip(api) {
       }
       if (!frame) await sleep(400);
     }
-    assert.ok(frame, 'Không thấy dải hạn mức [data-testid="usage-strip"] trong khung chat thật của VS Code');
+    assert.ok(frame, 'Không thấy dải hạn mức [data-testid="usage-inline"] trong khung chat thật của VS Code');
     await sleep(400);
     const info = await frame.evaluate(() => {
-      const el = document.querySelector('[data-testid="usage-strip"]');
-      const bars = [...el.querySelectorAll('[role="progressbar"]')].map((b) => ({
-        label: b.getAttribute('aria-label'),
-        now: Number(b.getAttribute('aria-valuenow')),
-        cls: b.firstElementChild ? b.firstElementChild.className : '',
-      }));
+      const el = document.querySelector('[data-testid="usage-inline"]');
       return {
         text: el.textContent.replace(/\s+/g, ' ').trim(),
-        state: el.getAttribute('data-state'),
-        bars,
-        hasBuy: [...el.querySelectorAll('button')].some((b) => /Nâng cấp|Mua gói|Upgrade|Buy/i.test(b.textContent || '')),
+        level: el.getAttribute('data-level'),
         rect: { w: el.getBoundingClientRect().width, h: el.getBoundingClientRect().height },
       };
     });
-    assert.strictEqual(info.state, 'ok', `data-state phải là ok: ${JSON.stringify(info)}`);
-    assert.strictEqual(info.bars.length, 2, `Phải có 2 thanh (5 giờ + tuần): ${JSON.stringify(info.bars)}`);
-    assert.deepStrictEqual(info.bars.map((b) => b.now), [42, 85], `Phần trăm phải khớp dữ liệu: ${JSON.stringify(info.bars)}`);
-    assert.match(info.bars[1].cls, /is-high/, `85% phải ở mức cảnh báo (vàng): ${info.bars[1].cls}`);
+    // MỘT dòng chữ trong ô nhập: gói + 5 giờ + tuần, đúng số liệu, không số tiền.
+    assert.strictEqual(info.level, '1', `85% phải ở mức cảnh báo: ${JSON.stringify(info)}`);
+    assert.match(info.text, /Plus/, `Phải hiện tên gói: ${info.text}`);
     assert.match(info.text, /42%/, 'Phải hiện 42%');
     assert.match(info.text, /85%/, 'Phải hiện 85%');
-    // Chỉ phần trăm, không bao giờ có số tiền.
     assert.doesNotMatch(info.text, /[$€₫]\s?\d|\b(USD|VND)\b/, `Không được hiện số tiền: ${info.text}`);
-    assert.ok(info.hasBuy, 'Đã ≥80% thì phải có nút mở trang gói');
-    assert.ok(info.rect.w > 100 && info.rect.h > 8, `Dải phải thật sự có kích thước: ${JSON.stringify(info.rect)}`);
+    assert.ok(info.rect.w > 40 && info.rect.h > 6, `Dải phải thật sự có kích thước: ${JSON.stringify(info.rect)}`);
     await shot('xx-usage-strip');
 
     // Chạm ngưỡng: 100% → thanh đỏ + cả dải chuyển trạng thái giới hạn.
     pushUsage({ usage: { ...usage, state: 'limit_week', week: { percent: 100, resetsInS: 3600 } } });
     await frame.waitForFunction(
       () => {
-        const el = document.querySelector('[data-testid="usage-strip"]');
-        return el && el.getAttribute('data-state') === 'limit_week' && !!el.querySelector('.us-fill.is-full');
+        const el = document.querySelector('[data-testid="usage-inline"]');
+        return el && el.getAttribute('data-level') === '2' && el.className.includes('is-2');
       },
       { timeout: 10000 },
     );

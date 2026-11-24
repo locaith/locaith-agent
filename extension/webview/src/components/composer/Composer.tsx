@@ -16,6 +16,8 @@ import { persistableAttachments } from '../../draftState';
 import { NO_NAV, historyKey, navDetached, type HistoryNav } from '../../../../src/shared/promptHistory'; // (0.7.4) ↑/↓ duyệt lại tin đã gõ
 import { getPromptHistory, recordPrompt } from '../../promptHistory';
 import { cx, readFileAsBase64 } from '../../util';
+import { usageInlineText, usageLevel, type UsageShape } from '../../../../src/shared/usageFormat';
+import { openExternalLink } from '../../externalLink';
 import { makeThumb, shrinkImage } from '../../imageShrink';
 import { loadUiState, post, saveUiState } from '../../vscode';
 import { AttachmentChip, attachmentText } from '../Chips';
@@ -172,6 +174,31 @@ function QueueList({ items }: { items: QueuedInfo[] }) {
   );
 }
 
+/**
+ * Hạn mức tài khoản, gói trong MỘT dòng ngay trong ô nhập prompt (0.7.15).
+ *
+ * Chỉ phần trăm — không số tiền. Bấm: gần cạn thì mở trang gói, bình thường mở trang giá để xem cho biết.
+ * Không tự vẽ thanh tiến trình ở đây để ô nhập không cao thêm; mức cảnh báo thể hiện bằng màu chữ + icon.
+ */
+function UsageInline({ usage }: { usage: UsageShape & { canUpgrade?: boolean; upgradeUrl?: string } }) {
+  const { t } = useApp();
+  const level = usageLevel(usage);
+  const canBuy = level >= 1 && usage.canUpgrade && usage.upgradeUrl;
+  return (
+    <button
+      type="button"
+      class={cx('cu-usage', `is-${level}`)}
+      title={`${t('usage.hint')}${usage.upgradeUrl ? ` · ${usage.upgradeUrl}` : ''}`}
+      aria-label={t('usage.titleFull')}
+      data-testid="usage-inline"
+      data-level={level}
+      onClick={() => openExternalLink(canBuy ? usage.upgradeUrl! : 'https://locaith.ai/pricing')}
+    >
+      <Icon name="gauge" size={12} />
+      <span class="cu-text">{usageInlineText(usage, t)}</span>
+    </button>
+  );
+}
 export function Composer({ view }: { view: ViewState }) {
   const { t, lang, toast, editor, platform, openSettings, settings } = useApp();
   const isBrowser = platform === 'browser';
@@ -811,6 +838,13 @@ export function Composer({ view }: { view: ViewState }) {
           </div>
         )}
 
+        {/* (0.7.15) Hạn mức: một dòng riêng ngay trong khung ô nhập — không chen với chip nên không bị cắt. */}
+        {view.locaith?.usage && (
+          <div class="composer-usageline">
+            <UsageInline usage={view.locaith.usage} />
+          </div>
+        )}
+
         <textarea
           ref={taRef}
           class="composer-input"
@@ -837,6 +871,7 @@ export function Composer({ view }: { view: ViewState }) {
         />
 
         <div class="composer-bar">
+          {/* (0.7.15) Hạn mức tài khoản nằm NGAY TRONG ô nhập: một dòng chữ, không thêm khối nào dưới khung chat. */}
           <div class="bar-left">
             <button
               type="button"
