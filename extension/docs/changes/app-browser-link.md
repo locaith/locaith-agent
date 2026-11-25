@@ -49,7 +49,10 @@ có `/v1/hello`); `test/browser-e2e/link.e2e.test.ts` trên Chrome và Edge th�
 nối, trang báo «Đã kết nối», mở lại liên kết thì «hết hạn hoặc đã dùng»; `verify-browser-package` kiểm `externally_connectable` chỉ localhost và đường nhận vé;
 `test/webview/browserLinkCopy.test.ts` kiểm chữ hai ngôn ngữ.
 
-**Phát hành** trong 0.7.20 (25/11/2026): VS Code 0.7.20 + gói Chrome / Edge 0.7.20 nộp Chrome Web Store (khoá manifest mới `externally_connectable`, không quyền mới). Tới khi
+**Phát hành** trong 0.7.20 (25/11/2026), sửa chữ ở 0.7.21 (26/11/2026): câu ở Cài đặt và ở cửa sổ «Kết nối» từng chỉ nói «không tới máy chủ Locaith» — đúng với
+tiện ích, nhưng ứng dụng có thể gửi tiếp (Locaith Work dùng mô hình Locaith gửi tới Locaith); nay nói như cửa sổ hỏi từng trang: tiện ích chỉ gửi tới ứng dụng,
+rồi từ ứng dụng tới nhà cung cấp AI chọn ở đó (có thể là mô hình Locaith). Gói Chrome / Edge 0.7.21 (thay 0.7.20, chưa từng nộp) nộp Chrome Web Store (khoá manifest
+mới `externally_connectable`, không quyền mới). Tới khi
 cửa hàng duyệt xong, bản 0.7.17 trên cửa hàng không nhận được vé nên trang /link báo «missing». Bản cài từ cửa hàng Edge Add-ons (nếu có) mang mã khác:
 ứng dụng thêm mã đó qua `&ext=`.
 
@@ -76,4 +79,4 @@ otherwise hold the request as an old leaking client); those keep working with th
 **Renamed:** Settings → "Connect to desktop apps", with one row per paired app. VS Code's Market → Chrome tab gets **Connect this browser** and a note that follows
 the last ticket. Other hosts: `setBridgeApp`, internal commands `locaithAgent.chrome.linkTicket` / `locaithAgent.chrome.linkState`, and `bridgeEvents` `change`.
 
-**Released** in 0.7.20 (25 Nov 2026): VS Code 0.7.20 + the Chrome / Edge 0.7.20 package submitted to the Chrome Web Store (new manifest key, no new permission).
+**Released** in 0.7.20 (25 Nov 2026); wording fixed in 0.7.21 (26 Nov 2026): the Settings hint and the Connect window now say the extension sends content only to the app, and from the app it goes to the AI provider chosen there (which may be a Locaith model). The Chrome / Edge 0.7.21 package (replacing 0.7.20, never submitted) goes to the Chrome Web Store (new manifest key, no new permission).

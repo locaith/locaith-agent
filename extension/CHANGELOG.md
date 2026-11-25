@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.7.21 - 2026-11-26
+
+- **Chrome / Edge: the connection texts now say where page content goes after the app.** In 0.7.20, Settings → Connect to desktop apps and the "Connect this browser" window said page content goes to the app on this computer and "not to a Locaith server". That is true of the extension itself, but the app may send the content on — Locaith Work using a Locaith model sends it to Locaith. Both texts now say what the window that asks before each page already said: the extension sends content only to that app on this computer, and from the app it goes to the AI provider chosen there, which may be a Locaith model. A test pins the wording.
+- No other change: the connection itself, its security checks and the contract for other hosts are the same as 0.7.20. VS Code users get this version only because both packages share one version number.
+- The Chrome / Edge package `locaith-agent-browser-0.7.21.zip` replaces 0.7.20 for the Chrome Web Store submission (0.7.20 was not submitted); no new permission.
+
 ## 0.7.20 - 2026-11-25
 
 - **Connect your browser from the app: "Connect this browser".** Market → Chrome now has a **Connect this browser** button. It opens your default browser on a one-time link served by the bridge on this computer (`http://127.0.0.1:<port>/link?t=…`, valid 2 minutes); the page hands the ticket to the Locaith AI extension, which opens one small window — "Connect this browser to an app on this computer?", naming the app and its port — and one click on **Connect** pairs it. No code to type and no card to click in the app. If that browser has no extension 0.7.20 or newer, the page says so with a Chrome Web Store link, and the Chrome tab in VS Code says it too. The desktop Locaith Work app can do the same through two internal commands (`locaithAgent.chrome.linkTicket`, `locaithAgent.chrome.linkState`), so it can pair the browser the user actually uses instead of a separate one.
