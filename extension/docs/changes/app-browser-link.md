@@ -49,8 +49,9 @@ có `/v1/hello`); `test/browser-e2e/link.e2e.test.ts` trên Chrome và Edge th�
 nối, trang báo «Đã kết nối», mở lại liên kết thì «hết hạn hoặc đã dùng»; `verify-browser-package` kiểm `externally_connectable` chỉ localhost và đường nhận vé;
 `test/webview/browserLinkCopy.test.ts` kiểm chữ hai ngôn ngữ.
 
-**Chưa làm.** Chưa phát hành (VS Code 0.7.20 + gói Chrome / Edge 0.7.20 lên Chrome Web Store — khoá manifest mới `externally_connectable`, không quyền mới). Bản cài từ cửa
-hàng Edge Add-ons (nếu có) mang mã khác: ứng dụng thêm mã đó qua `&ext=`.
+**Phát hành** trong 0.7.20 (25/11/2026): VS Code 0.7.20 + gói Chrome / Edge 0.7.20 nộp Chrome Web Store (khoá manifest mới `externally_connectable`, không quyền mới). Tới khi
+cửa hàng duyệt xong, bản 0.7.17 trên cửa hàng không nhận được vé nên trang /link báo «missing». Bản cài từ cửa hàng Edge Add-ons (nếu có) mang mã khác:
+ứng dụng thêm mã đó qua `&ext=`.
 
 ---
 
@@ -75,4 +76,4 @@ otherwise hold the request as an old leaking client); those keep working with th
 **Renamed:** Settings → "Connect to desktop apps", with one row per paired app. VS Code's Market → Chrome tab gets **Connect this browser** and a note that follows
 the last ticket. Other hosts: `setBridgeApp`, internal commands `locaithAgent.chrome.linkTicket` / `locaithAgent.chrome.linkState`, and `bridgeEvents` `change`.
 
-**Not released yet.** Release = VS Code 0.7.20 + the Chrome / Edge 0.7.20 package on the Chrome Web Store (new manifest key, no new permission).
+**Released** in 0.7.20 (25 Nov 2026): VS Code 0.7.20 + the Chrome / Edge 0.7.20 package submitted to the Chrome Web Store (new manifest key, no new permission).
