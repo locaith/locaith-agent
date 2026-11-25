@@ -52,6 +52,18 @@ describe('(0.7.20) chữ của cầu nối ứng dụng trên máy', () => {
     expect(val('set.link.hint', 1)).toMatch(/not to a Locaith server/);
   });
 
+  it('(0.7.21) nói đúng nội dung đi đâu SAU ứng dụng: tiện ích chỉ gửi tới ứng dụng trên máy, rồi ứng dụng gửi tới nhà cung cấp AI của nó (có thể là Locaith)', () => {
+    // Locaith Work dùng mô hình Locaith thì nội dung đi tiếp tới Locaith — câu «không tới máy chủ Locaith» một mình là sai với người dùng Work.
+    expect(val('set.link.hint', 0)).toMatch(/Tiện ích chỉ gửi .* không tới máy chủ Locaith; từ ứng dụng, nội dung đi tới nhà cung cấp AI .*mô hình Locaith/);
+    expect(val('set.link.hint', 1)).toMatch(/The extension sends what it reads only to that app .* not to a Locaith server; from the app it goes to the AI provider .*Locaith model/);
+    const approve = fs.readFileSync(path.resolve(__dirname, '../../src/browser/link/approvePage.ts'), 'utf8');
+    const appWhat = [...approve.matchAll(/appWhat: '([^']*)'/g)].map((m) => m[1]);
+    expect(appWhat).toHaveLength(2);
+    expect(appWhat[0]).toMatch(/nhà cung cấp AI mà ứng dụng dùng \(có thể là mô hình Locaith\)/);
+    expect(appWhat[1]).toMatch(/AI provider the app uses \(which may be a Locaith model\)/);
+    for (const s of appWhat) expect(s).not.toMatch(/không tới máy chủ Locaith|not to a Locaith server/);
+  });
+
   it('trạng thái nêu tên ứng dụng ({apps}) ở «đã kết nối», «chờ», «đã ngắt»', () => {
     for (const k of ['set.link.state.connected', 'set.link.state.paired', 'set.link.state.lost', 'set.link.lostSome']) {
       expect(val(k, 0), k).toContain('{apps}');
