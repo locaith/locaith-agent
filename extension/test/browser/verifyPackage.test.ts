@@ -201,6 +201,8 @@ describe('bộ kiểm BẮT được từng lỗi của sự cố 0.6.27', () =>
     rejects(mutated((d) => edit(d, 'background.js', (s) => s + ';fetch("https://studio-api.locaith.com/api/llm/v1/chat");')), /dịch vụ nền KHÔNG có đường nào tới máy chủ Locaith/);
     rejects(mutated((d) => editManifest(d, (m) => m.host_permissions.push('http://127.0.0.1/*'))), /không xin quyền máy chủ cho 127.0.0.1/);
     rejects(mutated((d) => edit(d, 'panel.js', (s) => s.split('"set.link.hint"').join('"set.link.hint.removed"'))), /panel.js có chuỗi set.link.hint/);
+    // (0.7.17) bản rò bộ nhớ: không huỷ thân câu trả lời
+    rejects(mutated((d) => edit(d, 'background.js', (s) => s.split('.cancel(').join('.cancel_gone('))), /dấu giao thức \?v=2 và có đường huỷ thân câu trả lời/);
   });
 
   it('chuỗi khoá API lại nói «kho bí mật của VS Code» (hoặc mất chuỗi riêng của bản trình duyệt)', () => {

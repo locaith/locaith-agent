@@ -181,6 +181,11 @@ export function verifyBrowserPackage(dir, opts = {}) {
     const approve = files.includes('bridge-approve.html') ? text('bridge-approve.html') : '';
     check(/<script src="bridge-approve\.js"><\/script>/.test(approve) && !/<script(?![^>]*\ssrc=)/i.test(approve), 'bridge-approve.html chỉ nạp bridge-approve.js (không có script nội tuyến — CSP của trang tiện ích)');
     check(/\/v1\/pair\/request/.test(bgCode) && /127\.0\.0\.1/.test(bgCode) && /nd-link-toggle/.test(bgCode), 'dịch vụ nền có cầu nối VS Code (xin ghép đôi tới 127.0.0.1)', 'mất cầu nối VS Code của bản Chrome — đã từng rơi khỏi bản dựng lại 0.6.27–0.7.11');
+    check(
+      /\/v1\/poll\?wait=20/.test(bgCode) && /v=\$\{|v=2/.test(bgCode) && /\.body\.cancel\(|body\?\.cancel\(|\.cancel\(\)\.catch/.test(bgCode),
+      'cầu nối VS Code gắn dấu giao thức ?v=2 và có đường huỷ thân câu trả lời (0.7.17)',
+      'bản 0.7.12 bỏ quên thân câu trả lời 401 và rò 2 MB mỗi 7 giây — dựng nhầm mã cũ?',
+    );
     check(/\/v1\/pair\/status/.test(bgCode) && /method:\s*["']POST["']/.test(bgCode), 'cầu nối hỏi kết quả ghép đôi bằng POST (Chrome không gắn Origin vào GET từ extension)');
     check(!/studio-api\.locaith|\/api\/llm\/v1|\/api\/feedback|locaith\.ai/.test(bgCode), 'dịch vụ nền KHÔNG có đường nào tới máy chủ Locaith (cầu nối chỉ nói chuyện với VS Code trên máy này)', 'nội dung trang đi qua cầu nối không được tới máy chủ Locaith');
     check((manifest.host_permissions ?? []).every((h) => !/127\.0\.0\.1|localhost/.test(h)), 'không xin quyền máy chủ cho 127.0.0.1 (máy chủ cầu cấp CORS cho origin tiện ích)');

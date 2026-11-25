@@ -13,6 +13,7 @@
  */
 
 import { consentGate } from '../consent';
+import { LINK_PROTO } from '../../shared/linkProtocol';
 import { inPage, type InPageArgs, type InPageKind } from './inPage';
 import { originOf, permPattern } from './origin';
 
@@ -24,8 +25,13 @@ export const LINK_KEY = 'nd.bridge';
 export const LINK_ON = 'nd.bridge.on';
 export const LINK_ALLOW = 'nd.bridge.allow';
 export const LINK_ALARM = 'nd-bridge-tick';
+/** (0.7.17) Nhớ «VS Code không còn nhận token của trình duyệt này» để Cài đặt vẫn nói rõ sau khi dịch vụ nền khởi động lại. */
+export const LINK_LOST = 'nd.bridge.lost';
+/** (0.7.17) Chưa thấy cửa sổ VS Code nào: dò lại thưa dần, bắt đầu 15 giây, gấp đôi mỗi lần, tối đa 5 phút (theo nhịp báo thức 30 giây). */
+export const SCAN_MIN_MS = 15_000;
+export const SCAN_MAX_MS = 5 * 60_000;
 
-export type PairState = 'idle' | 'asking' | 'waiting' | 'denied' | 'expired' | 'not_found' | 'busy' | 'old' | 'consent';
+export type PairState = 'idle' | 'asking' | 'waiting' | 'denied' | 'expired' | 'not_found' | 'busy' | 'old' | 'consent' | 'lost';
 
 export interface LinkStatus {
   paired: boolean;
@@ -49,6 +55,8 @@ export interface LinkOptions {
   /** Thay `fetch` (test cần gắn Origin chrome-extension://…, thứ trình duyệt tự gắn). */
   fetch?: typeof fetch;
   approveMs?: number;
+  /** Đồng hồ cho lịch dò VS Code (test thay để khỏi chờ thật 15 giây – 5 phút). */
+  now?: () => number;
 }
 
 export interface LinkApi {
@@ -61,7 +69,27 @@ export interface LinkApi {
 }
 
 const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
-const touchWorker = (): void => void chrome.runtime.getPlatformInfo(() => void chrome.runtime.lastError);
+const touchWorker = (): void => {
+  try {
+    void chrome.runtime.getPlatformInfo(() => void chrome.runtime.lastError);
+  } catch {
+    /* ngữ cảnh tiện ích đã bị huỷ (cập nhật / gỡ): không sao */
+  }
+};
+/** Chờ sau lần lỗi thứ n của một cửa sổ VS Code đang nối: 4 s, 8 s… (tối đa 30 s). */
+const backoff = (n: number): number => Math.min(30_000, 2000 * 2 ** n);
+/** Một cửa sổ VS Code đang nối mà lỗi liền bấy nhiêu lần (đã đóng / treo) thì thôi giữ vòng chờ của nó; nhịp báo thức sẽ dò lại thưa dần. */
+const POLL_MAX_FAILS = 3;
+/** Gắn dấu giao thức vào yêu cầu có token (xem shared/linkProtocol.ts). */
+const withProto = (p: string): string => `${p}${p.includes('?') ? '&' : '?'}v=${LINK_PROTO}`;
+
+/** Câu trả lời ĐÃ ĐỌC XONG của máy chủ cầu — không bao giờ là một Response còn sống (xem `call`). */
+interface Reply {
+  status: number;
+  ok: boolean;
+  data: unknown;
+}
+type Job = { id: string; op: string; args?: Record<string, unknown> };
 
 export function installLink(opts: LinkOptions = {}): LinkApi {
   let PORTS: readonly number[] = opts.ports ?? LINK_PORTS;
@@ -73,6 +101,7 @@ export function installLink(opts: LinkOptions = {}): LinkApi {
   };
   const doFetch: typeof fetch = opts.fetch ?? ((...a) => fetch(...a));
   const approveMs = opts.approveMs ?? 150_000;
+  const clock = opts.now ?? (() => Date.now());
   const loops = new Set<number>();
   const waiting = new Map<string, { origin: string; decided: boolean; done: (d: string, reason?: string) => void }>();
   const pending = new Map<string, Promise<{ d: string; reason?: string }>>();
@@ -81,13 +110,24 @@ export function installLink(opts: LinkOptions = {}): LinkApi {
   let lastOkAt = 0; // lần gần nhất một cổng VS Code trả lời hợp lệ: «đã kết nối» = trong vòng 45 giây
   let pairState: PairState = 'idle';
   let pairRun = 0; // số thứ tự lần xin: tắt công tắc giữa chừng thì lần cũ tự dừng
+  let stopCtl = new AbortController(); // tắt / mất ghép đôi / dừng: huỷ NGAY mọi yêu cầu đang bay (kể cả long-poll 20 giây)
+  let scanning: Promise<void> | null = null;
+  let nextScanAt = 0;
+  let scanDelay = SCAN_MIN_MS;
 
   const consentOk = async (): Promise<boolean> => {
     if (opts.testBuild) return true;
     const g = consentGate();
     return g ? g.ok().catch(() => false) : false;
   };
-  const changed = (): void => void Promise.resolve(chrome.runtime.sendMessage({ type: 'nd-link-changed' })).catch(() => undefined);
+  // sendMessage có thể ném lỗi ĐỒNG BỘ (ngữ cảnh tiện ích đã bị huỷ): không để nó thoát ra khỏi vòng chờ / khối finally.
+  const changed = (): void => {
+    try {
+      void Promise.resolve(chrome.runtime.sendMessage({ type: 'nd-link-changed' })).catch(() => undefined);
+    } catch {
+      /* không có khung nào đang nghe */
+    }
+  };
   const setPair = (s: PairState): void => {
     pairState = s;
     changed();
@@ -102,61 +142,175 @@ export function installLink(opts: LinkOptions = {}): LinkApi {
   }
   const isOn = async (): Promise<boolean> => (await chrome.storage.local.get(LINK_ON))[LINK_ON] !== false;
 
+  /**
+   * Gọi máy chủ cầu của VS Code và LUÔN giải phóng thân câu trả lời — đọc hết, hoặc huỷ nếu lỗi / quá giờ / bị dừng.
+   * Bài học 0.7.12: thân câu trả lời 401 bị bỏ quên, mỗi lần Chrome giữ lại một vùng nhớ dùng chung 2 MB không bao giờ trả
+   * (máy thật 25/11/2026: 1.371 vùng = 2,7 GB trong một tiến trình tiện ích, bộ nhớ cam kết của Windows tăng ~4 GB/giờ, máy treo sau một ngày).
+   * Hàm này không trả Response ra ngoài, chỉ trả mã trạng thái và JSON đã đọc — nơi gọi không thể quên giải phóng.
+   */
+  async function call(port: number, path: string, init: RequestInit = {}, timeoutMs = 10_000): Promise<Reply> {
+    const ctl = new AbortController();
+    const stopSig = stopCtl.signal;
+    const abort = (): void => ctl.abort();
+    if (stopSig.aborted) abort();
+    else stopSig.addEventListener('abort', abort, { once: true });
+    const timer = setTimeout(abort, timeoutMs);
+    let res: Response | undefined;
+    try {
+      res = await doFetch(`http://127.0.0.1:${port}${path}`, { ...init, signal: ctl.signal });
+      const text = await res.text();
+      let data: unknown;
+      try {
+        data = text ? JSON.parse(text) : undefined;
+      } catch {
+        data = undefined;
+      }
+      return { status: res.status, ok: res.ok, data };
+    } finally {
+      clearTimeout(timer);
+      stopSig.removeEventListener('abort', abort);
+      if (res?.body && !res.bodyUsed) await res.body.cancel().catch(() => undefined);
+    }
+  }
+
   async function start(): Promise<boolean> {
     await refreshPorts();
     if (!(await loadToken())) return false;
     if (!(await isOn())) return false;
     if (!(await consentOk())) return false;
-    running = true;
-    for (const p of PORTS) if (!loops.has(p)) void pollLoop(p);
+    if (!running) {
+      running = true;
+      nextScanAt = 0;
+      scanDelay = SCAN_MIN_MS;
+    }
     chrome.alarms.create(LINK_ALARM, { periodInMinutes: 0.5 });
     changed();
+    await scan();
     return true;
   }
 
-  function stop(): void {
+  /** Dừng mọi thứ đang chạy: hạ cờ, huỷ ngay các yêu cầu đang bay, bỏ nhịp báo thức. */
+  function halt(): void {
     running = false;
+    stopCtl.abort();
+    stopCtl = new AbortController();
     void chrome.alarms.clear(LINK_ALARM);
+  }
+
+  function stop(): void {
+    halt();
     changed();
   }
 
-  async function pollLoop(port: number): Promise<void> {
-    loops.add(port);
-    let miss = 0;
-    try {
-      // Kiểm nhanh xem cổng này có VS Code đã ghép với ta không (long-poll chỉ trả lời sau tối đa 20 giây: không có bước này công tắc báo «đang tìm VS Code» cả 20 giây đầu).
+  /**
+   * Có VS Code nhưng KHÔNG cửa sổ nào nhận token của trình duyệt này (đã ghép đôi với hồ sơ / trình duyệt khác, hoặc đã bấm Huỷ ghép đôi):
+   * dừng hẳn, xoá token, tắt công tắc, nhớ lý do để Cài đặt nói rõ. KHÔNG tự thử lại — bản 0.7.12 thử lại mỗi 7 giây mãi mãi và rò bộ nhớ.
+   */
+  async function lose(): Promise<void> {
+    halt();
+    token = '';
+    await chrome.storage.local.remove(LINK_KEY);
+    await chrome.storage.local.set({ [LINK_ON]: false, [LINK_LOST]: Date.now() });
+    setPair('lost');
+  }
+
+  /**
+   * Dò các cổng CHƯA có vòng chờ bằng /v1/ping có token:
+   *  • cổng trả 200 (cửa sổ VS Code nhận ta) → mở vòng chờ lệnh cho ĐÚNG cổng đó;
+   *  • không có VS Code (cổng đóng) → không giữ gì, không giữ dịch vụ nền thức; lần dò sau thưa dần 15 giây → 5 phút;
+   *  • có VS Code mà không cửa sổ nào nhận token → `lose()`.
+   */
+  function scan(): Promise<void> {
+    if (scanning) return scanning;
+    scanning = (async () => {
       try {
-        const r = await doFetch(`http://127.0.0.1:${port}/v1/ping`, { headers: authHeaders() });
-        if (r.ok) {
+        if (!running || !token) return;
+        const free = PORTS.filter((p) => !loops.has(p));
+        const res = await Promise.all(
+          free.map(async (p) => {
+            try {
+              return { p, status: (await call(p, withProto('/v1/ping'), { headers: authHeaders() }, 5000)).status };
+            } catch {
+              return { p, status: 0 }; // không có VS Code ở cổng này (hoặc không trả lời kịp)
+            }
+          }),
+        );
+        if (!running || !token) return;
+        const ok = res.filter((x) => x.status === 200);
+        for (const x of ok) void pollLoop(x.p);
+        if (ok.length) {
           lastOkAt = Date.now();
+          scanDelay = SCAN_MIN_MS;
+          nextScanAt = 0;
           changed();
+          return;
         }
-      } catch {
-        /* cổng này chưa có VS Code */
+        if (loops.size) return; // vẫn còn cửa sổ đang nối: cổng khác từ chối thì thôi, lần dò sau xét lại
+        if (res.some((x) => x.status === 401 || x.status === 403)) {
+          await lose();
+          return;
+        }
+        nextScanAt = clock() + scanDelay;
+        scanDelay = Math.min(SCAN_MAX_MS, scanDelay * 2);
+      } finally {
+        scanning = null;
       }
+    })();
+    return scanning;
+  }
+
+  /**
+   * Vòng chờ lệnh (long-poll) tới MỘT cửa sổ VS Code đã nhận token của ta (do `scan` mở).
+   *  • 200 → nhận việc (nếu có) và hỏi tiếp; máy chủ trả ngay mà không có việc thì nghỉ 1 giây (không quay vòng nóng);
+   *  • 401 / 403 → cửa sổ này không còn nhận ta: thôi hẳn, KHÔNG hỏi lại (0.7.12 hỏi lại mỗi 7 giây mãi mãi);
+   *  • lỗi mạng / lỗi máy chủ → chờ 4 s, 8 s; lỗi liền 3 lần (VS Code đã đóng) thì thôi giữ vòng, nhịp báo thức dò lại thưa dần.
+   */
+  async function pollLoop(port: number): Promise<void> {
+    if (loops.has(port)) return;
+    loops.add(port);
+    let fails = 0;
+    let refused = false;
+    try {
       while (running && token) {
+        touchWorker(); // đang nối: giữ dịch vụ nền sống để nhận lệnh kịp thời
+        const t0 = Date.now();
+        let r: Reply;
         try {
-          touchWorker(); // đặt lại bộ đếm nhàn rỗi để dịch vụ nền không bị tắt khi đang chờ lệnh
-          const r = await doFetch(`http://127.0.0.1:${port}/v1/poll?wait=20`, { headers: authHeaders() });
-          if (r.ok) {
-            miss = 0;
-            lastOkAt = Date.now();
-            const j = (await r.json()) as { job?: { id: string; op: string; args?: Record<string, unknown> } };
-            if (j && j.job) void run(port, j.job);
-            continue;
-          }
-          miss = r.status === 401 ? 6 : miss + 1; // 401: cửa sổ VS Code này không biết token của ta (ghép đôi khác) — thử lại thưa
+          r = await call(port, withProto('/v1/poll?wait=20'), { headers: authHeaders() }, 35_000);
         } catch {
-          miss++;
+          if (!running || ++fails >= POLL_MAX_FAILS) break;
+          await sleep(backoff(fails));
+          continue;
         }
-        await sleep(Math.min(8000, 1000 + miss * 1000));
+        if (r.ok) {
+          fails = 0;
+          lastOkAt = Date.now();
+          const job = (r.data as { job?: Job } | undefined)?.job;
+          if (job) void run(port, job);
+          else if (Date.now() - t0 < 1000) await sleep(1000);
+          continue;
+        }
+        if (r.status === 401 || r.status === 403) {
+          refused = true;
+          break;
+        }
+        if (++fails >= POLL_MAX_FAILS) break;
+        await sleep(backoff(fails));
       }
     } finally {
       loops.delete(port);
+      changed();
+      if (running && token && loops.size === 0) {
+        if (refused) void scan(); // token bị từ chối: dò lại ngay — không cửa sổ nào nhận nữa thì báo mất ghép đôi
+        else {
+          nextScanAt = clock() + scanDelay; // VS Code đã đóng: để nhịp báo thức dò lại thưa dần
+          scanDelay = Math.min(SCAN_MAX_MS, scanDelay * 2);
+        }
+      }
     }
   }
 
-  async function run(port: number, job: { id: string; op: string; args?: Record<string, unknown> }): Promise<void> {
+  async function run(port: number, job: Job): Promise<void> {
     let out: { ok: true; data: unknown } | { ok: false; error: string };
     try {
       out = { ok: true, data: await runOp(job.op, job.args ?? {}) };
@@ -164,7 +318,7 @@ export function installLink(opts: LinkOptions = {}): LinkApi {
       out = { ok: false, error: String((e as Error)?.message ?? e) };
     }
     try {
-      await doFetch(`http://127.0.0.1:${port}/v1/result`, { method: 'POST', headers: { ...authHeaders(), 'content-type': 'application/json' }, body: JSON.stringify({ id: job.id, ...out }) });
+      await call(port, withProto('/v1/result'), { method: 'POST', headers: { ...authHeaders(), 'content-type': 'application/json' }, body: JSON.stringify({ id: job.id, ...out }) }, 30_000);
     } catch (e) {
       console.error('[Locaith AI] cầu nối VS Code: không trả được kết quả', e);
     }
@@ -172,8 +326,8 @@ export function installLink(opts: LinkOptions = {}): LinkApi {
 
   // ── ghép đôi KHÔNG MÃ ─────────────────────────────────────────────────────────
   // Bật công tắc → xin kết nối tới MỌI cổng VS Code; VS Code hiện thẻ «Cho phép / Từ chối» trong khung chat của nó; người dùng bấm Cho phép → ta nhận token MỘT lần, lưu rồi nối.
-  const post = (port: number, path: string, body?: unknown) =>
-    doFetch(`http://127.0.0.1:${port}${path}`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body ?? {}) });
+  const post = (port: number, path: string, body?: unknown): Promise<Reply> =>
+    call(port, path, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body ?? {}) }, 8000);
   const cancelAsked = (list: ({ port: number; id?: string } | null)[]): void => {
     for (const x of list) if (x && x.id) post(x.port, '/v1/pair/cancel', { id: x.id }).catch(() => undefined);
   };
@@ -181,12 +335,13 @@ export function installLink(opts: LinkOptions = {}): LinkApi {
   async function requestPairing(): Promise<void> {
     await refreshPorts();
     const me = ++pairRun;
+    await chrome.storage.local.remove(LINK_LOST);
     setPair('asking');
     const asked = await Promise.all(
       PORTS.map(async (port) => {
         try {
           const r = await post(port, '/v1/pair/request');
-          const j = (await r.json().catch(() => ({}))) as { id?: string; error?: string };
+          const j = (r.data ?? {}) as { id?: string; error?: string };
           return r.ok && j.id ? { port, id: j.id } : { port, status: r.status, error: j.error };
         } catch {
           return null; // không có VS Code ở cổng này
@@ -199,6 +354,7 @@ export function installLink(opts: LinkOptions = {}): LinkApi {
       const any = asked.filter(Boolean) as { error?: string }[];
       setPair(any.some((x) => x.error === 'busy' || x.error === 'rate_limited') ? 'busy' : any.length ? 'old' : 'not_found');
       await chrome.storage.local.set({ [LINK_ON]: false });
+      stop(); // công tắc đã tắt: không để vòng nào chạy ngầm
       return;
     }
     setPair('waiting');
@@ -213,8 +369,8 @@ export function installLink(opts: LinkOptions = {}): LinkApi {
           // POST, không phải GET: Chrome KHÔNG gắn tiêu đề Origin vào yêu cầu GET gửi từ extension (đã đo, cả Chrome lẫn Edge) mà máy chủ cầu cần Origin để biết extension nào đang hỏi;
           // POST thì luôn có Origin. VS Code bản cũ (chưa có POST /v1/pair/status) trả 404 → thử GET kiểu cũ (nó cũng sẽ bị từ chối → báo «VS Code quá cũ» bên dưới).
           let r = await post(x.port, '/v1/pair/status', { id: x.id });
-          if (r.status === 404) r = await doFetch(`http://127.0.0.1:${x.port}/v1/pair/status?id=${encodeURIComponent(x.id)}`);
-          const j = (await r.json()) as { state?: string; token?: string; error?: string };
+          if (r.status === 404) r = await call(x.port, `/v1/pair/status?id=${encodeURIComponent(x.id)}`, {}, 8000);
+          const j = (r.data ?? {}) as { state?: string; token?: string; error?: string };
           if (r.status === 404 || j.error === 'origin') {
             old++;
             continue;
@@ -236,12 +392,14 @@ export function installLink(opts: LinkOptions = {}): LinkApi {
       if (old === live.length) {
         setPair('old'); // mọi VS Code tìm thấy đều là bản cũ chưa hỗ trợ ghép đôi không mã từ bản Chrome này
         await chrome.storage.local.set({ [LINK_ON]: false });
+        stop();
         cancelAsked(live);
         return;
       }
       if (denied + gone === live.length) {
         setPair(denied > 0 ? 'denied' : 'expired');
         await chrome.storage.local.set({ [LINK_ON]: false });
+        stop();
         return;
       }
       await sleep(1000);
@@ -249,15 +407,17 @@ export function installLink(opts: LinkOptions = {}): LinkApi {
     if (me === pairRun) {
       setPair('expired');
       await chrome.storage.local.set({ [LINK_ON]: false });
+      stop();
       cancelAsked(live);
     }
   }
 
   async function status(): Promise<LinkStatus> {
-    const [l, s, ok] = await Promise.all([chrome.storage.local.get([LINK_KEY, LINK_ALLOW, LINK_ON]), chrome.storage.session.get(LINK_ALLOW), consentOk()]);
+    const [l, s, ok] = await Promise.all([chrome.storage.local.get([LINK_KEY, LINK_ALLOW, LINK_ON, LINK_LOST]), chrome.storage.session.get(LINK_ALLOW), consentOk()]);
     const paired = !!(l[LINK_KEY] && (l[LINK_KEY] as { token?: string }).token);
     const on = l[LINK_ON] === undefined ? paired : l[LINK_ON] === true; // bản cũ: có token = bật; cài mới chưa ghép = tắt
-    return { paired, on, running, connected: connected(), pairing: pairState, ports: [...loops], allowed: (l[LINK_ALLOW] as string[]) || [], session: (s[LINK_ALLOW] as string[]) || [], consent: ok };
+    const pairing: PairState = pairState === 'idle' && l[LINK_LOST] ? 'lost' : pairState; // còn nhớ sau khi dịch vụ nền khởi động lại
+    return { paired, on, running, connected: connected(), pairing, ports: [...loops], allowed: (l[LINK_ALLOW] as string[]) || [], session: (s[LINK_ALLOW] as string[]) || [], consent: ok };
   }
 
   async function toggle(on: boolean): Promise<LinkStatus> {
@@ -274,12 +434,16 @@ export function installLink(opts: LinkOptions = {}): LinkApi {
       return status();
     }
     await chrome.storage.local.set({ [LINK_ON]: true });
+    await chrome.storage.local.remove(LINK_LOST);
     pairState = 'idle';
     if (await loadToken()) {
       await start();
-      // Đã ghép từ trước: nối ngay. Không nối được trong vài giây (VS Code đóng, hoặc token bị thu hồi ở VS Code) thì xin lại như lần đầu.
+      // Đã ghép từ trước: nối ngay. Không nối được trong vài giây (VS Code đóng, hoặc token đã bị thu hồi / ghép nơi khác) thì xin lại như lần đầu.
       for (let i = 0; i < 16 && !connected(); i++) await sleep(250);
-      if (!connected()) void requestPairing();
+      if (!connected()) {
+        await chrome.storage.local.set({ [LINK_ON]: true }); // `lose()` có thể vừa tắt nó khi thấy token bị từ chối
+        void requestPairing();
+      }
       return status();
     }
     void requestPairing();
@@ -491,8 +655,12 @@ export function installLink(opts: LinkOptions = {}): LinkApi {
     }
   });
 
+  // Nhịp báo thức 30 giây (chỉ có khi đang bật): dịch vụ nền bị tắt thì dựng lại; đang nối thì xem có cửa sổ VS Code mới không;
+  // chưa thấy VS Code thì chỉ dò khi đã tới lượt (thưa dần) — không vòng nào chạy liên tục khi VS Code đóng.
   chrome.alarms.onAlarm.addListener((a) => {
-    if (a.name === LINK_ALARM) void start();
+    if (a.name !== LINK_ALARM) return;
+    if (!running) void start();
+    else if (loops.size > 0 || clock() >= nextScanAt) void scan();
   });
   void start();
 
@@ -502,7 +670,7 @@ export function installLink(opts: LinkOptions = {}): LinkApi {
     runOp,
     shutdown: () => {
       pairRun++;
-      running = false;
+      halt();
     },
   };
 }

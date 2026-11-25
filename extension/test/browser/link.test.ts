@@ -3,9 +3,11 @@
  * dịch vụ nền được dựng với `chrome.*` giả, máy chủ là BrowserBridge thật trên cổng ngẫu nhiên. Kiểm: TẮT mặc định + cổng đồng ý, ghép đôi không mã (cho phép / từ chối),
  * nối và nhận lệnh, duyệt theo từng trang (một lần / từ chối / thu hồi), tab chưa duyệt chỉ lộ tên miền, bỏ qua tin nhắn lạ.
  */
+import * as http from 'node:http';
+import type { AddressInfo } from 'node:net';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { BrowserBridge, type BridgeCreds, type BridgeStore } from '../../src/core/chrome/bridge';
-import { installLink, type LinkApi } from '../../src/browser/link/linkSw';
+import { SCAN_MIN_MS, installLink, type LinkApi } from '../../src/browser/link/linkSw';
 import { originOf, permPattern } from '../../src/browser/link/origin';
 
 const EXT = 'a'.repeat(32);
@@ -37,6 +39,7 @@ function fakeChrome() {
   const listeners: Listener[] = [];
   const granted = new Set<string>();
   const log = { windowsCreated: [] as string[], executed: [] as { kind: string; tabId: number }[], permRequests: [] as unknown[], alarms: [] as string[], changed: 0 };
+  const alarmListeners: ((a: { name: string }) => void)[] = [];
   let tabs: Tab[] = [];
   let nextWin = 100;
   const onClosed = new Set<(id: number) => void>();
@@ -52,7 +55,7 @@ function fakeChrome() {
       onMessage: { addListener: (l: Listener) => void listeners.push(l), removeListener: (l: Listener) => void listeners.splice(listeners.indexOf(l), 1) },
     },
     storage: { local, session },
-    alarms: { create: (n: string) => void log.alarms.push(n), clear: async () => true, onAlarm: { addListener: () => undefined } },
+    alarms: { create: (n: string) => void log.alarms.push(n), clear: async () => true, onAlarm: { addListener: (l: (a: { name: string }) => void) => void alarmListeners.push(l) } },
     permissions: {
       contains: async (q: { origins?: string[] }) => (q.origins ?? []).every((o) => granted.has(o)),
       request: async (q: unknown) => (log.permRequests.push(q), true),
@@ -96,7 +99,9 @@ function fakeChrome() {
       }
       if (!used) resolve(undefined);
     });
-  return { chrome, local, session, log, granted, send, setTabs: (t: Tab[]) => (tabs = t), listeners };
+  /** Bắn nhịp báo thức như Chrome làm mỗi 30 giây. */
+  const fireAlarm = (name = 'nd-bridge-tick') => alarmListeners.forEach((l) => l({ name }));
+  return { chrome, local, session, log, granted, send, setTabs: (t: Tab[]) => (tabs = t), listeners, fireAlarm };
 }
 
 const memStore = (): BridgeStore => {
@@ -130,17 +135,36 @@ afterEach(() => {
   delete g.chrome;
 });
 
-const mkLink = (o: { testBuild?: boolean } = {}) =>
+/** fetch thật + gắn Origin chrome-extension:// như trình duyệt tự gắn cho tiện ích. */
+const extFetch: typeof fetch = (u, init) => fetch(u, { ...init, headers: { ...(init?.headers as Record<string, string>), origin: `chrome-extension://${EXT}` } });
+
+const mkLink = (o: { testBuild?: boolean; fetch?: typeof fetch; ports?: number[] } = {}) =>
   (link = installLink({
-    ports: [port],
+    ports: o.ports ?? [port],
     testBuild: o.testBuild ?? true,
     approveMs: 3000,
-    fetch: (u, init) => fetch(u, { ...init, headers: { ...(init?.headers as Record<string, string>), origin: `chrome-extension://${EXT}` } }),
+    fetch: o.fetch ?? extFetch,
   }));
 
+/**
+ * (0.7.17) fetch có ghi sổ: mọi lời gọi (kể cả thất bại) và mọi Response thật đã trả về.
+ * `unreleased()` liệt kê Response có thân CHƯA được đọc hết cũng chưa bị huỷ — đúng thứ làm 0.7.12 rò 2 MB mỗi lần trong Chrome.
+ */
+function tracked() {
+  const calls: string[] = [];
+  const responses: Response[] = [];
+  const f: typeof fetch = async (u, init) => {
+    calls.push(String(u));
+    const r = await extFetch(u, init);
+    responses.push(r);
+    return r;
+  };
+  return { fetch: f, calls, unreleased: () => responses.filter((r) => r.body !== null && !r.bodyUsed).map((r) => `${r.status} ${r.url}`) };
+}
+
 /** Ghép đôi xong và nối: bật công tắc, bấm Cho phép trong «VS Code» (bridge.approvePair). */
-async function pairAndConnect(): Promise<void> {
-  mkLink();
+async function pairAndConnect(f?: typeof fetch): Promise<void> {
+  mkLink(f ? { fetch: f } : {});
   await link.toggle(true);
   await until(() => !!bridge.pairRequest());
   expect(await bridge.approvePair(bridge.pairRequest()!.id)).toBe(true);
@@ -347,5 +371,122 @@ describe('origin', () => {
     expect(() => originOf('chrome://settings')).toThrow(/http\/https/);
     expect(() => originOf('data:text/html,hi')).toThrow(/http\/https/);
     expect(permPattern('http://localhost:3000')).toBe('http://localhost/*');
+  });
+});
+
+/**
+ * (0.7.17) Sự cố 0.7.12 trên máy thật (25/11/2026): VS Code trả 401 (trình duyệt này đã bị thay bằng hồ sơ khác khi ghép đôi), tiện ích hỏi lại
+ * mỗi 7 giây mãi mãi và KHÔNG đọc / huỷ thân câu trả lời → Chrome giữ một vùng nhớ 2 MB mỗi lần: 2,7 GB trong một tiến trình, ~4 GB/giờ.
+ * Các ca dưới đây chạy với máy chủ cầu THẬT và Response THẬT; `unreleased()` phải luôn rỗng.
+ */
+describe('cầu nối VS Code (Chrome) — không rò bộ nhớ, không gọi mãi (0.7.17)', () => {
+  const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+  /** Chờ theo SỐ LẦN thử (không theo đồng hồ — có ca giả đồng hồ). */
+  const waitFor = async (f: () => boolean | Promise<boolean>, tries = 250) => {
+    for (let i = 0; i < tries; i++) {
+      if (await f()) return;
+      await sleep(20);
+    }
+    throw new Error('quá hạn chờ điều kiện');
+  };
+  const closedPort = async (): Promise<number> => {
+    const s = http.createServer();
+    await new Promise<void>((r) => s.listen(0, '127.0.0.1', () => r()));
+    const p = (s.address() as AddressInfo).port;
+    await new Promise<void>((r) => s.close(() => r()));
+    return p;
+  };
+  const authed = (calls: string[]) => calls.filter((c) => /\/v1\/(ping|poll|result)/.test(c));
+
+  it('token bị VS Code từ chối (đã ghép đôi nơi khác): dò MỘT lần rồi dừng hẳn — không gọi lại, xoá token, tắt công tắc, báo mất ghép đôi; mọi thân câu trả lời đã giải phóng', async () => {
+    await fc.local.set({ 'nd.bridge': { token: 'token-cu-da-het-hieu-luc' }, 'nd.bridge.on': true });
+    const t = tracked();
+    mkLink({ fetch: t.fetch, ports: [port, await closedPort()] });
+    await waitFor(async () => (await link.status()).pairing === 'lost');
+    const n = t.calls.length;
+    await sleep(1500); // 0.7.12 đã gọi lại sau 7 giây; ở đây không được gọi thêm lần nào nữa
+    expect(t.calls.length).toBe(n);
+    expect(authed(t.calls)).toHaveLength(2); // đúng một lần ping mỗi cổng
+    expect(t.calls.every((c) => /[?&]v=2(&|$)/.test(c))).toBe(true); // luôn gắn dấu giao thức để VS Code mới trả 401 thay vì đóng kết nối
+    expect(await link.status()).toMatchObject({ on: false, paired: false, running: false, connected: false, pairing: 'lost', ports: [] });
+    expect(fc.local.m.has('nd.bridge')).toBe(false);
+    expect(fc.local.m.get('nd.bridge.lost')).toEqual(expect.any(Number));
+    expect(t.unreleased()).toEqual([]);
+    fc.fireAlarm(); // báo thức cũ (nếu Chrome còn giữ) cũng không dựng lại gì
+    await sleep(200);
+    expect(t.calls.length).toBe(n);
+  });
+
+  it('đang nối thì VS Code huỷ / ghép nơi khác → vòng chờ nhận 401 → dừng hẳn và báo mất ghép đôi, không hỏi lại; thân câu trả lời đã giải phóng', async () => {
+    const t = tracked();
+    await pairAndConnect(t.fetch);
+    await bridge.unpair(); // đánh thức long-poll đang chờ; lần hỏi kế tiếp sẽ bị 401
+    await waitFor(async () => (await link.status()).pairing === 'lost');
+    const n = t.calls.length;
+    await sleep(1500);
+    expect(t.calls.length).toBe(n);
+    expect((await link.status()).running).toBe(false);
+    expect(t.unreleased()).toEqual([]);
+  });
+
+  it('mọi đường gọi đều giải phóng thân câu trả lời: xin ghép đôi, nhận token, ping, chờ lệnh, trả kết quả, và long-poll đang bay khi tắt', async () => {
+    const t = tracked();
+    await pairAndConnect(t.fetch);
+    expect(await bridge.call('ping', {})).toMatchObject({ v: 1 }); // VS Code → lệnh → tiện ích làm → POST /v1/result
+    expect(t.calls.some((c) => c.includes('/v1/result?v=2'))).toBe(true);
+    await link.toggle(false); // huỷ ngay long-poll đang chờ, không để nó treo thêm 20 giây
+    await sleep(300);
+    expect(t.unreleased()).toEqual([]);
+    expect((await link.status()).running).toBe(false);
+  });
+
+  it('không có VS Code: không vòng chờ nào chạy; báo thức chỉ dò khi tới lượt và giãn dần (15 s → 30 s …)', async () => {
+    await fc.local.set({ 'nd.bridge': { token: 'tok' }, 'nd.bridge.on': true });
+    let t = 1_000_000;
+    const calls: string[] = [];
+    const closed = await closedPort();
+    link = installLink({ ports: [closed], testBuild: true, now: () => t, fetch: (u, init) => (calls.push(String(u)), extFetch(u, init)) });
+    await waitFor(async () => calls.length === 1 && (await link.status()).running);
+    await sleep(100);
+    expect((await link.status()).ports).toEqual([]); // không có vòng chờ nào
+    fc.fireAlarm(); // chưa tới lượt
+    await sleep(100);
+    expect(calls).toHaveLength(1);
+    t += SCAN_MIN_MS + 1; // tới lượt (15 s)
+    fc.fireAlarm();
+    await waitFor(() => calls.length === 2);
+    await sleep(50);
+    t += SCAN_MIN_MS + 1; // lượt sau phải chờ 30 s: 15 s là chưa đủ
+    fc.fireAlarm();
+    await sleep(100);
+    expect(calls).toHaveLength(2);
+    t += SCAN_MIN_MS + 1;
+    fc.fireAlarm();
+    await waitFor(() => calls.length === 3);
+    expect((await link.status()).ports).toEqual([]);
+  });
+
+  it('máy chủ trả ngay mà không có việc: không quay vòng nóng (tối đa ~1 lần/giây)', async () => {
+    await fc.local.set({ 'nd.bridge': { token: 'tok' }, 'nd.bridge.on': true });
+    const calls: string[] = [];
+    mkLink({ ports: [47999], fetch: async (u) => (calls.push(String(u)), new Response('{}', { status: 200, headers: { 'content-type': 'application/json' } })) });
+    await sleep(2300);
+    const polls = calls.filter((c) => c.includes('/v1/poll')).length;
+    expect(polls).toBeGreaterThanOrEqual(2);
+    expect(polls).toBeLessThanOrEqual(4);
+  });
+
+  it('sau khi mất ghép đôi, bật lại công tắc → xin ghép đôi mới; thông báo «mất ghép đôi» biến mất', async () => {
+    await fc.local.set({ 'nd.bridge': { token: 'token-cu' }, 'nd.bridge.on': true });
+    mkLink();
+    await waitFor(async () => (await link.status()).pairing === 'lost');
+    await link.toggle(true);
+    await waitFor(() => !!bridge.pairRequest());
+    const s = await link.status();
+    expect(s.on).toBe(true);
+    expect(['asking', 'waiting']).toContain(s.pairing);
+    expect(fc.local.m.has('nd.bridge.lost')).toBe(false);
+    expect(await bridge.approvePair(bridge.pairRequest()!.id)).toBe(true);
+    await waitFor(async () => (await link.status()).connected);
   });
 });

@@ -49,9 +49,9 @@ const pairWith = async (b: BrowserBridge, port: number, ext = EXT) => {
 const auth = (token: string, ext = EXT) => ({ authorization: `Bearer ${token}`, origin: `chrome-extension://${ext}` });
 
 describe('cầu nối Chrome — ghép đôi và chống truy cập trái phép', () => {
-  it('chưa ghép đôi: mọi đường dẫn có bảo vệ đều 401', async () => {
+  it('chưa ghép đôi: mọi đường dẫn có bảo vệ đều 401 (tiện ích bản mới, có ?v=2)', async () => {
     const { port } = await mk();
-    for (const [m, p] of [['GET', '/v1/ping'], ['GET', '/v1/poll?wait=0'], ['POST', '/v1/result']] as const) expect((await raw(port, m, p, { headers: { origin: OK_ORIGIN } })).status).toBe(401);
+    for (const [m, p] of [['GET', '/v1/ping?v=2'], ['GET', '/v1/poll?wait=0&v=2'], ['POST', '/v1/result?v=2']] as const) expect((await raw(port, m, p, { headers: { origin: OK_ORIGIN } })).status).toBe(401);
   });
 
   it('ghép đôi: đúng mã + Origin extension → token 256 bit, lưu vào kho cùng id extension; mã dùng một lần', async () => {
@@ -99,8 +99,8 @@ describe('cầu nối Chrome — ghép đôi và chống truy cập trái phép'
   it('token sai → 401; extension KHÁC (id khác) dù có token → 403; không Origin nhưng đúng token → vào được (tiến trình cục bộ đã có bí mật)', async () => {
     const { b, port } = await mk();
     const token = ((await pairWith(b, port)).r.json.token as string);
-    expect((await raw(port, 'GET', '/v1/ping', { headers: auth(token.slice(0, -1) + (token.endsWith('A') ? 'B' : 'A')) })).status).toBe(401);
-    expect((await raw(port, 'GET', '/v1/ping', { headers: auth(token, EXT2) })).status).toBe(403);
+    expect((await raw(port, 'GET', '/v1/ping?v=2', { headers: auth(token.slice(0, -1) + (token.endsWith('A') ? 'B' : 'A')) })).status).toBe(401);
+    expect((await raw(port, 'GET', '/v1/ping?v=2', { headers: auth(token, EXT2) })).status).toBe(403);
     expect((await raw(port, 'GET', '/v1/ping', { headers: { authorization: `Bearer ${token}` } })).status).toBe(200);
   });
 
@@ -128,8 +128,49 @@ describe('cầu nối Chrome — ghép đôi và chống truy cập trái phép'
     const token = ((await pairWith(A.b, A.port)).r.json.token as string);
     expect((await raw(B.port, 'GET', '/v1/ping', { headers: auth(token) })).status).toBe(200); // B thấy token mới nhờ đọc lại kho
     await A.b.unpair();
-    expect((await raw(A.port, 'GET', '/v1/ping', { headers: auth(token) })).status).toBe(401);
-    expect((await raw(B.port, 'GET', '/v1/ping', { headers: auth(token) })).status).toBe(401);
+    expect((await raw(A.port, 'GET', '/v1/ping?v=2', { headers: auth(token) })).status).toBe(401);
+    expect((await raw(B.port, 'GET', '/v1/ping?v=2', { headers: auth(token) })).status).toBe(401);
+  });
+});
+
+/**
+ * (0.7.17) Tiện ích Chrome 0.7.12 (bản cửa hàng) bỏ quên thân câu trả lời lỗi: mỗi 401 nó giữ một vùng nhớ dùng chung 2 MB không bao giờ trả
+ * và hỏi lại mỗi 7 giây mãi mãi (máy thật 25/11/2026: 2,7 GB trong một tiến trình, ~4 GB/giờ). Máy chủ cầu không sửa được mã của bản cũ,
+ * nhưng có thể không đưa cho nó thân câu trả lời nào: yêu cầu từ tiện ích KHÔNG gắn `?v=2` mà token sai thì bị ĐÓNG kết nối.
+ */
+describe('cầu nối Chrome — không để tiện ích Chrome bản cũ rò bộ nhớ (0.7.17)', () => {
+  it('bản cũ (không ?v=2) dùng token sai → đóng kết nối, KHÔNG trả lời, ở cả /v1/ping, /v1/poll, /v1/result; đếm được số lần', async () => {
+    const { b, port } = await mk();
+    const token = (await pairWith(b, port)).r.json.token as string;
+    const bad = token.slice(0, -1) + (token.endsWith('A') ? 'B' : 'A');
+    for (const [m, p] of [['GET', '/v1/ping'], ['GET', '/v1/poll?wait=20'], ['POST', '/v1/result']] as const) {
+      await expect(raw(port, m, p, { headers: auth(bad), ...(m === 'POST' ? { body: '{}' } : {}) }), `${m} ${p}`).rejects.toThrow(/socket hang up|ECONNRESET/);
+    }
+    expect(b.oldClientRefusals()).toBe(3);
+    // chưa ghép đôi (token rỗng ở VS Code) cũng vậy — đúng trường hợp «đã ghép với hồ sơ khác rồi huỷ»
+    await b.unpair();
+    await expect(raw(port, 'GET', '/v1/poll?wait=20', { headers: auth(token) })).rejects.toThrow(/socket hang up|ECONNRESET/);
+    expect(b.oldClientRefusals()).toBe(4);
+  });
+
+  it('bản cũ với token ĐÚNG vẫn chạy như trước (không cần ?v=2); bản mới token sai nhận 401 có thân JSON; tiến trình cục bộ không Origin vẫn nhận 401', async () => {
+    const { b, port } = await mk();
+    const token = (await pairWith(b, port)).r.json.token as string;
+    expect((await raw(port, 'GET', '/v1/ping', { headers: auth(token) })).json).toEqual({ ok: true, v: 1 });
+    const bad = token.slice(0, -1) + (token.endsWith('A') ? 'B' : 'A');
+    const fresh = await raw(port, 'GET', '/v1/poll?wait=20&v=2', { headers: auth(bad) });
+    expect(fresh.status).toBe(401);
+    expect(fresh.json).toEqual({ error: 'unauthorized' });
+    expect((await raw(port, 'GET', '/v1/ping', { headers: { authorization: `Bearer ${bad}` } })).status).toBe(401); // curl/tiến trình khác: không phải tiện ích → không đóng
+    expect(b.oldClientRefusals()).toBe(0);
+  });
+
+  it('extension KHÁC id: bản cũ bị đóng kết nối, bản mới nhận 403; preflight CORS không bị ảnh hưởng', async () => {
+    const { b, port } = await mk();
+    const token = (await pairWith(b, port)).r.json.token as string;
+    await expect(raw(port, 'GET', '/v1/ping', { headers: auth(token, EXT2) })).rejects.toThrow(/socket hang up|ECONNRESET/);
+    expect((await raw(port, 'GET', '/v1/ping?v=2', { headers: auth(token, EXT2) })).status).toBe(403);
+    expect((await raw(port, 'OPTIONS', '/v1/poll', { headers: { origin: OK_ORIGIN, 'access-control-request-method': 'GET' } })).status).toBe(204);
   });
 });
 
@@ -320,7 +361,7 @@ describe('cầu nối Chrome — ghép đôi KHÔNG MÃ (Chrome xin, VS Code hi�
     const first = (await pairWith(b, port)).r.json.token as string;
     const q = await ask(port, EXT2);
     expect(await b.approvePair(q.json.id)).toBe(true);
-    expect((await raw(port, 'GET', '/v1/ping', { headers: auth(first) })).status).toBe(401);
+    expect((await raw(port, 'GET', '/v1/ping?v=2', { headers: auth(first) })).status).toBe(401);
     const got = (await poll(port, q.json.id, EXT2)).json.token as string;
     expect((await raw(port, 'GET', '/v1/ping', { headers: auth(got, EXT2) })).json).toEqual({ ok: true, v: 1 });
   });

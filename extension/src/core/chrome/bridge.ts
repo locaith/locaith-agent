@@ -16,6 +16,7 @@
 import { randomBytes, randomInt, timingSafeEqual } from 'node:crypto';
 import * as http from 'node:http';
 import type { AddressInfo } from 'node:net';
+import { LINK_PROTO } from '../../shared/linkProtocol';
 
 export const BRIDGE_PORTS: readonly number[] = [47615, 47616, 47617, 47618, 47619, 47620];
 export const BRIDGE_VERSION = 1;
@@ -96,6 +97,8 @@ export class BrowserBridge {
   private readonly credTtl: number;
   private readonly connectWait: number;
   private seq = 0;
+  private oldRefused = 0;
+  private oldRefusedLogAt = 0;
   private readonly reqs = new Map<string, PairReq>();
   private reqTimes: number[] = [];
   private readonly listeners = new Set<() => void>();
@@ -300,6 +303,34 @@ export class BrowserBridge {
     res.end(code === 204 ? undefined : JSON.stringify(body));
   }
 
+  /**
+   * Từ chối một yêu cầu cần token.
+   * Tiện ích Chrome bản cũ (gọi từ extension mà KHÔNG gắn `?v=2`, xem shared/linkProtocol.ts) bỏ quên thân câu trả lời lỗi: mỗi 401 nó rò một vùng
+   * nhớ 2 MB và hỏi lại mỗi 7 giây mãi mãi. Với nó, ĐÓNG kết nối thay vì trả lời — fetch báo lỗi mạng, không có thân nào để rò, và nó tự giãn nhịp.
+   * Bản mới (có dấu) và tiến trình cục bộ không có Origin vẫn nhận mã lỗi rõ ràng.
+   */
+  private refuse(req: http.IncomingMessage, res: http.ServerResponse, url: URL, em: RegExpExecArray | null, code: 401 | 403, error: string): void {
+    if (em && url.searchParams.get('v') !== LINK_PROTO) {
+      this.oldRefused++;
+      const t = this.now();
+      if (t - this.oldRefusedLogAt > 10 * 60_000) {
+        this.oldRefusedLogAt = t;
+        this.log(
+          'warn',
+          `Cầu nối Chrome: tiện ích Chrome bản cũ dùng token không còn hiệu lực — đóng kết nối để nó không rò bộ nhớ (${this.oldRefused} lần). Cập nhật tiện ích Locaith AI trên Chrome rồi ghép đôi lại.`,
+        );
+      }
+      res.destroy();
+      return;
+    }
+    return this.send(res, code, { error }, req);
+  }
+
+  /** Số lần đã đóng kết nối của tiện ích Chrome bản cũ dùng token sai (chẩn đoán / test). */
+  oldClientRefusals(): number {
+    return this.oldRefused;
+  }
+
   private async readBody(req: http.IncomingMessage): Promise<unknown | undefined> {
     const chunks: Buffer[] = [];
     let size = 0;
@@ -340,8 +371,8 @@ export class BrowserBridge {
     if (url.pathname === '/v1/pair/cancel' && req.method === 'POST') return this.pairCancelHttp(req, res, em?.[1]);
 
     const auth = /^Bearer (\S+)$/.exec(String(req.headers.authorization ?? ''))?.[1];
-    if (!this.creds.token || !auth || !safeEq(auth, this.creds.token)) return this.send(res, 401, { error: 'unauthorized' }, req);
-    if (em && this.creds.extId && em[1] !== this.creds.extId) return this.send(res, 403, { error: 'origin' }, req);
+    if (!this.creds.token || !auth || !safeEq(auth, this.creds.token)) return this.refuse(req, res, url, em, 401, 'unauthorized');
+    if (em && this.creds.extId && em[1] !== this.creds.extId) return this.refuse(req, res, url, em, 403, 'origin');
 
     if (req.method === 'GET' && url.pathname === '/v1/ping') return this.send(res, 200, { ok: true, v: BRIDGE_VERSION }, req);
     if (req.method === 'GET' && url.pathname === '/v1/poll') {

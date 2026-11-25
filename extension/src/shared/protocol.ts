@@ -661,7 +661,7 @@ export interface VscodeLinkView {
   /** Một VS Code vừa trả lời hợp lệ (trong 45 giây qua). */
   connected: boolean;
   /** Tiến trình xin ghép đôi: 'asking' (đang hỏi các cổng) · 'waiting' (chờ bấm Cho phép trong VS Code) · 'denied' · 'expired' · 'not_found' · 'busy' · 'old' · 'consent' · 'idle'. */
-  pairing: 'idle' | 'asking' | 'waiting' | 'denied' | 'expired' | 'not_found' | 'busy' | 'old' | 'consent';
+  pairing: 'idle' | 'asking' | 'waiting' | 'denied' | 'expired' | 'not_found' | 'busy' | 'old' | 'consent' | 'lost';
   /** Trang đã «Luôn cho phép». */
   allowed: string[];
   /** Trang chỉ cho phép trong phiên này. */

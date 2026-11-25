@@ -203,5 +203,37 @@ describe.skipIf(BROWSERS.length === 0)('cầu nối VS Code (bản trình duyệ
       await panel.waitForFunction(() => /Đang tắt/.test(document.querySelector('[data-testid="vscode-link-state"]')?.textContent ?? ''), { timeout: 20_000 });
       expect(errors.filter((e) => !/favicon|Failed to load resource/i.test(e))).toEqual([]);
     });
+
+    // (0.7.17) Sự cố 0.7.12 trên máy thật: VS Code trả 401 (trình duyệt đã bị thay khi ghép đôi hồ sơ khác), tiện ích hỏi lại mỗi 7 giây mãi mãi và rò 2 MB mỗi lần.
+    it('(0.7.17) VS Code huỷ / ghép đôi nơi khác → tiện ích nhận 401 rồi DỪNG HẲN (không gọi lại), Cài đặt báo mất ghép đôi', async () => {
+      // Bật lại: token cũ vẫn còn hiệu lực ở VS Code nên nối ngay, không cần ghép đôi.
+      await panel.evaluate(() => {
+        const sw = document.querySelector('[data-testid="vscode-link"] [role="switch"], [data-testid="vscode-link"] input[type="checkbox"], [data-testid="vscode-link"] button[aria-checked]') as HTMLElement;
+        sw.click();
+      });
+      await until(() => bridge.connected());
+      await panel.waitForFunction(() => /Đã kết nối với VS Code/.test(document.querySelector('[data-testid="vscode-link-state"]')?.textContent ?? ''), { timeout: 20_000 });
+      const server = (bridge as any).server as http.Server;
+      const seen: string[] = [];
+      const onReq = (req: http.IncomingMessage) => {
+        if (req.method !== 'OPTIONS' && /^\/v1\/(ping|poll|result)/.test(req.url ?? '')) seen.push(String(req.url));
+      };
+      server.on('request', onReq);
+      try {
+        await bridge.unpair(); // như người dùng ghép đôi hồ sơ / trình duyệt khác, hoặc bấm Huỷ ghép đôi trong VS Code
+        await panel.waitForFunction(() => /không còn nhận trình duyệt này/.test(document.querySelector('[data-testid="vscode-link-state"]')?.textContent ?? ''), { timeout: 30_000 });
+        const atLost = seen.length;
+        await new Promise((r) => setTimeout(r, 16_000)); // 0.7.12 đã gọi lại ít nhất 2 lần trong khoảng này
+        expect(seen.slice(atLost), 'không được gọi thêm sau khi mất ghép đôi').toEqual([]);
+        expect(seen.length).toBeGreaterThan(0);
+        expect(seen.every((u) => /[?&]v=2(&|$)/.test(u)), seen.join(', ')).toBe(true); // bản mới luôn gắn dấu giao thức
+        expect(bridge.oldClientRefusals()).toBe(0); // nên không bao giờ bị máy chủ coi là bản cũ
+        const st = (await panel.evaluate(() => chrome.runtime.sendMessage({ type: 'nd-link-status' }))) as any;
+        expect(st).toMatchObject({ on: false, paired: false, running: false, pairing: 'lost' });
+        expect(errors.filter((e) => !/favicon|Failed to load resource/i.test(e))).toEqual([]);
+      } finally {
+        server.off('request', onReq);
+      }
+    }, 90_000);
   });
 });
