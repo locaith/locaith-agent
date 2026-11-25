@@ -29,6 +29,10 @@ const CONNECTED_MS = 45_000;
 const REQ_TTL_MS = 2 * 60_000;
 const REQ_PER_MIN = 6;
 const CODE_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+/** (0.7.18) Giữ GET của tiện ích Chrome bản cũ không trả lời quá 30 giây để Chrome tự dừng dịch vụ nền của nó (rồi mới đóng). */
+const OLD_HOLD_MS = 45_000;
+/** Giữ cùng lúc tối đa bấy nhiêu yêu cầu như vậy (một trang web không thể dùng việc giữ để chiếm cổng). */
+const OLD_HOLD_MAX = 8;
 const EXT_ORIGIN = /^chrome-extension:\/\/([a-p]{32})$/;
 const HOST_OK = /^(127\.0\.0\.1|localhost|\[::1\]):\d+$/;
 
@@ -65,6 +69,8 @@ export interface BridgeOptions {
   credTtlMs?: number;
   /** Chờ extension kết nối tối đa bấy lâu trước khi báo "chưa kết nối" (mặc định 10 giây). */
   connectWaitMs?: number;
+  /** (0.7.18) Giữ yêu cầu GET của tiện ích Chrome bản cũ (token sai, không `?v=2`) bấy lâu rồi mới đóng (mặc định 45 giây). */
+  oldHoldMs?: number;
 }
 
 interface Job {
@@ -99,6 +105,8 @@ export class BrowserBridge {
   private seq = 0;
   private oldRefused = 0;
   private oldRefusedLogAt = 0;
+  private readonly held = new Set<http.ServerResponse>();
+  private readonly oldHoldMs: number;
   private readonly reqs = new Map<string, PairReq>();
   private reqTimes: number[] = [];
   private readonly listeners = new Set<() => void>();
@@ -112,6 +120,7 @@ export class BrowserBridge {
     this.ports = o.ports ?? BRIDGE_PORTS;
     this.credTtl = o.credTtlMs ?? 5000;
     this.connectWait = o.connectWaitMs ?? 10_000;
+    this.oldHoldMs = o.oldHoldMs ?? OLD_HOLD_MS;
   }
 
   // ── vòng đời ──
@@ -139,6 +148,8 @@ export class BrowserBridge {
   }
 
   stop(): void {
+    for (const r of [...this.held]) r.destroy(); // yêu cầu của tiện ích bản cũ đang bị giữ: đóng luôn
+    this.held.clear();
     this.server?.closeAllConnections?.();
     this.server?.close();
     this.server = undefined;
@@ -305,25 +316,46 @@ export class BrowserBridge {
 
   /**
    * Từ chối một yêu cầu cần token.
-   * Tiện ích Chrome bản cũ (gọi từ extension mà KHÔNG gắn `?v=2`, xem shared/linkProtocol.ts) bỏ quên thân câu trả lời lỗi: mỗi 401 nó rò một vùng
-   * nhớ 2 MB và hỏi lại mỗi 7 giây mãi mãi. Với nó, ĐÓNG kết nối thay vì trả lời — fetch báo lỗi mạng, không có thân nào để rò, và nó tự giãn nhịp.
-   * Bản mới (có dấu) và tiến trình cục bộ không có Origin vẫn nhận mã lỗi rõ ràng.
+   *
+   * Tiện ích Chrome bản cũ (≤ 0.7.16: gọi từ trình duyệt mà KHÔNG gắn `?v=2`, xem shared/linkProtocol.ts) bỏ quên thân câu trả lời lỗi: mỗi 401 nó
+   * rò một vùng nhớ 2 MB và hỏi lại mỗi 7 giây mãi mãi. Với nó, KHÔNG đưa câu trả lời nào:
+   *  • GET (ping / poll): GIỮ yêu cầu không trả lời tối đa `oldHoldMs` (45 giây) rồi đóng. Chrome tự dừng dịch vụ nền có fetch chờ quá 30 giây,
+   *    nên bản cũ ngừng hẳn và Chrome áp được bản cập nhật đang treo (vòng gọi cũ giữ dịch vụ nền thức mãi nên Chrome không bao giờ áp được);
+   *  • yêu cầu khác, hoặc đã giữ đủ `OLD_HOLD_MAX` yêu cầu: đóng kết nối ngay.
+   * «Từ trình duyệt» = có Origin của tiện ích HOẶC có tiêu đề Sec-Fetch-*: Chrome KHÔNG gắn Origin vào GET gửi từ tiện ích (đo trên Chrome và Edge
+   * 18/11 và 25/11/2026) — bản 0.7.17 chỉ xét Origin nên ping / poll của bản cũ lọt qua và vẫn nhận 401 kèm thân (máy thật 25/11: 3,9 GB).
+   * Bản mới (có dấu) và tiến trình cục bộ (không Origin, không Sec-Fetch-*) vẫn nhận mã lỗi rõ ràng.
    */
   private refuse(req: http.IncomingMessage, res: http.ServerResponse, url: URL, em: RegExpExecArray | null, code: 401 | 403, error: string): void {
-    if (em && url.searchParams.get('v') !== LINK_PROTO) {
+    const fromBrowser = !!em || typeof req.headers['sec-fetch-mode'] === 'string' || typeof req.headers['sec-fetch-site'] === 'string';
+    if (fromBrowser && url.searchParams.get('v') !== LINK_PROTO) {
       this.oldRefused++;
       const t = this.now();
       if (t - this.oldRefusedLogAt > 10 * 60_000) {
         this.oldRefusedLogAt = t;
         this.log(
           'warn',
-          `Cầu nối Chrome: tiện ích Chrome bản cũ dùng token không còn hiệu lực — đóng kết nối để nó không rò bộ nhớ (${this.oldRefused} lần). Cập nhật tiện ích Locaith AI trên Chrome rồi ghép đôi lại.`,
+          `Cầu nối Chrome: tiện ích Chrome bản cũ dùng token không còn hiệu lực — không trả lời để nó không rò bộ nhớ (${this.oldRefused} lần). Khởi động lại Chrome để nhận bản tiện ích mới, rồi ghép đôi lại nếu cần.`,
         );
+      }
+      if (req.method === 'GET' && this.held.size < OLD_HOLD_MAX) {
+        this.held.add(res);
+        const timer = setTimeout(() => res.destroy(), this.oldHoldMs);
+        res.on('close', () => {
+          clearTimeout(timer);
+          this.held.delete(res);
+        });
+        return;
       }
       res.destroy();
       return;
     }
     return this.send(res, code, { error }, req);
+  }
+
+  /** Số yêu cầu của tiện ích bản cũ đang bị giữ không trả lời (chẩn đoán / test). */
+  heldOldClients(): number {
+    return this.held.size;
   }
 
   /** Số lần đã đóng kết nối của tiện ích Chrome bản cũ dùng token sai (chẩn đoán / test). */

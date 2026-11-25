@@ -135,8 +135,15 @@ afterEach(() => {
   delete g.chrome;
 });
 
-/** fetch thật + gắn Origin chrome-extension:// như trình duyệt tự gắn cho tiện ích. */
-const extFetch: typeof fetch = (u, init) => fetch(u, { ...init, headers: { ...(init?.headers as Record<string, string>), origin: `chrome-extension://${EXT}` } });
+/**
+ * fetch thật + tiêu đề như Chrome / Edge THẬT gắn cho fetch từ dịch vụ nền của tiện ích (đo 25/11/2026): Origin chrome-extension:// CHỈ ở yêu cầu
+ * không phải GET (GET không có Origin), Sec-Fetch-* ở mọi yêu cầu. Bản 0.7.17 test bằng bộ giả gắn Origin cả cho GET nên không thấy lỗ ở phía VS Code.
+ */
+const extFetch: typeof fetch = (u, init) => {
+  const method = (init?.method ?? 'GET').toUpperCase();
+  const viaBrowser = { 'sec-fetch-mode': 'cors', 'sec-fetch-site': 'none', 'sec-fetch-dest': 'empty' };
+  return fetch(u, { ...init, headers: { ...(init?.headers as Record<string, string>), ...viaBrowser, ...(method === 'GET' || method === 'HEAD' ? {} : { origin: `chrome-extension://${EXT}` }) } });
+};
 
 const mkLink = (o: { testBuild?: boolean; fetch?: typeof fetch; ports?: number[] } = {}) =>
   (link = installLink({

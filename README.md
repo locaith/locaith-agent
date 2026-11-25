@@ -1,13 +1,19 @@
 # Locaith AI Agent for VS Code
 
-English-first VS Code Marketplace release for `LocaithAI.locaith-agent`, version `0.7.17`.
+English-first VS Code Marketplace release for `LocaithAI.locaith-agent`, version `0.7.18`.
 
 > This repository contains the **source code** of Locaith AI Agent — the VS Code extension, the Chrome / Edge edition and the `locaith-cli` terminal app — together with the prebuilt release packages and their checksums. The source is published under the [Functional Source License](LICENSE) (FSL-1.1-ALv2); see [License](#license).
 
-## What's new in 0.7.17
+## What's new in 0.7.18
+
+- **The VS Code side now really stops the 0.7.12 browser build from leaking.** 0.7.17 only closed the connection for requests that carried the extension's `Origin`, but Chrome and Edge send no `Origin` on GET requests from an extension, so the old build's ping and poll still received 401 replies and kept leaking (measured after a reboot: 3.9 GB in one extension process of a profile still running 0.7.12). The bridge now recognises browser requests by `Origin` or `Sec-Fetch-*`; an old-style GET with an unknown token is held without an answer and then closed, so the old build gets no reply to leak and Chrome stops its worker — which also lets the pending 0.7.17 browser update install.
+- **Correction:** the 0.7.17 notes said the 0.7.12 build left no unread reply against the new VS Code; that was measured with a test client that sent `Origin` on GET, which real Chrome does not. Tests now use the headers Chrome sends, and a real Chrome + Edge test checks the old-style request from the extension's own service worker.
+- The Chrome / Edge package stays 0.7.17. Details: `CHANGELOG.md`.
+
+### Also in 0.7.17
 
 - **Chrome / Edge: the VS Code connection no longer leaks memory.** When VS Code refused the browser's pairing token (paired with another profile or browser since, or the pairing was removed), 0.7.12–0.7.16 asked again every 7 seconds forever and never read the error replies; Chrome keeps a 2 MB block for each unread reply (measured on a real machine: 2.7 GB in one extension process). Every reply is now read or cancelled, a refused token stops the connection and Settings says how to pair again, and nothing polls while VS Code is closed.
-- **The VS Code side protects the 0.7.12 browser build already in the Chrome Web Store:** for a token it does not know, the bridge closes the connection instead of answering 401, so the old build has no reply to leak. Update VS Code and reload the window to stop a running leak at once.
+- **The VS Code side protects the 0.7.12 browser build already in the Chrome Web Store:** for a token it does not know, the bridge closes the connection instead of answering 401, so the old build has no reply to leak. *(0.7.17 missed GET requests, which carry no Origin — fixed in 0.7.18.)*
 - Details and measurements: `CHANGELOG.md`.
 
 ### Also in 0.7.12
@@ -68,9 +74,9 @@ Search for **Locaith AI Agent** in VS Code Extensions, or run:
 
 ## Install from the VSIX
 
-Download [`locaith-agent-0.7.17.vsix`](releases/locaith-agent-0.7.17.vsix), then choose **Extensions** → **...** → **Install from VSIX...**. From a terminal, run:
+Download [`locaith-agent-0.7.18.vsix`](releases/locaith-agent-0.7.18.vsix), then choose **Extensions** → **...** → **Install from VSIX...**. From a terminal, run:
 
-`code --install-extension releases/locaith-agent-0.7.17.vsix`
+`code --install-extension releases/locaith-agent-0.7.18.vsix`
 
 The package manifest declares VS Code engine `^1.90.0` and publisher `LocaithAI`. The Marketplace README is English-first; the package also includes a Vietnamese guide. The package is about 13 MB because it bundles 835 open-source skills.
 
@@ -88,9 +94,9 @@ The zip carries its own `LICENSE.txt` (Locaith Freeware License) and `THIRD_PART
 
 ## Package integrity
 
-SHA-256 of `locaith-agent-0.7.17.vsix`:
+SHA-256 of `locaith-agent-0.7.18.vsix`:
 
-`FDAFCEB635898114F5A0E76039962499B0A4CE6957C2860E0EAFBF371239E77A`
+`7ED10C8292F78D11E97B227B7DF772F9342A2068015A93BCB0DEF2DB18EAEDCC`
 
 All release checksums are listed in `SHA256SUMS.txt`.
 

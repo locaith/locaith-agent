@@ -70,7 +70,7 @@ describe.skipIf(BROWSERS.length === 0)('cầu nối VS Code (bản trình duyệ
     const origin = () => `http://127.0.0.1:${site.port}`;
 
     beforeAll(async () => {
-      bridge = new BrowserBridge(memStore(), () => undefined, { ports: [0], credTtlMs: 0, connectWaitMs: 15_000 });
+      bridge = new BrowserBridge(memStore(), () => undefined, { ports: [0], credTtlMs: 0, connectWaitMs: 15_000, oldHoldMs: 1500 });
       port = await bridge.start();
       profile = fs.mkdtempSync(path.join(os.tmpdir(), `nd-e2e-link-${name}-`));
       browser = await puppeteer.launch({ executablePath: exe, headless: true, pipe: true, enableExtensions: true, userDataDir: profile, args: ['--no-first-run', '--no-default-browser-check', '--window-size=1280,900'] });
@@ -235,5 +235,46 @@ describe.skipIf(BROWSERS.length === 0)('cầu nối VS Code (bản trình duyệ
         server.off('request', onReq);
       }
     }, 90_000);
+
+    // (0.7.18) Lỗ của 0.7.17: phần chặn phía VS Code chỉ xét Origin, mà Chrome KHÔNG gắn Origin vào GET từ tiện ích → ping / poll của bản 0.7.12
+    // vẫn nhận 401 kèm thân và rò tiếp (máy thật 25/11: 3,9 GB). Ở đây đo bằng fetch THẬT của dịch vụ nền, đúng tiêu đề trình duyệt gửi.
+    it('(0.7.18) yêu cầu kiểu bản cũ (GET không ?v=2, token sai) từ dịch vụ nền THẬT không nhận câu trả lời nào; có ?v=2 thì nhận 401; GET từ tiện ích không có Origin', async () => {
+      await panel.evaluate(() => chrome.runtime.sendMessage({ type: 'nd-link-status' })); // đánh thức dịch vụ nền nếu nó đang ngủ
+      const target = await browser.waitForTarget((x) => x.type() === 'service_worker' && x.url().startsWith(`chrome-extension://${extId}/`), { timeout: 20_000 });
+      const worker = (await target.worker())!;
+      const server = (bridge as any).server as http.Server;
+      const seen: { url: string; origin?: string; site?: string }[] = [];
+      const onReq = (req: http.IncomingMessage) => {
+        if (/^\/v1\/(ping|poll)/.test(req.url ?? '')) seen.push({ url: String(req.url), origin: req.headers.origin as string | undefined, site: req.headers['sec-fetch-site'] as string | undefined });
+      };
+      server.on('request', onReq);
+      try {
+        const before = bridge.oldClientRefusals();
+        const out = await worker.evaluate(async (p: number) => {
+          const t0 = Date.now();
+          let oldStyle = '';
+          try {
+            const r = await fetch(`http://127.0.0.1:${p}/v1/poll?wait=20`, { headers: { authorization: 'Bearer token-cu-het-hieu-luc' } });
+            oldStyle = `status ${r.status}`;
+            await r.text();
+          } catch {
+            oldStyle = 'network-error';
+          }
+          const held = Date.now() - t0;
+          const r2 = await fetch(`http://127.0.0.1:${p}/v1/ping?v=2`, { headers: { authorization: 'Bearer token-cu-het-hieu-luc' } });
+          return { oldStyle, held, fresh: r2.status, body: await r2.text() };
+        }, port);
+        expect(out.oldStyle, 'bản cũ không được nhận câu trả lời nào').toBe('network-error');
+        expect(out.held).toBeGreaterThanOrEqual(1200); // bị giữ (để Chrome tự dừng dịch vụ nền cũ), không đóng ngay
+        expect(out.fresh).toBe(401);
+        expect(JSON.parse(out.body)).toEqual({ error: 'unauthorized' });
+        expect(bridge.oldClientRefusals()).toBe(before + 1);
+        const get = seen.find((s) => s.url.startsWith('/v1/poll'));
+        expect(get?.origin, 'Chrome không gắn Origin vào GET từ tiện ích').toBeUndefined();
+        expect(get?.site).toBe('none');
+      } finally {
+        server.off('request', onReq);
+      }
+    }, 60_000);
   });
 });

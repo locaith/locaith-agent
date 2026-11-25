@@ -15,7 +15,7 @@ function memStore(): BridgeStore & { v: BridgeCreds } {
   return s;
 }
 async function mk(store = memStore(), o: ConstructorParameters<typeof BrowserBridge>[2] = {}) {
-  const b = new BrowserBridge(store, () => {}, { ports: [0], credTtlMs: 0, connectWaitMs: 300, ...o });
+  const b = new BrowserBridge(store, () => {}, { ports: [0], credTtlMs: 0, connectWaitMs: 300, oldHoldMs: 200, ...o });
   open.push(b);
   const port = await b.start();
   return { b, port, store };
@@ -162,6 +162,68 @@ describe('cầu nối Chrome — không để tiện ích Chrome bản cũ rò b
     expect(fresh.status).toBe(401);
     expect(fresh.json).toEqual({ error: 'unauthorized' });
     expect((await raw(port, 'GET', '/v1/ping', { headers: { authorization: `Bearer ${bad}` } })).status).toBe(401); // curl/tiến trình khác: không phải tiện ích → không đóng
+    expect(b.oldClientRefusals()).toBe(0);
+  });
+
+  /** Tiêu đề Chrome / Edge THẬT gửi kèm fetch từ dịch vụ nền của tiện ích (đo 25/11/2026): GET KHÔNG có Origin, POST có; cả hai có Sec-Fetch-*. */
+  const chromeGet = (token: string) => ({ authorization: `Bearer ${token}`, 'sec-fetch-mode': 'cors', 'sec-fetch-site': 'none', 'sec-fetch-dest': 'empty' });
+  const chromePost = (token: string) => ({ ...chromeGet(token), origin: OK_ORIGIN });
+  const until = async (f: () => boolean, ms = 3000) => {
+    const end = Date.now() + ms;
+    while (!f()) {
+      if (Date.now() > end) throw new Error('quá hạn chờ điều kiện');
+      await new Promise((r) => setTimeout(r, 20));
+    }
+  };
+
+  it('(0.7.18) bản cũ: GET y như Chrome gửi (KHÔNG Origin, có Sec-Fetch-*) với token sai → GIỮ không trả lời rồi đóng — không có câu trả lời nào để rò (đây là lỗ của 0.7.17)', async () => {
+    const { b, port } = await mk(memStore(), { oldHoldMs: 400 });
+    const token = (await pairWith(b, port)).r.json.token as string;
+    const bad = token.slice(0, -1) + (token.endsWith('A') ? 'B' : 'A');
+    for (const p of ['/v1/ping', '/v1/poll?wait=20']) {
+      const t0 = Date.now();
+      await expect(raw(port, 'GET', p, { headers: chromeGet(bad) }), p).rejects.toThrow(/socket hang up|ECONNRESET/);
+      expect(Date.now() - t0, `${p}: phải bị giữ ~400 ms rồi mới đóng`).toBeGreaterThanOrEqual(350);
+    }
+    expect(b.oldClientRefusals()).toBe(2);
+    await until(() => b.heldOldClients() === 0); // máy chủ nhận «close» sau khi phía khách đã thấy kết nối đứt
+  });
+
+  it('(0.7.18) bản cũ: POST (có Origin) token sai → đóng NGAY; đang giữ GET mà VS Code dừng cầu nối thì đóng luôn', async () => {
+    const { b, port } = await mk(memStore(), { oldHoldMs: 60_000 });
+    const token = (await pairWith(b, port)).r.json.token as string;
+    const bad = token.slice(0, -1) + (token.endsWith('A') ? 'B' : 'A');
+    const t0 = Date.now();
+    await expect(raw(port, 'POST', '/v1/result', { headers: chromePost(bad), body: '{}' })).rejects.toThrow(/socket hang up|ECONNRESET/);
+    expect(Date.now() - t0).toBeLessThan(1000);
+    const held = expect(raw(port, 'GET', '/v1/poll?wait=20', { headers: chromeGet(bad) })).rejects.toThrow(/socket hang up|ECONNRESET/);
+    await until(() => b.heldOldClients() === 1);
+    b.stop();
+    await held;
+  });
+
+  it('(0.7.18) giữ tối đa 8 yêu cầu cùng lúc; yêu cầu thứ 9 bị đóng ngay (một trang web không chiếm được cổng)', async () => {
+    const { b, port } = await mk(memStore(), { oldHoldMs: 60_000 });
+    const held = Array.from({ length: 8 }, () => raw(port, 'GET', '/v1/poll?wait=20', { headers: chromeGet('sai') }).catch((e: unknown) => e));
+    await until(() => b.heldOldClients() === 8);
+    const t0 = Date.now();
+    await expect(raw(port, 'GET', '/v1/ping', { headers: chromeGet('sai') })).rejects.toThrow(/socket hang up|ECONNRESET/);
+    expect(Date.now() - t0).toBeLessThan(1000);
+    b.stop();
+    await Promise.all(held);
+    expect(b.heldOldClients()).toBe(0);
+  });
+
+  it('(0.7.18) bản mới (?v=2) GET y như Chrome gửi: token sai → 401 có thân JSON, token đúng → 200; bản cũ token ĐÚNG vẫn chạy; curl token sai → 401', async () => {
+    const { b, port } = await mk();
+    const token = (await pairWith(b, port)).r.json.token as string;
+    const bad = token.slice(0, -1) + (token.endsWith('A') ? 'B' : 'A');
+    const fresh = await raw(port, 'GET', '/v1/poll?wait=20&v=2', { headers: chromeGet(bad) });
+    expect(fresh.status).toBe(401);
+    expect(fresh.json).toEqual({ error: 'unauthorized' });
+    expect((await raw(port, 'GET', '/v1/ping?v=2', { headers: chromeGet(token) })).json).toEqual({ ok: true, v: 1 });
+    expect((await raw(port, 'GET', '/v1/ping', { headers: chromeGet(token) })).json).toEqual({ ok: true, v: 1 });
+    expect((await raw(port, 'GET', '/v1/ping', { headers: { authorization: `Bearer ${bad}` } })).status).toBe(401);
     expect(b.oldClientRefusals()).toBe(0);
   });
 
