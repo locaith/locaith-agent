@@ -2,7 +2,7 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { BIO_SPEC, bioPaths, findPython, installBio, parsePyVersion, pythonCandidates, type Runner } from '../src/core/mcp/bioInstall';
+import { BIO_PINNED_COMMIT, BIO_SPEC, BIO_ZIP_URL, bioPaths, findPython, installBio, parsePyVersion, pythonCandidates, type Runner } from '../src/core/mcp/bioInstall';
 import { BIO_AUTO_ALLOW, BIO_WORKSPACE_ID, BioMemoryService } from '../src/host/bioMemory';
 
 /** Runner giả ghi lại từng lệnh; `script` quyết định kết quả theo lệnh. */
@@ -58,6 +58,14 @@ describe('cài Bio-Agent OS vào môi trường riêng', () => {
     expect(calls[2]).toBe(`${p.exe} --help`);
     expect(BIO_SPEC).toContain('bio-agent-os[mcp]');
     expect(lines.join('\n')).toContain('Successfully installed');
+  });
+
+  it('mã nguồn được ghim theo MỘT commit, không theo nhánh (nhánh main của kho công khai không còn mã từ 22/11/2026)', () => {
+    expect(BIO_PINNED_COMMIT).toMatch(/^[0-9a-f]{40}$/);
+    expect(BIO_ZIP_URL).toBe(`https://github.com/locaith/bio-memory-ai-locaith/archive/${BIO_PINNED_COMMIT}.zip`);
+    // một nhánh hay một thẻ dời được; chỉ commit là bất biến
+    expect(BIO_ZIP_URL).not.toMatch(/refs\/(heads|tags)\//);
+    expect(BIO_SPEC).toBe(`bio-agent-os[mcp] @ ${BIO_ZIP_URL}`);
   });
 
   it('không có Python → thông báo hướng dẫn cài; pip lỗi → trả lỗi kèm đuôi nhật ký, không báo thành công', async () => {

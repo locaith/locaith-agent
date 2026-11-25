@@ -8,7 +8,14 @@ import { spawn } from 'node:child_process';
 import { existsSync, readdirSync } from 'node:fs';
 import * as path from 'node:path';
 
-export const BIO_ZIP_URL = 'https://github.com/locaith/bio-memory-ai-locaith/archive/refs/heads/main.zip';
+/**
+ * Mã nguồn được cài: GHIM theo một commit, không theo nhánh. Từ 22/11/2026 nhánh `main` của kho công khai chỉ còn README và LICENSE
+ * (Bio-Memory 0.11 phát hành dạng biên dịch), nên `…/archive/refs/heads/main.zip` không còn `pyproject.toml` và pip từ chối cài:
+ * mọi lần cài mới hay «cập nhật» đều hỏng. Commit dưới đây là đầu nhánh `main` ngay trước đó (bio-agent-os 0.8.2rc1, có extra `mcp`):
+ * đúng mã mà bản cài cũ vẫn tải. Đổi sang bản khác thì đổi commit ở đây, kèm test; đừng trỏ lại vào một nhánh.
+ */
+export const BIO_PINNED_COMMIT = '918682538c65530951171ddbff991fcf9848de0d';
+export const BIO_ZIP_URL = `https://github.com/locaith/bio-memory-ai-locaith/archive/${BIO_PINNED_COMMIT}.zip`;
 export const BIO_SPEC = `bio-agent-os[mcp] @ ${BIO_ZIP_URL}`;
 
 export interface RunResult {
