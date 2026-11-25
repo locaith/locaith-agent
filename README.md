@@ -1,10 +1,14 @@
 # Locaith AI Agent for VS Code
 
-English-first VS Code Marketplace release for `LocaithAI.locaith-agent`, version `0.7.18`.
+English-first VS Code Marketplace release for `LocaithAI.locaith-agent`, version `0.7.19`.
 
 > This repository contains the **source code** of Locaith AI Agent — the VS Code extension, the Chrome / Edge edition and the `locaith-cli` terminal app — together with the prebuilt release packages and their checksums. The source is published under the [Functional Source License](LICENSE) (FSL-1.1-ALv2); see [License](#license).
 
-## What's new in 0.7.18
+## What's new in 0.7.19
+
+- **Installing or updating Bio-Memory works again.** The install button downloaded the source from the `main` branch of the public `bio-memory-ai-locaith` repository, which since 22 November 2026 only holds the README and the licence (Bio-Memory 0.11 ships as a compiled release), so every new install or update failed. The installer now pins the source to a fixed commit (Bio-Agent OS 0.8.2rc1 with its `mcp` extra). Existing installs were not affected. Details: `CHANGELOG.md`.
+
+### Also in 0.7.18
 
 - **The VS Code side now really stops the 0.7.12 browser build from leaking.** 0.7.17 only closed the connection for requests that carried the extension's `Origin`, but Chrome and Edge send no `Origin` on GET requests from an extension, so the old build's ping and poll still received 401 replies and kept leaking (measured after a reboot: 3.9 GB in one extension process of a profile still running 0.7.12). The bridge now recognises browser requests by `Origin` or `Sec-Fetch-*`; an old-style GET with an unknown token is held without an answer and then closed, so the old build gets no reply to leak and Chrome stops its worker — which also lets the pending 0.7.17 browser update install.
 - **Correction:** the 0.7.17 notes said the 0.7.12 build left no unread reply against the new VS Code; that was measured with a test client that sent `Origin` on GET, which real Chrome does not. Tests now use the headers Chrome sends, and a real Chrome + Edge test checks the old-style request from the extension's own service worker.
@@ -74,9 +78,9 @@ Search for **Locaith AI Agent** in VS Code Extensions, or run:
 
 ## Install from the VSIX
 
-Download [`locaith-agent-0.7.18.vsix`](releases/locaith-agent-0.7.18.vsix), then choose **Extensions** → **...** → **Install from VSIX...**. From a terminal, run:
+Download [`locaith-agent-0.7.19.vsix`](releases/locaith-agent-0.7.19.vsix), then choose **Extensions** → **...** → **Install from VSIX...**. From a terminal, run:
 
-`code --install-extension releases/locaith-agent-0.7.18.vsix`
+`code --install-extension releases/locaith-agent-0.7.19.vsix`
 
 The package manifest declares VS Code engine `^1.90.0` and publisher `LocaithAI`. The Marketplace README is English-first; the package also includes a Vietnamese guide. The package is about 13 MB because it bundles 835 open-source skills.
 
@@ -94,9 +98,9 @@ The zip carries its own `LICENSE.txt` (Locaith Freeware License) and `THIRD_PART
 
 ## Package integrity
 
-SHA-256 of `locaith-agent-0.7.18.vsix`:
+SHA-256 of `locaith-agent-0.7.19.vsix`:
 
-`7ED10C8292F78D11E97B227B7DF772F9342A2068015A93BCB0DEF2DB18EAEDCC`
+`46075D76E709EA71419CE97B7980B1B8B0648E2B2AEA4BC28EC9DEFF47DCA93E`
 
 All release checksums are listed in `SHA256SUMS.txt`.
 
