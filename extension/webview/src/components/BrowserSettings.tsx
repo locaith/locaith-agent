@@ -182,7 +182,9 @@ export function AddProviderForm({ onDone }: { onDone: () => void }) {
 
 
 /**
- * (0.7.12) Công tắc «Kết nối với VS Code»: bật thì xin ghép đôi (VS Code hiện thẻ Cho phép / Từ chối), sau đó VS Code điều khiển được các trang bạn duyệt từng trang.
+ * (0.7.12) Công tắc «Kết nối với ứng dụng trên máy» (trước 0.7.20: «Kết nối với VS Code»): bật thì xin ghép đôi (ứng dụng hiện thẻ Cho phép / Từ chối),
+ * sau đó ứng dụng điều khiển được các trang bạn duyệt từng trang. (0.7.20) Mỗi ứng dụng (VS Code, Locaith Work…) một token, liệt kê riêng từng ứng dụng;
+ * ứng dụng cũng tự khởi xướng được («Kết nối trình duyệt» trong ứng dụng → «Kết nối» ở cửa sổ nhỏ của tiện ích).
  * Làm mới trạng thái mỗi 4 giây khi mục này còn hiện (dịch vụ nền không đẩy mọi thay đổi như «đã nối»).
  */
 function VscodeLinkSection({ link, siteAccess }: { link: VscodeLinkView; siteAccess: boolean }) {
@@ -203,6 +205,11 @@ function VscodeLinkSection({ link, siteAccess }: { link: VscodeLinkView; siteAcc
         : link.paired
           ? 'paired'
           : 'asking';
+  const apps = link.apps ?? [];
+  const names = (list: string[]): string => [...new Set(list.filter(Boolean))].join(', ') || t('set.link.appsAny');
+  const lostNames = names(link.lost ?? []);
+  const params =
+    state === 'connected' ? { apps: names(apps.filter((a) => a.connected).map((a) => a.name)) } : state === 'paired' ? { apps: names(apps.map((a) => a.name)) } : state === 'lost' ? { apps: lostNames } : undefined;
   const pages = [...new Set([...link.allowed, ...link.session])];
   return (
     <section class="set-section" data-testid="vscode-link">
@@ -213,8 +220,26 @@ function VscodeLinkSection({ link, siteAccess }: { link: VscodeLinkView; siteAcc
         <Switch checked={link.on} label={t('set.link.toggle')} onChange={(v) => post({ type: 'vscode_link_toggle', on: v })} />
       </div>
       <div class="field-hint" role="status" data-testid="vscode-link-state">
-        {t(`set.link.state.${state}` as I18nKey)}
+        {t(`set.link.state.${state}` as I18nKey, params)}
       </div>
+      {state !== 'lost' && link.pairing === 'lost' && (link.lost?.length ?? 0) > 0 && (
+        <div class="field-hint" data-testid="vscode-link-lost">
+          {t('set.link.lostSome', { apps: lostNames })}
+        </div>
+      )}
+      {apps.length > 0 && (
+        <>
+          <div class="field-label">{t('set.link.apps')}</div>
+          <ul class="link-pages" data-testid="vscode-link-apps">
+            {apps.map((a) => (
+              <li key={a.kind} class="field field-inline">
+                <span class="field-label">{a.name || t('set.link.appsAny')}</span>
+                <Badge tone={a.connected ? 'ok' : 'warn'}>{a.connected ? t('set.link.app.on') : t('set.link.app.off')}</Badge>
+              </li>
+            ))}
+          </ul>
+        </>
+      )}
       {link.on && !siteAccess && <div class="field-hint">{t('set.link.shot')}</div>}
       <div class="field-label">{t('set.link.allowed')}</div>
       {pages.length === 0 ? (

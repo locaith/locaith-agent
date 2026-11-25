@@ -23,13 +23,25 @@ interface RawStatus {
   pairing: VscodeLinkView['pairing'];
   allowed: string[];
   session: string[];
+  apps?: { kind: string; name: string; connected: boolean }[];
+  lost?: string[];
 }
 
 export function chromeLinkHost(): BrowserLinkHost {
   const send = <T>(m: unknown): Promise<T> => chrome.runtime.sendMessage(m) as Promise<T>;
   const view = async (): Promise<VscodeLinkView> => {
     const s = await send<RawStatus>({ type: 'nd-link-status' });
-    return { paired: s.paired, on: s.on, connected: s.connected, pairing: s.pairing, allowed: s.allowed ?? [], session: s.session ?? [] };
+    return {
+      paired: s.paired,
+      on: s.on,
+      connected: s.connected,
+      pairing: s.pairing,
+      allowed: s.allowed ?? [],
+      session: s.session ?? [],
+      // tên rỗng = token từ bản ≤ 0.7.19 chưa rõ của ứng dụng nào (giao diện hiện «ứng dụng trên máy»)
+      apps: (s.apps ?? []).map((a) => ({ kind: String(a.kind), name: String(a.name ?? '').slice(0, 40), connected: a.connected === true })),
+      lost: (s.lost ?? []).map((x) => String(x).slice(0, 40)),
+    };
   };
   return {
     view,

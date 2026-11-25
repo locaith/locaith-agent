@@ -139,6 +139,18 @@ export async function activate(context: vscode.ExtensionContext): Promise<TestAp
     autoStart: () => vscode.workspace.getConfiguration('locaithAgent').get<boolean>('chrome.bridge', true),
   });
   void chromeSvc.init();
+  // (0.7.20) Lệnh NỘI BỘ cho host khác (bản desktop Locaith Work): tạo vé ghép đôi và đọc trạng thái cầu nối. Không khai trong package.json.
+  context.subscriptions.push(
+    vscode.commands.registerCommand('locaithAgent.chrome.linkTicket', async () => {
+      try {
+        return await chromeSvc.linkTicket();
+      } catch (e) {
+        const message = e instanceof Error ? e.message : String(e);
+        return { error: /47615|bận|busy/i.test(message) ? 'busy' : 'failed', message };
+      }
+    }),
+    vscode.commands.registerCommand('locaithAgent.chrome.linkState', () => chromeSvc.linkState()),
+  );
   const bio = new BioMemoryService({
     root: path.join(os.homedir(), '.locaith', 'bio-memory'),
     memento: context.globalState,

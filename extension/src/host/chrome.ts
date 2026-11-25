@@ -5,8 +5,23 @@
  * mỗi lần ghép đôi đều cần người dùng bấm Cho phép. Tắt hẳn bằng cài đặt `locaithAgent.chrome.bridge` = false (khi đó chỉ mở nếu đã ghép đôi hoặc người dùng tạo mã).
  */
 
-import { BrowserBridge, type BridgeCreds, type BridgeStatus, type BridgeStore } from '../core/chrome/bridge';
+import { BrowserBridge, type BridgeApp, type BridgeCreds, type BridgeStatus, type BridgeStore, type LinkTicketInfo } from '../core/chrome/bridge';
 import type { ChromeCaller } from '../core/chrome/tools';
+import { bridgeEvents, getBridgeApp } from './bridgeApp';
+
+/** (0.7.20) Trạng thái cầu nối cho ứng dụng (lệnh locaithAgent.chrome.linkState). */
+export interface ChromeLinkState {
+  app: BridgeApp;
+  running: boolean;
+  /** Có một trình duyệt đã ghép đôi với ứng dụng này. */
+  paired: boolean;
+  /** Trình duyệt đó đang nối (hỏi lệnh trong 45 giây gần nhất). */
+  connected: boolean;
+  /** Có yêu cầu ghép đôi (kiểu cũ: công tắc trong tiện ích) đang chờ bấm Cho phép. */
+  pairRequest: boolean;
+  /** Vé ghép đôi mới nhất do ứng dụng tạo. */
+  ticket?: LinkTicketInfo;
+}
 
 const KEY = 'locaithAgent.chrome.bridge';
 
@@ -41,11 +56,24 @@ export class ChromeService implements ChromeCaller {
   constructor(
     secrets: SecretsLike,
     private readonly log: (level: 'debug' | 'info' | 'warn' | 'error', msg: string) => void,
-    opts: { bridge?: BrowserBridge; /** Có mở máy chủ ngay khi kích hoạt không (mặc định: có). */ autoStart?: () => boolean } = {},
+    opts: { bridge?: BrowserBridge; /** Có mở máy chủ ngay khi kích hoạt không (mặc định: có). */ autoStart?: () => boolean; /** (0.7.20) Ứng dụng giữ cầu nối (mặc định: setBridgeApp, rồi VS Code). */ app?: BridgeApp } = {},
   ) {
     this.store = secretStore(secrets);
-    this.bridge = opts.bridge ?? new BrowserBridge(this.store, log);
+    const app = opts.app ?? getBridgeApp();
+    this.bridge = opts.bridge ?? new BrowserBridge(this.store, log, app ? { app } : {});
     this.autoStart = opts.autoStart ?? (() => true);
+    this.bridge.onChange(() => bridgeEvents.emit('change'));
+  }
+
+  /** (0.7.20) Ghép đôi do ứng dụng khởi xướng: vé dùng một lần + địa chỉ trang /link để mở trong trình duyệt của người dùng. */
+  linkTicket(): Promise<{ url: string; expiresAt: number }> {
+    return this.bridge.linkTicket();
+  }
+
+  linkState(): ChromeLinkState {
+    const s = this.bridge.status();
+    const ticket = this.bridge.lastTicket();
+    return { app: this.bridge.appInfo(), running: s.running, paired: s.paired, connected: s.connected, pairRequest: !!s.pairRequest, ...(ticket ? { ticket } : {}) };
   }
 
   private readonly autoStart: () => boolean;

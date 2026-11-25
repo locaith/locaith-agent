@@ -1,6 +1,7 @@
 /** Tab Chrome của Chợ: ghép đôi VS Code với extension Locaith trên Chrome để trợ lý đọc/điều khiển các trang người dùng cho phép. */
 import { useEffect, useState } from 'preact/hooks';
 import type { ChromeStatus } from '../../../src/shared/protocol';
+import type { I18nKey } from '../i18n';
 import { useApp } from '../ctx';
 import { cx } from '../util';
 import { post } from '../vscode';
@@ -16,6 +17,17 @@ function Countdown({ until }: { until: number }) {
   }, []);
   const s = Math.max(0, Math.round((until - now) / 1000));
   return <span class="chr-count">{`${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`}</span>;
+}
+
+/** Trình duyệt chưa có tiện ích đủ mới — trang /link cũng có nút này; ở đây để người dùng khỏi phải tìm. */
+const STORE_URL = 'https://chromewebstore.google.com/detail/amngiccgboohakecgdiadjkdfcablkjc';
+
+/** (0.7.20) Lời nhắn cho lần bấm «Kết nối trình duyệt này» gần nhất (trang /link báo về qua máy chủ cầu). Chuyện đã qua vài phút thì thôi nhắc. */
+function linkNote(ticket: ChromeStatus['ticket'], now: number): I18nKey | undefined {
+  if (!ticket) return undefined;
+  if (ticket.state === 'pending') return ticket.page === 'missing' ? 'chr.link.missing' : ticket.page === 'asked' ? 'chr.link.asked' : 'chr.link.opening';
+  if (now - ticket.expiresAt > 3 * 60_000) return undefined;
+  return ticket.state === 'denied' ? 'chr.link.denied' : ticket.state === 'expired' ? 'chr.link.expired' : undefined;
 }
 
 export function ChromePanel({ chrome }: { chrome?: ChromeStatus }) {
@@ -36,6 +48,21 @@ export function ChromePanel({ chrome }: { chrome?: ChromeStatus }) {
   }
   const code = chrome.pairing;
   const state = chrome.paired ? (chrome.connected ? 'on' : 'wait') : code ? 'pairing' : 'off';
+  const note = linkNote(chrome.ticket, Date.now());
+  // đã ghép đôi thì chỉ nhắc khi đang chờ lần «Kết nối lại trình duyệt» (đã nối xong thì vé «paired» không cần nói gì)
+  const noteEl = note && (!chrome.paired || chrome.ticket?.state === 'pending') && (
+    <div class={note === 'chr.link.missing' ? 'mk-err' : 'mk-meta'} role="status" data-testid="chr-link-note">
+      {t(note)}
+      {note === 'chr.link.missing' && (
+        <>
+          {' '}
+          <Button small variant="ghost" icon="globe" onClick={() => post({ type: 'open_external', url: STORE_URL })}>
+            {t('chr.link.store')}
+          </Button>
+        </>
+      )}
+    </div>
+  );
   return (
     <div class="mk-pane">
       <p class="set-hint">{t('chr.intro')}</p>
@@ -56,10 +83,15 @@ export function ChromePanel({ chrome }: { chrome?: ChromeStatus }) {
               <li>{t('chr.step3')}</li>
             </ol>
             <div class="mk-toolbar">
-              <Button small variant="primary" icon="link" onClick={() => post({ type: 'chrome_pair_start' })}>
+              <Button small variant="primary" icon="globe" onClick={() => post({ type: 'chrome_link_open' })} data-testid="chr-link-open">
+                {t('chr.link')}
+              </Button>
+              <Button small variant="ghost" icon="link" onClick={() => post({ type: 'chrome_pair_start' })}>
                 {t('chr.pair')}
               </Button>
             </div>
+            <p class="mk-meta">{t('chr.linkHint')}</p>
+            {noteEl}
           </>
         )}
 
@@ -86,10 +118,14 @@ export function ChromePanel({ chrome }: { chrome?: ChromeStatus }) {
             {chrome.extensionId && <div class="mk-meta">{t('chr.extId', { id: chrome.extensionId })}</div>}
             <div class="mk-toolbar">
               <Badge tone={chrome.connected ? 'ok' : 'warn'}>{chrome.connected ? t('chr.badge.on') : t('chr.badge.wait')}</Badge>
+              <Button small variant="ghost" icon="globe" onClick={() => post({ type: 'chrome_link_open' })}>
+                {t('chr.linkAgain')}
+              </Button>
               <Button small variant="ghost" icon="trash" onClick={() => post({ type: 'chrome_unpair' })}>
                 {t('chr.unpair')}
               </Button>
             </div>
+            {noteEl}
           </>
         )}
       </section>

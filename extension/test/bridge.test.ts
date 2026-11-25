@@ -23,7 +23,7 @@ async function mk(store = memStore(), o: ConstructorParameters<typeof BrowserBri
 
 /** Yêu cầu HTTP thô để đặt được cả Host/Origin tuỳ ý (fetch không cho đổi Host). */
 function raw(port: number, method: string, path: string, o: { headers?: Record<string, string>; body?: string | Buffer } = {}) {
-  return new Promise<{ status: number; headers: http.IncomingHttpHeaders; json: any }>((resolve, reject) => {
+  return new Promise<{ status: number; headers: http.IncomingHttpHeaders; json: any; text: string }>((resolve, reject) => {
     const req = http.request({ host: '127.0.0.1', port, method, path, headers: { host: `127.0.0.1:${port}`, ...(o.body ? { 'content-type': 'application/json' } : {}), ...o.headers } }, (res) => {
       let t = '';
       res.on('data', (d) => (t += d));
@@ -34,7 +34,7 @@ function raw(port: number, method: string, path: string, o: { headers?: Record<s
         } catch {
           /* không phải JSON */
         }
-        resolve({ status: res.statusCode ?? 0, headers: res.headers, json });
+        resolve({ status: res.statusCode ?? 0, headers: res.headers, json, text: t });
       });
     });
     req.on('error', reject);
@@ -426,5 +426,169 @@ describe('cầu nối Chrome — ghép đôi KHÔNG MÃ (Chrome xin, VS Code hi�
     expect((await raw(port, 'GET', '/v1/ping?v=2', { headers: auth(first) })).status).toBe(401);
     const got = (await poll(port, q.json.id, EXT2)).json.token as string;
     expect((await raw(port, 'GET', '/v1/ping', { headers: auth(got, EXT2) })).json).toEqual({ ok: true, v: 1 });
+  });
+});
+
+describe('cầu nối Chrome — (0.7.20) ghép đôi do ỨNG DỤNG khởi xướng (vé + trang /link) và danh tính ứng dụng', () => {
+  const redeem = (port: number, t: string, ext: string | null = EXT) =>
+    raw(port, 'POST', '/v1/pair/ticket', { headers: ext ? { origin: `chrome-extension://${ext}` } : {}, body: JSON.stringify({ t }) });
+  const ticketOf = (url: string) => new URL(url).searchParams.get('t') as string;
+  /** Yêu cầu GET như trình duyệt gửi khi người dùng mở trang (cùng nguồn: không Origin). */
+  const page = (port: number, path: string) => raw(port, 'GET', path, { headers: { 'sec-fetch-site': 'none', 'sec-fetch-mode': 'navigate', 'sec-fetch-dest': 'document' } });
+  const check = (b: BrowserBridge) => (b as unknown as { checkConnected(): void }).checkConnected();
+
+  it('GET /v1/hello (không token) cho biết ứng dụng nào giữ cổng; mặc định VS Code; kind sai bị bỏ; trang web / Host lạ vẫn bị chặn', async () => {
+    const a = await mk();
+    expect((await raw(a.port, 'GET', '/v1/hello', { headers: { origin: OK_ORIGIN } })).json).toEqual({ v: 2, app: { kind: 'vscode', name: 'VS Code' } });
+    expect(a.b.appInfo()).toEqual({ kind: 'vscode', name: 'VS Code' });
+    const w = await mk(memStore(), { app: { kind: 'work', name: '  Locaith Work  ' } });
+    expect((await raw(w.port, 'GET', '/v1/hello')).json).toEqual({ v: 2, app: { kind: 'work', name: 'Locaith Work' } });
+    const bad = await mk(memStore(), { app: { kind: 'Bad Kind!', name: 'x' } });
+    expect((await raw(bad.port, 'GET', '/v1/hello')).json.app).toEqual({ kind: 'vscode', name: 'VS Code' });
+    expect((await raw(a.port, 'GET', '/v1/hello', { headers: { origin: 'https://evil.example' } })).status).toBe(403);
+    expect((await raw(a.port, 'GET', '/v1/hello', { headers: { host: 'evil.example' } })).status).toBe(403);
+  });
+
+  it('vé: tạo → trang /link (CSP chặt, có tên ứng dụng) → tiện ích đổi vé lấy token MỘT lần → token dùng được, lưu kho chung, trả kèm app', async () => {
+    const { b, port, store } = await mk(memStore(), { app: { kind: 'work', name: 'Locaith Work' } });
+    let changes = 0;
+    b.onChange(() => void changes++);
+    const tk = await b.linkTicket();
+    expect(tk.url).toMatch(new RegExp(`^http://127\\.0\\.0\\.1:${port}/link\\?t=[A-Za-z0-9_-]{24}$`));
+    expect(tk.expiresAt).toBeGreaterThan(Date.now() + 100_000);
+    expect(b.lastTicket()).toMatchObject({ state: 'pending' });
+    expect(changes).toBe(1);
+    const t = ticketOf(tk.url);
+
+    const html = await page(port, `/link?t=${t}`);
+    expect(html.status).toBe(200);
+    expect(html.headers['content-type']).toMatch(/^text\/html/);
+    expect(html.headers['content-security-policy']).toMatch(/default-src 'none'; script-src 'self'/);
+    expect(html.headers['referrer-policy']).toBe('no-referrer');
+    expect(html.headers['cache-control']).toBe('no-store');
+    expect(html.headers['access-control-allow-origin']).toBeUndefined();
+    expect(html.text).toContain('data-state="pending"');
+    expect(html.text).toContain('Kết nối trình duyệt này với Locaith Work');
+    expect(html.text).toContain('<script src="/link.js"></script>');
+    expect(html.text).not.toMatch(/<script>/); // không có script nội tuyến (CSP script-src 'self')
+    const js = await page(port, '/link.js');
+    expect(js.status).toBe(200);
+    expect(js.headers['content-type']).toMatch(/^text\/javascript/);
+    expect(js.text).toContain("type: 'nd-link-ticket'");
+
+    expect((await page(port, `/link/state?t=${t}`)).json).toEqual({ state: 'pending' });
+    const got = await redeem(port, t);
+    expect(got.status).toBe(200);
+    expect(got.json).toMatchObject({ v: 1, app: { kind: 'work', name: 'Locaith Work' } });
+    expect(got.json.token).toMatch(/^[A-Za-z0-9_-]{43}$/);
+    expect(store.v).toEqual({ token: got.json.token, extId: EXT });
+    expect(b.status()).toMatchObject({ paired: true, extensionId: EXT });
+    expect(b.lastTicket()).toMatchObject({ state: 'paired' });
+    expect((await raw(port, 'GET', '/v1/ping?v=2', { headers: auth(got.json.token) })).json).toEqual({ ok: true, v: 1 });
+    // dùng một lần: đổi lại → 410; trang báo đã ghép; trang mở lại thấy «hết hạn hoặc đã dùng»
+    expect((await redeem(port, t)).status).toBe(410);
+    expect((await page(port, `/link/state?t=${t}`)).json).toEqual({ state: 'paired' });
+    expect((await page(port, `/link?t=${t}`)).text).toContain('data-state="expired"');
+    expect(changes).toBeGreaterThanOrEqual(2);
+  });
+
+  it('đổi vé cần Origin của tiện ích: không Origin / trang web / Host lạ đều bị từ chối và vé vẫn còn nguyên', async () => {
+    const { b, port } = await mk();
+    const t = ticketOf((await b.linkTicket()).url);
+    expect((await redeem(port, t, null)).status).toBe(403);
+    expect((await raw(port, 'POST', '/v1/pair/ticket', { headers: { origin: 'https://evil.example' }, body: JSON.stringify({ t }) })).status).toBe(403);
+    expect((await raw(port, 'POST', '/v1/pair/ticket', { headers: { origin: OK_ORIGIN, host: 'evil.example' }, body: JSON.stringify({ t }) })).status).toBe(403);
+    expect((await raw(port, 'POST', '/v1/pair/ticket/deny', { body: JSON.stringify({ t }) })).status).toBe(403);
+    expect(b.status().paired).toBe(false);
+    expect(b.lastTicket()?.state).toBe('pending');
+    expect((await redeem(port, 'x'.repeat(24))).status).toBe(410); // vé lạ
+    expect((await redeem(port, 'short')).status).toBe(410);
+    expect((await redeem(port, t)).status).toBe(200); // vé thật vẫn dùng được
+  });
+
+  it('trang web không đọc được trang /link: Origin https://… bị từ chối; chỉ GET; vé lạ → trang «hết hạn» không nhắc tên ứng dụng', async () => {
+    const { b, port } = await mk(memStore(), { app: { kind: 'work', name: 'Locaith Work' } });
+    const t = ticketOf((await b.linkTicket()).url);
+    expect((await raw(port, 'GET', `/link?t=${t}`, { headers: { origin: 'https://evil.example' } })).status).toBe(403);
+    expect((await raw(port, 'GET', `/link/state?t=${t}`, { headers: { origin: 'https://evil.example' } })).status).toBe(403);
+    expect((await raw(port, 'POST', `/link?t=${t}`, { body: '{}' })).status).toBe(405);
+    const other = await page(port, `/link?t=${'z'.repeat(24)}`);
+    expect(other.text).toContain('data-state="expired"');
+    expect(other.text).not.toContain('<h1>Kết nối trình duyệt này với Locaith Work</h1>');
+    expect((await page(port, `/link/state?t=${'z'.repeat(24)}`)).json).toEqual({ state: 'expired' });
+  });
+
+  it('người dùng bấm «Không kết nối» (tiện ích báo deny) → vé bị huỷ, không ghép đôi; deny sau khi đã ghép không gỡ được gì', async () => {
+    const { b, port, store } = await mk();
+    const t = ticketOf((await b.linkTicket()).url);
+    expect((await raw(port, 'POST', '/v1/pair/ticket/deny', { headers: { origin: OK_ORIGIN }, body: JSON.stringify({ t }) })).status).toBe(200);
+    expect(b.lastTicket()?.state).toBe('denied');
+    expect((await page(port, `/link/state?t=${t}`)).json).toEqual({ state: 'denied' });
+    expect((await redeem(port, t)).status).toBe(410);
+    expect(store.v).toEqual({});
+    const t2 = ticketOf((await b.linkTicket()).url);
+    const ok = await redeem(port, t2);
+    expect(ok.status).toBe(200);
+    await raw(port, 'POST', '/v1/pair/ticket/deny', { headers: { origin: OK_ORIGIN }, body: JSON.stringify({ t: t2 }) });
+    expect(b.lastTicket()?.state).toBe('paired');
+    expect(store.v.token).toBe(ok.json.token);
+  });
+
+  it('vé hết hạn sau 2 phút (trạng thái «expired», có sự kiện một lần); tối đa 3 vé — vé cũ nhất bị bỏ', async () => {
+    let t = 7_000_000;
+    const { b, port } = await mk(memStore(), { now: () => t });
+    let changes = 0;
+    b.onChange(() => void changes++);
+    const first = ticketOf((await b.linkTicket()).url);
+    t += 121_000;
+    expect(b.lastTicket()).toMatchObject({ state: 'expired' });
+    expect((await redeem(port, first)).status).toBe(410);
+    expect((await page(port, `/link/state?t=${first}`)).json).toEqual({ state: 'expired' });
+    const before = changes;
+    check(b); // nhịp 5 giây: báo ra ngoài khi vé tự hết hạn
+    expect(changes).toBe(before + 1);
+    check(b);
+    expect(changes).toBe(before + 1); // không báo lặp
+    const v: string[] = [];
+    for (let i = 0; i < 4; i++) v.push(ticketOf((await b.linkTicket()).url));
+    expect((await redeem(port, v[0])).status).toBe(410); // bị đẩy ra (giữ tối đa 3)
+    expect((await redeem(port, v[3])).status).toBe(200);
+  });
+
+  it('trang /link báo nó thấy gì (asked / missing) cho ứng dụng; «missing» đến muộn không ghi đè «asked»; giá trị lạ bị bỏ', async () => {
+    const { b, port } = await mk();
+    const t = ticketOf((await b.linkTicket()).url);
+    await page(port, `/link/state?t=${t}&page=missing`);
+    expect(b.lastTicket()).toMatchObject({ state: 'pending', page: 'missing' });
+    await page(port, `/link/state?t=${t}&page=asked`);
+    expect(b.lastTicket()?.page).toBe('asked');
+    await page(port, `/link/state?t=${t}&page=missing`);
+    expect(b.lastTicket()?.page).toBe('asked');
+    await page(port, `/link/state?t=${t}&page=evil`);
+    expect(b.lastTicket()?.page).toBe('asked');
+  });
+
+  it('ghép đôi kiểu cũ (POST /v1/pair/status, mã) cũng trả kèm app để tiện ích giữ đúng token theo ứng dụng', async () => {
+    const { b, port } = await mk(memStore(), { app: { kind: 'work', name: 'Locaith Work' } });
+    const q = await raw(port, 'POST', '/v1/pair/request', { headers: { origin: OK_ORIGIN }, body: '{}' });
+    await b.approvePair(q.json.id);
+    const got = await raw(port, 'POST', '/v1/pair/status', { headers: { origin: OK_ORIGIN }, body: JSON.stringify({ id: q.json.id }) });
+    expect(got.json).toMatchObject({ state: 'approved', app: { kind: 'work', name: 'Locaith Work' } });
+    expect((await pairWith(b, port)).r.json.app).toEqual({ kind: 'work', name: 'Locaith Work' });
+  });
+
+  it('sự kiện khi «đã kết nối» bật / tắt (ứng dụng không phải hỏi liên tục)', async () => {
+    let t = 3_000_000;
+    const { b, port } = await mk(memStore(), { now: () => t });
+    const token = (await pairWith(b, port)).r.json.token as string;
+    let changes = 0;
+    b.onChange(() => void changes++);
+    await raw(port, 'GET', '/v1/poll?wait=0&v=2', { headers: auth(token) });
+    expect(changes).toBe(1); // vừa nối
+    await raw(port, 'GET', '/v1/poll?wait=0&v=2', { headers: auth(token) });
+    expect(changes).toBe(1);
+    t += 46_000;
+    check(b);
+    expect(changes).toBe(2); // mất nối
   });
 });

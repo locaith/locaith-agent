@@ -194,7 +194,9 @@ describe('manifest và gói build sản phẩm (nguyên tắc ít quyền nhất
     expect(sb).toContain('font-src data:;');
     expect(manifest.sandbox.pages).toEqual(['artifact-sandbox.html']);
     expect(manifest.web_accessible_resources).toBeUndefined();
-    expect(manifest.externally_connectable).toBeUndefined();
+    // (0.7.20) chỉ trang /link của ỨNG DỤNG TRÊN MÁY (127.0.0.1 / localhost) được gửi tin cho tiện ích — để chuyển vé ghép đôi khi người dùng bấm
+    // «Kết nối trình duyệt» trong ứng dụng. Không trang web nào trên mạng, không tiện ích nào khác (không `ids`), không kênh TLS.
+    expect(manifest.externally_connectable).toEqual({ matches: ['http://127.0.0.1/*', 'http://localhost/*'] });
     expect(manifest.content_scripts).toBeUndefined(); // runtime chỉ được nạp theo yêu cầu, không chạy trên mọi trang
   });
 

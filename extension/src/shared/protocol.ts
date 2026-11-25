@@ -650,16 +650,21 @@ export interface ChromePairView {
 }
 
 /**
- * (0.7.12) Cầu nối VS Code của bản Chrome / Edge — công tắc «Kết nối với VS Code» trong Cài đặt. Chỉ bản trình duyệt; vắng = chưa đọc được trạng thái.
- * Việc ghép đôi diễn ra ở VS Code (thẻ «Cho phép / Từ chối» hiện trong khung chat của VS Code — xem ChromePairView).
+ * (0.7.12) Cầu nối ứng dụng trên máy của bản Chrome / Edge — công tắc «Kết nối với ứng dụng trên máy» (trước 0.7.20: «Kết nối với VS Code») trong Cài đặt.
+ * Chỉ bản trình duyệt; vắng = chưa đọc được trạng thái. Việc ghép đôi diễn ra ở ứng dụng (thẻ «Cho phép / Từ chối» trong khung chat của VS Code — xem ChromePairView),
+ * hoặc (0.7.20) do ứng dụng khởi xướng: bấm «Kết nối trình duyệt» trong ứng dụng rồi «Kết nối» trong trình duyệt.
  */
 export interface VscodeLinkView {
-  /** Đã có token ghép đôi với một VS Code. */
+  /** Đã có token ghép đôi với ít nhất một ứng dụng. */
   paired: boolean;
-  /** Công tắc đang bật (đang nối hoặc đang tìm VS Code). */
+  /** Công tắc đang bật (đang nối hoặc đang tìm ứng dụng). */
   on: boolean;
-  /** Một VS Code vừa trả lời hợp lệ (trong 45 giây qua). */
+  /** Một ứng dụng vừa trả lời hợp lệ (trong 45 giây qua). */
   connected: boolean;
+  /** (0.7.20) Từng ứng dụng đã ghép đôi (mỗi ứng dụng một token): tên tự khai và đang nối hay không. Vắng ở bản cũ. */
+  apps?: { kind: string; name: string; connected: boolean }[];
+  /** (0.7.20) Tên các ứng dụng vừa không còn nhận trình duyệt này (đã bị ngắt). */
+  lost?: string[];
   /** Tiến trình xin ghép đôi: 'asking' (đang hỏi các cổng) · 'waiting' (chờ bấm Cho phép trong VS Code) · 'denied' · 'expired' · 'not_found' · 'busy' · 'old' · 'consent' · 'idle'. */
   pairing: 'idle' | 'asking' | 'waiting' | 'denied' | 'expired' | 'not_found' | 'busy' | 'old' | 'consent' | 'lost';
   /** Trang đã «Luôn cho phép». */
@@ -719,6 +724,8 @@ export interface ChromeStatus {
   port?: number;
   extensionId?: string;
   pairing?: { code: string; expiresAt: number };
+  /** (0.7.20) Lần bấm «Kết nối trình duyệt này» gần nhất: trang /link thấy tiện ích chưa (`page`), người dùng đã bấm gì (`state`). */
+  ticket?: { state: 'pending' | 'paired' | 'denied' | 'expired'; page?: 'asked' | 'missing'; expiresAt: number };
   error?: string;
 }
 
@@ -1261,6 +1268,7 @@ export type WebviewMessage =
   | { type: 'plugin_uninstall'; id: string }
   | { type: 'chrome_status' }
   | { type: 'chrome_pair_start' }
+  | { type: 'chrome_link_open' }
   | { type: 'chrome_unpair' }
   | { type: 'mcp_open_config' }
   | { type: 'agents_open_folder' }

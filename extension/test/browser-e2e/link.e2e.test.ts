@@ -92,11 +92,12 @@ describe.skipIf(BROWSERS.length === 0)('cầu nối VS Code (bản trình duyệ
       fs.rmSync(profile, { recursive: true, force: true });
     });
 
-    it('Cài đặt có mục «Kết nối với VS Code», đang TẮT, chưa có trang nào được cho phép', async () => {
+    it('Cài đặt có mục «Kết nối với ứng dụng trên máy» (0.7.20, trước là «Kết nối với VS Code»), đang TẮT, chưa có trang nào được cho phép', async () => {
       await panel.evaluate(async () => (window as any).__nd.controller.showScreen('settings'));
       await panel.waitForSelector('[data-testid="vscode-link"]', { timeout: 20_000 });
       const t = await panel.$eval('[data-testid="vscode-link"]', (el) => (el as HTMLElement).innerText);
-      expect(t).toMatch(/Kết nối với VS Code/);
+      expect(t).toMatch(/Kết nối với ứng dụng trên máy/);
+      expect(t).not.toMatch(/Kết nối với VS Code/);
       expect(t).toMatch(/TẮT mặc định/);
       expect(await panel.$eval('[data-testid="vscode-link-state"]', (el) => (el as HTMLElement).innerText)).toMatch(/Đang tắt/);
       expect(t).toMatch(/Chưa có trang nào/);
@@ -114,6 +115,8 @@ describe.skipIf(BROWSERS.length === 0)('cầu nối VS Code (bản trình duyệ
       expect(await bridge.approvePair(bridge.pairRequest()!.id)).toBe(true);
       await until(() => bridge.connected());
       await panel.waitForFunction(() => /Đã kết nối với VS Code/.test(document.querySelector('[data-testid="vscode-link-state"]')?.textContent ?? ''), { timeout: 20_000 });
+      // (0.7.20) mỗi ứng dụng một dòng: tên tự khai + đang nối
+      await panel.waitForFunction(() => /VS Code\s*đang nối/.test((document.querySelector('[data-testid="vscode-link-apps"]') as HTMLElement | null)?.innerText ?? ''), { timeout: 20_000 });
     });
 
     it('VS Code điều khiển một trang đã cho phép: tabs.list → snapshot → gõ → bấm → đọc (mã trang chạy trên bản NÉN)', async () => {
@@ -276,5 +279,49 @@ describe.skipIf(BROWSERS.length === 0)('cầu nối VS Code (bản trình duyệ
         server.off('request', onReq);
       }
     }, 60_000);
+
+    // (0.7.20) Ghép đôi do ỨNG DỤNG khởi xướng, trên trình duyệt thật: ứng dụng tạo vé → mở trang /link của máy chủ cầu → trang gửi vé cho tiện ích
+    // (externally_connectable) → cửa sổ «Kết nối» thật của tiện ích (bản NÉN) → bấm → đổi vé lấy token → nối. Đây là đường mà nút «Kết nối trình duyệt này» đi.
+    it('(0.7.20) trang /link: không thấy tiện ích → báo «missing» cho ứng dụng; có tiện ích → cửa sổ «Kết nối» → bấm → nối, trang báo «Đã kết nối»', async () => {
+      expect(bridge.status().paired).toBe(false); // ca trước đã huỷ ghép đôi
+      const visible = (p: Page) => p.evaluate(() => [...document.querySelectorAll('section')].filter((s) => !(s as HTMLElement).hidden).map((s) => s.id));
+
+      // 1) trang chỉ gọi mã tiện ích trên cửa hàng (bản --test có mã khác) → không ai trả lời → «missing», ứng dụng biết để nhắc cài / cập nhật
+      const t1 = await bridge.linkTicket();
+      const p1 = await browser.newPage();
+      await p1.goto(t1.url, { waitUntil: 'load' });
+      await p1.waitForFunction(() => !(document.getElementById('s-missing') as HTMLElement).hidden, { timeout: 15_000 });
+      await until(() => bridge.lastTicket()?.page === 'missing');
+      expect(await visible(p1)).toEqual(['s-missing']);
+      await p1.close();
+
+      // 2) có tiện ích (mã của bản --test qua ?ext=, như bản nhà phát triển) → cửa sổ hỏi thật
+      const t2 = await bridge.linkTicket();
+      const p2 = await browser.newPage();
+      await p2.goto(`${t2.url}&ext=${extId}`, { waitUntil: 'load' });
+      const target = await browser.waitForTarget((t) => t.url().includes('bridge-approve.html') && t.url().includes('mode=app'), { timeout: 15_000 });
+      const pop = (await target.page())!;
+      await pop.waitForSelector('#title');
+      // cửa sổ theo ngôn ngữ trình duyệt (headless thường là tiếng Anh)
+      expect(await pop.$eval('#title', (e) => e.textContent ?? '')).toMatch(/Kết nối trình duyệt này với ứng dụng trên máy|Connect this browser to an app on this computer/);
+      expect(await pop.$eval('#origin', (e) => e.textContent ?? '')).toMatch(new RegExp(`VS Code.*(cổng|port) ${port}`));
+      expect(await pop.$eval('#always', (e) => (e as HTMLElement).hidden)).toBe(true);
+      await p2.waitForFunction(() => !(document.getElementById('s-ask') as HTMLElement).hidden, { timeout: 15_000 });
+      expect(bridge.lastTicket()).toMatchObject({ state: 'pending', page: 'asked' });
+      await pop.evaluate(() => (document.getElementById('once') as HTMLElement).click());
+      await until(() => bridge.lastTicket()?.state === 'paired');
+      await until(() => bridge.connected());
+      expect(bridge.status()).toMatchObject({ paired: true, extensionId: extId });
+      await p2.waitForFunction(() => !(document.getElementById('s-done') as HTMLElement).hidden, { timeout: 15_000 });
+      expect(await visible(p2)).toEqual(['s-done']);
+      const st = (await panel.evaluate(() => chrome.runtime.sendMessage({ type: 'nd-link-status' }))) as any;
+      expect(st).toMatchObject({ on: true, paired: true, connected: true, apps: [{ kind: 'vscode', name: 'VS Code', connected: true }] });
+      expect(await bridge.call('tabs.list', {})).toEqual(expect.any(Array));
+      // vé đã dùng: mở lại liên kết thì trang nói «hết hạn hoặc đã dùng»
+      await p2.goto(`${t2.url}&ext=${extId}`, { waitUntil: 'load' });
+      expect(await visible(p2)).toEqual(['s-expired']);
+      await p2.close();
+      expect(errors.filter((e) => !/favicon|Failed to load resource/i.test(e))).toEqual([]);
+    }, 90_000);
   });
 });

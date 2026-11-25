@@ -77,6 +77,10 @@ function manifest() {
     optional_permissions: ['identity', 'tabs'],
     // Phải đúng chuỗi "<all_urls>": chrome.tabs.captureVisibleTab chỉ chấp nhận `<all_urls>` hoặc activeTab (không chấp nhận https://*/* + http://*/*).
     optional_host_permissions: ['<all_urls>'],
+    // (0.7.20) Chỉ trang /link do ỨNG DỤNG TRÊN MÁY (VS Code, Locaith Work) phục vụ ở 127.0.0.1 / localhost được gửi tin cho tiện ích — để chuyển vé ghép đôi khi
+    // người dùng bấm «Kết nối trình duyệt» trong ứng dụng. Mẫu không có cổng = mọi cổng; dịch vụ nền vẫn chỉ nhận tin từ đúng cổng cầu nối 47615–47620
+    // và vẫn hỏi người dùng trước khi kết nối. Không trang web nào trên mạng gửi tin tới được.
+    externally_connectable: { matches: ['http://127.0.0.1/*', 'http://localhost/*'] },
     content_security_policy: { extension_pages: "script-src 'self'; object-src 'self'", sandbox: SANDBOX_CSP },
     sandbox: { pages: ['artifact-sandbox.html'] },
     commands: {
@@ -106,7 +110,7 @@ const LOCALES = {
     menuAskSelection: { message: 'Hỏi Locaith AI về đoạn đã chọn' },
     menuExplainSelection: { message: 'Giải thích đoạn đã chọn' },
     menuSummarizePage: { message: 'Tóm tắt trang này' },
-    menuConnectVscode: { message: 'Kết nối với VS Code…' },
+    menuConnectVscode: { message: 'Kết nối với ứng dụng trên máy…' },
   },
   en: {
     extName: { message: 'Locaith AI — Browser agent' },
@@ -118,7 +122,7 @@ const LOCALES = {
     menuAskSelection: { message: 'Ask Locaith AI about the selection' },
     menuExplainSelection: { message: 'Explain the selection' },
     menuSummarizePage: { message: 'Summarize this page' },
-    menuConnectVscode: { message: 'Connect to VS Code…' },
+    menuConnectVscode: { message: 'Connect to desktop apps…' },
   },
 };
 

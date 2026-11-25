@@ -205,6 +205,14 @@ describe('bộ kiểm BẮT được từng lỗi của sự cố 0.6.27', () =>
     rejects(mutated((d) => edit(d, 'background.js', (s) => s.split('.cancel(').join('.cancel_gone('))), /dấu giao thức \?v=2 và có đường huỷ thân câu trả lời/);
   });
 
+  it('(0.7.20) ghép đôi do ứng dụng khởi xướng: externally_connectable chỉ khớp 127.0.0.1 / localhost, dịch vụ nền có đường nhận vé', () => {
+    rejects(mutated((d) => editManifest(d, (m) => (m.externally_connectable.matches = ['https://*/*']))), /externally_connectable chỉ khớp/);
+    rejects(mutated((d) => editManifest(d, (m) => m.externally_connectable.matches.push('http://*/*'))), /externally_connectable chỉ khớp/);
+    rejects(mutated((d) => editManifest(d, (m) => (m.externally_connectable.ids = ['*']))), /externally_connectable chỉ khớp/);
+    rejects(mutated((d) => editManifest(d, (m) => delete m.externally_connectable)), /externally_connectable chỉ khớp/);
+    rejects(mutated((d) => edit(d, 'background.js', (s) => s.split('onMessageExternal').join('onMessageGone'))), /dịch vụ nền nhận vé ghép đôi từ trang \/link/);
+  });
+
   it('chuỗi khoá API lại nói «kho bí mật của VS Code» (hoặc mất chuỗi riêng của bản trình duyệt)', () => {
     rejects(mutated((d) => edit(d, 'panel.js', (s) => s.split('"set.providers.hint.browser"').join('"set.providers.hint.removed"'))), /panel\.js có chuỗi set\.providers\.hint\.browser/);
     rejects(

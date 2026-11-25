@@ -11,7 +11,7 @@ import { PENDING_KEY, type PendingAction } from './pending';
 export const MENU_ASK = 'nd-ask-selection';
 export const MENU_EXPLAIN = 'nd-explain-selection';
 export const MENU_SUMMARIZE = 'nd-summarize-page';
-/** Mục trên biểu tượng tiện ích: mở khung chat tới Cài đặt → Kết nối với VS Code (không mang dữ liệu của trang). */
+/** Mục trên biểu tượng tiện ích: mở khung chat tới Cài đặt → Kết nối với ứng dụng trên máy (không mang dữ liệu của trang). */
 export const MENU_LINK = 'nd-link-menu';
 export { PENDING_KEY };
 

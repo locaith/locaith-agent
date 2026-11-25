@@ -238,7 +238,7 @@ async function main(): Promise<void> {
     if (p.kind === 'summarize') await controller.ask(vi ? 'Tóm tắt trang tôi đang xem: ý chính, số liệu quan trọng và những điểm cần lưu ý.' : 'Summarize the page I am viewing: key points, important figures and caveats.');
     else if (p.kind === 'explain' && p.text) await controller.ask(vi ? `Giải thích giúp tôi đoạn này trong ngữ cảnh của trang đang xem:\n\n${quoted}` : `Explain this passage in the context of the page I am viewing:\n\n${quoted}`);
     // "Hỏi về đoạn đã chọn" đi qua ô nhập: người dùng thấy đúng chữ (đã bỏ ký tự ẩn) và tự quyết định gửi.
-    else if (p.kind === 'link') await controller.showScreen('settings'); // chuột phải biểu tượng → «Kết nối với VS Code…»
+    else if (p.kind === 'link') await controller.showScreen('settings'); // chuột phải biểu tượng → «Kết nối với ứng dụng trên máy…»
     else if (p.kind === 'ask' && p.text) controller.insert(`"${cleanText(p.text)}"\n\n`);
   };
   chrome.storage.onChanged.addListener((changes, area) => {

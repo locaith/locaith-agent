@@ -32,7 +32,7 @@ chrome.runtime.onInstalled.addListener(() => {
     chrome.contextMenus.create({ id: MENU_ASK, title: msg('menuAskSelection'), contexts: ['selection'] });
     chrome.contextMenus.create({ id: MENU_EXPLAIN, title: msg('menuExplainSelection'), contexts: ['selection'] });
     chrome.contextMenus.create({ id: MENU_SUMMARIZE, title: msg('menuSummarizePage'), contexts: ['page', 'frame'] });
-    // Chuột phải vào biểu tượng tiện ích → «Kết nối với VS Code…»: mở khung chat thẳng tới phần Cài đặt tương ứng.
+    // Chuột phải vào biểu tượng tiện ích → «Kết nối với ứng dụng trên máy…» (trước 0.7.20: «Kết nối với VS Code…»): mở khung chat thẳng tới phần Cài đặt tương ứng.
     chrome.contextMenus.create({ id: MENU_LINK, title: msg('menuConnectVscode'), contexts: ['action'] });
   });
 });

@@ -632,7 +632,7 @@ export class ChatController implements vscode.Disposable {
   }
 
   /**
-   * Nhận một tin đã được kiểm hợp lệ từ máy khách từ xa và xử lý như tin từ webview. ia = tên thiết bị: các thao tác đáng chú ý hiện
+   * Nhận một tin đã được kiểm hợp lệ từ máy khách từ xa và xử lý như tin từ webview. `via` = tên thiết bị: các thao tác đáng chú ý hiện
    * một thông báo ngắn trong khung chat để người đang ngồi ở VS Code biết có điều khiển từ xa (thông báo không lưu vào lịch sử).
    */
   handleRemote(m: WebviewMessage, via?: string): Promise<void> {
@@ -1382,6 +1382,18 @@ export class ChatController implements vscode.Disposable {
       case 'chrome_pair_start': {
         const r = await this.d.marketService.chromePair();
         if (!r.ok) this.toast('error', r.message);
+        return this.sendMarket(true);
+      }
+      case 'chrome_link_open': {
+        // (0.7.20) Ghép đôi do ứng dụng khởi xướng: tạo vé rồi mở trang /link trong trình duyệt của người dùng (bản desktop: Orb mở trong trình duyệt dùng gần nhất).
+        const vi = this.lang === 'vi';
+        try {
+          const t = await this.d.chrome.linkTicket();
+          await openExternalOnce(t.url, (x) => vscode.env.openExternal(vscode.Uri.parse(x)));
+          this.toast('info', vi ? 'Đã mở trình duyệt: bấm «Kết nối» ở cửa sổ nhỏ của tiện ích Locaith AI.' : 'Opened your browser: click “Connect” in the small Locaith AI window.');
+        } catch (e) {
+          this.toast('error', (vi ? 'Không mở được liên kết kết nối trình duyệt: ' : 'Could not open the browser connect link: ') + (e instanceof Error ? e.message : String(e)));
+        }
         return this.sendMarket(true);
       }
       case 'chrome_unpair': {

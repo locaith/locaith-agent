@@ -187,14 +187,27 @@ export function verifyBrowserPackage(dir, opts = {}) {
       'bản 0.7.12 bỏ quên thân câu trả lời 401 và rò 2 MB mỗi 7 giây — dựng nhầm mã cũ?',
     );
     check(/\/v1\/pair\/status/.test(bgCode) && /method:\s*["']POST["']/.test(bgCode), 'cầu nối hỏi kết quả ghép đôi bằng POST (Chrome không gắn Origin vào GET từ extension)');
-    check(!/studio-api\.locaith|\/api\/llm\/v1|\/api\/feedback|locaith\.ai/.test(bgCode), 'dịch vụ nền KHÔNG có đường nào tới máy chủ Locaith (cầu nối chỉ nói chuyện với VS Code trên máy này)', 'nội dung trang đi qua cầu nối không được tới máy chủ Locaith');
+    check(!/studio-api\.locaith|\/api\/llm\/v1|\/api\/feedback|locaith\.ai/.test(bgCode), 'dịch vụ nền KHÔNG có đường nào tới máy chủ Locaith (cầu nối chỉ nói chuyện với ứng dụng trên máy này)', 'nội dung trang đi qua cầu nối không được tới máy chủ Locaith');
     check((manifest.host_permissions ?? []).every((h) => !/127\.0\.0\.1|localhost/.test(h)), 'không xin quyền máy chủ cho 127.0.0.1 (máy chủ cầu cấp CORS cho origin tiện ích)');
+    // (0.7.20) ghép đôi do ỨNG DỤNG khởi xướng: chỉ trang /link của ứng dụng trên máy (127.0.0.1 / localhost) được gửi tin cho tiện ích — không trang web nào, không tiện ích nào khác.
+    const ec = manifest.externally_connectable;
+    const ecMatches = Array.isArray(ec?.matches) ? ec.matches : [];
+    check(
+      !!ec && ecMatches.length > 0 && ecMatches.every((m) => m === 'http://127.0.0.1/*' || m === 'http://localhost/*') && ec.ids === undefined && ec.accepts_tls_channel_id === undefined,
+      'externally_connectable chỉ khớp http://127.0.0.1/* và http://localhost/* (trang /link của ứng dụng trên máy)',
+      JSON.stringify(ec ?? null),
+    );
+    check(
+      /onMessageExternal/.test(bgCode) && /nd-link-ticket/.test(bgCode) && /\/v1\/pair\/ticket/.test(bgCode) && /\(\?:127\\\.0\\\.0\\\.1\|localhost\)/.test(bgCode),
+      'dịch vụ nền nhận vé ghép đôi từ trang /link (onMessageExternal) và chỉ từ 127.0.0.1 / localhost',
+      'thiếu đường nhận vé → nút «Kết nối trình duyệt» trong ứng dụng sẽ không làm gì',
+    );
     for (const key of ['set.link', 'set.link.hint', 'set.link.toggle']) {
       const v = readBundledString(panel, key);
-      check(typeof v === 'string' && v.length > 0, `panel.js có chuỗi ${key} (mục «Kết nối với VS Code» trong Cài đặt)`, 'không thấy khoá — người dùng sẽ không thấy chỗ bật cầu nối VS Code');
+      check(typeof v === 'string' && v.length > 0, `panel.js có chuỗi ${key} (mục «Kết nối với ứng dụng trên máy» trong Cài đặt)`, 'không thấy khoá — người dùng sẽ không thấy chỗ bật cầu nối VS Code');
     }
     const linkHint = readBundledString(panel, 'set.link.hint');
-    if (typeof linkHint === 'string') check(/TẮT mặc định/.test(linkHint) && /không tới máy chủ Locaith/.test(linkHint), 'mô tả cầu nối nói rõ: tắt mặc định, dữ liệu chỉ tới VS Code trên máy này (không tới máy chủ Locaith)', linkHint);
+    if (typeof linkHint === 'string') check(/TẮT mặc định/.test(linkHint) && /không tới máy chủ Locaith/.test(linkHint), 'mô tả cầu nối nói rõ: tắt mặc định, dữ liệu chỉ tới ứng dụng trên máy này (không tới máy chủ Locaith)', linkHint);
   }
 
   // ── đánh giá một chạm (src/browser/rating.ts): mã gửi sao tới `<máy chủ>/api/feedback`. Máy chủ đó PHẢI nằm trong host_permissions

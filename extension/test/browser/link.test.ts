@@ -37,6 +37,8 @@ function fakeChrome() {
   const local = area();
   const session = area();
   const listeners: Listener[] = [];
+  /** (0.7.20) tin từ trang web được externally_connectable cho phép (trang /link của ứng dụng trên máy). */
+  const extListeners: ((m: unknown, sender: { origin?: string; url?: string }, reply: (r: unknown) => void) => boolean | void)[] = [];
   const granted = new Set<string>();
   const log = { windowsCreated: [] as string[], executed: [] as { kind: string; tabId: number }[], permRequests: [] as unknown[], alarms: [] as string[], changed: 0 };
   const alarmListeners: ((a: { name: string }) => void)[] = [];
@@ -53,6 +55,7 @@ function fakeChrome() {
         if (m?.type === 'nd-link-changed') log.changed++;
       },
       onMessage: { addListener: (l: Listener) => void listeners.push(l), removeListener: (l: Listener) => void listeners.splice(listeners.indexOf(l), 1) },
+      onMessageExternal: { addListener: (l: (typeof extListeners)[number]) => void extListeners.push(l) },
     },
     storage: { local, session },
     alarms: { create: (n: string) => void log.alarms.push(n), clear: async () => true, onAlarm: { addListener: (l: (a: { name: string }) => void) => void alarmListeners.push(l) } },
@@ -101,7 +104,19 @@ function fakeChrome() {
     });
   /** Bắn nhịp báo thức như Chrome làm mỗi 30 giây. */
   const fireAlarm = (name = 'nd-bridge-tick') => alarmListeners.forEach((l) => l({ name }));
-  return { chrome, local, session, log, granted, send, setTabs: (t: Tab[]) => (tabs = t), listeners, fireAlarm };
+  /** Gửi tin như MỘT TRANG WEB (chrome.runtime.sendMessage(extId, …) từ trang được externally_connectable cho phép); undefined = không ai trả lời. */
+  const sendExternal = (m: unknown, origin: string) =>
+    new Promise<unknown>((resolve) => {
+      let used = false;
+      for (const l of extListeners) {
+        const r = l(m, { origin, url: origin + '/link' }, (x) => ((used = true), resolve(x)));
+        if (r === true) return;
+      }
+      if (!used) resolve(undefined);
+    });
+  /** Người dùng đóng cửa sổ (bấm X). */
+  const closeWindow = (id: number) => [...onClosed].forEach((f) => f(id));
+  return { chrome, local, session, log, granted, send, sendExternal, closeWindow, setTabs: (t: Tab[]) => (tabs = t), listeners, fireAlarm };
 }
 
 const memStore = (): BridgeStore => {
@@ -203,7 +218,10 @@ describe('cầu nối VS Code (Chrome) — ghép đôi không mã', () => {
     expect(s).toMatchObject({ on: true, paired: true, running: true, connected: true, pairing: 'idle' });
     expect(bridge.status().extensionId).toBe(EXT);
     expect(fc.log.alarms).toContain('nd-bridge-tick');
-    expect((fc.local.m.get('nd.bridge') as { token: string }).token.length).toBeGreaterThan(20);
+    // (0.7.20) token lưu theo ứng dụng: máy chủ cầu trả kèm app { kind: 'vscode' } khi giao token
+    expect((fc.local.m.get('nd.bridge.apps') as Record<string, { token: string; name: string }>).vscode).toMatchObject({ name: 'VS Code', token: expect.stringMatching(/^.{21,}$/) });
+    expect(fc.local.m.has('nd.bridge')).toBe(false);
+    expect(s.apps).toEqual([{ kind: 'vscode', name: 'VS Code', connected: true }]);
   });
 
   it('VS Code bấm Từ chối → trạng thái «denied», công tắc tự tắt, không có token', async () => {
@@ -343,7 +361,7 @@ describe('cầu nối VS Code (Chrome) — lệnh từ VS Code và duyệt theo 
     await pairAndConnect();
     await fc.local.set({ 'nd.bridge.allow': ['https://shop.example.com'] });
     fc.granted.add(permPattern('https://shop.example.com'));
-    await expect(bridge.call('page.screenshot', { tabId: 1 })).rejects.toThrow(/Kết nối với VS Code/);
+    await expect(bridge.call('page.screenshot', { tabId: 1 })).rejects.toThrow(/Truy cập trang web/);
     fc.granted.add('<all_urls>');
     expect(await bridge.call('page.screenshot', { tabId: 1 })).toMatchObject({ mediaType: 'image/jpeg', data: 'QUJD' });
   });
@@ -413,11 +431,11 @@ describe('cầu nối VS Code (Chrome) — không rò bộ nhớ, không gọi m
     const n = t.calls.length;
     await sleep(1500); // 0.7.12 đã gọi lại sau 7 giây; ở đây không được gọi thêm lần nào nữa
     expect(t.calls.length).toBe(n);
-    expect(authed(t.calls)).toHaveLength(2); // đúng một lần ping mỗi cổng
-    expect(t.calls.every((c) => /[?&]v=2(&|$)/.test(c))).toBe(true); // luôn gắn dấu giao thức để VS Code mới trả 401 thay vì đóng kết nối
+    expect(authed(t.calls)).toHaveLength(1); // đúng một lần ping ở cổng có VS Code (0.7.20: cổng đóng không qua được /v1/hello nên không bị gửi token)
+    expect(t.calls.every((c) => /[?&]v=2(&|$)/.test(c))).toBe(true); // luôn gắn dấu giao thức (kể cả /v1/hello) để VS Code mới trả 401 thay vì giữ / đóng kết nối
     expect(await link.status()).toMatchObject({ on: false, paired: false, running: false, connected: false, pairing: 'lost', ports: [] });
     expect(fc.local.m.has('nd.bridge')).toBe(false);
-    expect(fc.local.m.get('nd.bridge.lost')).toEqual(expect.any(Number));
+    expect(fc.local.m.get('nd.bridge.lost')).toEqual({ at: expect.any(Number), apps: ['VS Code'] }); // (0.7.20) nhớ cả tên ứng dụng đã ngắt
     expect(t.unreleased()).toEqual([]);
     fc.fireAlarm(); // báo thức cũ (nếu Chrome còn giữ) cũng không dựng lại gì
     await sleep(200);
@@ -495,5 +513,201 @@ describe('cầu nối VS Code (Chrome) — không rò bộ nhớ, không gọi m
     expect(fc.local.m.has('nd.bridge.lost')).toBe(false);
     expect(await bridge.approvePair(bridge.pairRequest()!.id)).toBe(true);
     await waitFor(async () => (await link.status()).connected);
+  });
+});
+
+/**
+ * (0.7.20) Nhiều ứng dụng trên máy (VS Code + bản desktop Locaith Work), MỖI ỨNG DỤNG MỘT token; ghép đôi do ỨNG DỤNG khởi xướng
+ * (trang /link gửi vé qua externally_connectable → cửa sổ «Kết nối» của tiện ích → đổi vé lấy token). Máy chủ cầu THẬT cho cả hai ứng dụng.
+ */
+describe('cầu nối ứng dụng trên máy (0.7.20) — nhiều ứng dụng, ghép đôi do ứng dụng khởi xướng', () => {
+  let work: BrowserBridge;
+  let workPort: number;
+  beforeEach(async () => {
+    work = new BrowserBridge(memStore(), () => undefined, { ports: [0], credTtlMs: 0, connectWaitMs: 4000, app: { kind: 'work', name: 'Locaith Work' } });
+    workPort = await work.start();
+  });
+  afterEach(() => work.stop());
+
+  const ticketOf = async (b: BrowserBridge) => new URL((await b.linkTicket()).url).searchParams.get('t') as string;
+  const lastWindow = () => new URL(fc.log.windowsCreated[fc.log.windowsCreated.length - 1]);
+  /** Ghép kiểu cũ bằng mã để có một token thật của VS Code (như tiện ích ≤ 0.7.19 đã lưu). */
+  const codeToken = async (): Promise<string> => {
+    const { code } = await bridge.startPairing();
+    const r = await fetch(`http://127.0.0.1:${port}/v1/pair`, { method: 'POST', headers: { origin: `chrome-extension://${EXT}`, 'content-type': 'application/json' }, body: JSON.stringify({ code }) });
+    return ((await r.json()) as { token: string }).token;
+  };
+  /** Ứng dụng mở trang /link; trang gửi vé; người dùng bấm «Kết nối» ở cửa sổ nhỏ của tiện ích. */
+  async function linkViaTicket(b: BrowserBridge, p: number): Promise<URL> {
+    const n = fc.log.windowsCreated.length;
+    const t = await ticketOf(b);
+    expect(await fc.sendExternal({ type: 'nd-link-ticket', t, v: 2 }, `http://127.0.0.1:${p}`)).toEqual({ ok: true });
+    await until(() => fc.log.windowsCreated.length === n + 1);
+    const w = lastWindow();
+    expect(await fc.send({ type: 'nd-link-decision', req: w.searchParams.get('req'), decision: 'connect' })).toEqual({ ok: true });
+    return w;
+  }
+
+  it('vé từ trang /link → cửa sổ «Kết nối» nêu tên + cổng ứng dụng → bấm Kết nối → token RIÊNG của ứng dụng đó, nối ngay (không cần bật công tắc trước)', async () => {
+    mkLink({ ports: [port, workPort] });
+    expect((await link.status()).on).toBe(false);
+    const w = await linkViaTicket(work, workPort);
+    expect(w.pathname).toBe('/bridge-approve.html');
+    expect(w.searchParams.get('mode')).toBe('app');
+    expect(w.searchParams.get('app')).toBe('Locaith Work');
+    expect(w.searchParams.get('port')).toBe(String(workPort));
+    await until(async () => (await link.status()).connected);
+    const s = await link.status();
+    expect(s).toMatchObject({ on: true, paired: true, running: true, connected: true, pairing: 'idle', lost: [] });
+    expect(s.apps).toEqual([{ kind: 'work', name: 'Locaith Work', connected: true }]);
+    expect(work.lastTicket()?.state).toBe('paired');
+    expect(work.status()).toMatchObject({ paired: true, extensionId: EXT });
+    expect(bridge.status().paired).toBe(false); // VS Code không bị đụng tới
+    expect(await work.call('ping', {})).toMatchObject({ v: 1 });
+  });
+
+  it('hai ứng dụng cùng lúc: mỗi ứng dụng một token, cả hai nhận lệnh; ứng dụng này huỷ ghép đôi thì CHỈ token của nó bị bỏ, ứng dụng kia vẫn nối', async () => {
+    fc.setTabs([{ id: 1, windowId: 1, active: true, url: 'https://shop.example.com/', title: 'Shop', status: 'complete' }]);
+    mkLink({ ports: [port, workPort] });
+    await linkViaTicket(bridge, port);
+    await linkViaTicket(work, workPort);
+    await until(async () => (await link.status()).apps.filter((a) => a.connected).length === 2);
+    const apps = fc.local.m.get('nd.bridge.apps') as Record<string, { token: string; name: string }>;
+    expect(Object.keys(apps).sort()).toEqual(['vscode', 'work']);
+    expect(apps.vscode.token).not.toBe(apps.work.token);
+    expect(await bridge.call('ping', {})).toMatchObject({ v: 1 });
+    expect(await work.call('ping', {})).toMatchObject({ v: 1 });
+    // cửa sổ hỏi duyệt trang nêu đúng ứng dụng đã gửi lệnh
+    const p = work.call('page.read', { tabId: 1 });
+    await until(() => fc.log.windowsCreated.some((u) => u.includes('origin=')));
+    const ask = new URL(fc.log.windowsCreated.find((u) => u.includes('origin='))!);
+    expect(ask.searchParams.get('app')).toBe('Locaith Work');
+    fc.granted.add(permPattern('https://shop.example.com'));
+    await fc.send({ type: 'nd-link-decision', req: ask.searchParams.get('req'), decision: 'once' });
+    expect(await p).toMatchObject({ tabId: 1 });
+    // Locaith Work huỷ ghép đôi → chỉ token của Work bị bỏ
+    await work.unpair();
+    await until(async () => (await link.status()).apps.length === 1);
+    const s = await link.status();
+    expect(s.apps).toEqual([{ kind: 'vscode', name: 'VS Code', connected: true }]);
+    expect(s).toMatchObject({ on: true, running: true, connected: true, pairing: 'lost', lost: ['Locaith Work'] });
+    expect(await bridge.call('ping', {})).toMatchObject({ v: 1 });
+    expect(Object.keys(fc.local.m.get('nd.bridge.apps') as object)).toEqual(['vscode']);
+  });
+
+  it('chỉ nhận vé từ trang của ứng dụng trên máy, đúng cổng cầu nối: trang web / cổng khác / vé sai dạng bị bỏ, không mở cửa sổ nào', async () => {
+    mkLink({ ports: [port, workPort] });
+    const t = await ticketOf(work);
+    expect(await fc.sendExternal({ type: 'nd-link-ticket', t }, 'https://evil.example')).toEqual({ ok: false, reason: 'origin' });
+    expect(await fc.sendExternal({ type: 'nd-link-ticket', t }, 'http://127.0.0.1:3000')).toEqual({ ok: false, reason: 'origin' });
+    expect(await fc.sendExternal({ type: 'nd-link-ticket', t }, `http://127.0.0.1:${workPort}.evil.example`)).toEqual({ ok: false, reason: 'origin' });
+    expect(await fc.sendExternal({ type: 'nd-link-ticket', t }, `https://127.0.0.1:${workPort}`)).toEqual({ ok: false, reason: 'origin' });
+    expect(await fc.sendExternal({ type: 'nd-link-ticket', t: 'ngan' }, `http://127.0.0.1:${workPort}`)).toBeUndefined();
+    expect(await fc.sendExternal({ type: 'nd-link-toggle', on: true }, `http://127.0.0.1:${workPort}`)).toBeUndefined();
+    await new Promise((r) => setTimeout(r, 100));
+    expect(fc.log.windowsCreated).toEqual([]);
+    expect(work.lastTicket()?.state).toBe('pending');
+    expect((await link.status()).on).toBe(false);
+    // localhost cũng là trang của ứng dụng trên máy
+    expect(await fc.sendExternal({ type: 'nd-link-ticket', t }, `http://localhost:${workPort}`)).toEqual({ ok: true });
+    await until(() => fc.log.windowsCreated.length === 1);
+  });
+
+  it('bấm «Không kết nối» hoặc đóng cửa sổ → vé bị huỷ ở ứng dụng, không có token; trang tải lại không mở cửa sổ thứ hai', async () => {
+    mkLink({ ports: [port, workPort] });
+    const origin = `http://127.0.0.1:${workPort}`;
+    const t = await ticketOf(work);
+    await fc.sendExternal({ type: 'nd-link-ticket', t }, origin);
+    await until(() => fc.log.windowsCreated.length === 1);
+    await fc.sendExternal({ type: 'nd-link-ticket', t }, origin); // trang tải lại
+    await new Promise((r) => setTimeout(r, 100));
+    expect(fc.log.windowsCreated).toHaveLength(1);
+    expect(await fc.send({ type: 'nd-link-decision', req: lastWindow().searchParams.get('req'), decision: 'deny' })).toEqual({ ok: true });
+    await until(() => work.lastTicket()?.state === 'denied');
+    expect(fc.local.m.has('nd.bridge.apps')).toBe(false);
+    // vé mới, người dùng đóng cửa sổ bằng nút X (cửa sổ giả đánh số từ 100)
+    const t2 = await ticketOf(work);
+    await fc.sendExternal({ type: 'nd-link-ticket', t: t2 }, origin);
+    await until(() => fc.log.windowsCreated.length === 2);
+    await new Promise((r) => setTimeout(r, 50));
+    fc.closeWindow(101);
+    await until(() => work.lastTicket()?.state === 'denied');
+    expect((await link.status()).paired).toBe(false);
+  });
+
+  it('Chrome tắt dịch vụ nền khi người dùng còn đọc cửa sổ «Kết nối»: bấm Kết nối sau đó vẫn có tác dụng (yêu cầu nằm ở storage.session)', async () => {
+    mkLink({ ports: [port, workPort] });
+    const t = await ticketOf(work);
+    await fc.sendExternal({ type: 'nd-link-ticket', t }, `http://127.0.0.1:${workPort}`);
+    await until(() => fc.log.windowsCreated.length === 1);
+    const req = lastWindow().searchParams.get('req');
+    // dịch vụ nền khởi động lại: mọi thứ trong bộ nhớ mất, chỉ còn kho của trình duyệt
+    link.shutdown();
+    const before = fc;
+    fc = fakeChrome();
+    for (const [k, v] of before.local.m) fc.local.m.set(k, v);
+    for (const [k, v] of before.session.m) fc.session.m.set(k, v);
+    g.chrome = fc.chrome;
+    mkLink({ ports: [port, workPort] });
+    expect(await fc.send({ type: 'nd-link-decision', req, decision: 'connect' })).toEqual({ ok: true });
+    await until(async () => (await link.status()).connected);
+    expect(work.lastTicket()?.state).toBe('paired');
+    expect([...fc.session.m.keys()].filter((k) => k.startsWith('nd.link.ask.'))).toEqual([]); // dọn sau khi xong
+    // mã yêu cầu lạ / đã dùng thì không làm gì
+    expect(await fc.send({ type: 'nd-link-decision', req, decision: 'connect' })).toEqual({ ok: false });
+  });
+
+  it('chưa đồng ý thông báo dữ liệu (bản phát hành): vé bị trả lại «consent», không mở cửa sổ', async () => {
+    mkLink({ ports: [port, workPort], testBuild: false });
+    const t = await ticketOf(work);
+    expect(await fc.sendExternal({ type: 'nd-link-ticket', t }, `http://127.0.0.1:${workPort}`)).toEqual({ ok: false, reason: 'consent' });
+    expect(fc.log.windowsCreated).toEqual([]);
+  });
+
+  it('token cũ (bản ≤ 0.7.19, chưa rõ của ứng dụng nào) được VS Code nhận → tự chuyển thành token của VS Code', async () => {
+    const token = await codeToken();
+    await fc.local.set({ 'nd.bridge': { token }, 'nd.bridge.on': true });
+    mkLink({ ports: [port, workPort] });
+    await until(async () => (await link.status()).connected);
+    expect(fc.local.m.get('nd.bridge.apps')).toEqual({ vscode: { token, name: 'VS Code', at: expect.any(Number) } });
+    expect(fc.local.m.has('nd.bridge')).toBe(false);
+    expect((await link.status()).apps).toEqual([{ kind: 'vscode', name: 'VS Code', connected: true }]);
+  });
+
+  it('token cũ bị Locaith Work từ chối khi VS Code đang đóng → KHÔNG bỏ (có thể là của VS Code); VS Code bản mới từ chối thì mới bỏ', async () => {
+    await fc.local.set({ 'nd.bridge': { token: 'token-cua-vscode-dang-dong' }, 'nd.bridge.on': true });
+    bridge.stop();
+    mkLink({ ports: [port, workPort] });
+    await new Promise((r) => setTimeout(r, 500));
+    let s = await link.status();
+    expect(s).toMatchObject({ paired: true, on: true, connected: false });
+    expect(s.pairing).not.toBe('lost');
+    expect(fc.local.m.get('nd.bridge')).toEqual({ token: 'token-cua-vscode-dang-dong' });
+    port = await bridge.start(); // VS Code mở lại (bản mới, cổng mới) — và không nhận token đó
+    link.shutdown();
+    mkLink({ ports: [port, workPort] });
+    await until(async () => (await link.status()).pairing === 'lost');
+    s = await link.status();
+    expect(s).toMatchObject({ paired: false, on: false, running: false, lost: ['VS Code'] });
+  });
+
+  it('máy chủ cầu cũ (≤ 0.7.19, chưa có /v1/hello) vẫn nối được bằng token cũ — và /v1/hello luôn có dấu ?v=2', async () => {
+    const token = await codeToken();
+    await fc.local.set({ 'nd.bridge': { token }, 'nd.bridge.on': true });
+    const calls: string[] = [];
+    // giả máy chủ cũ: /v1/hello không có → 401 như mọi đường cần token
+    const oldServer: typeof fetch = async (u, init) => {
+      calls.push(String(u));
+      if (String(u).includes('/v1/hello')) return new Response('{"error":"unauthorized"}', { status: 401, headers: { 'content-type': 'application/json' } });
+      return extFetch(u, init);
+    };
+    mkLink({ ports: [port], fetch: oldServer });
+    await until(async () => (await link.status()).connected);
+    const hellos = calls.filter((c) => c.includes('/v1/hello'));
+    expect(hellos.length).toBeGreaterThan(0);
+    expect(hellos.every((c) => /[?&]v=2(&|$)/.test(c))).toBe(true);
+    expect((await link.status()).apps).toEqual([{ kind: '?', name: '', connected: true }]); // chưa rõ ứng dụng nào: giữ nguyên, giao diện hiện «ứng dụng trên máy»
+    expect(fc.local.m.get('nd.bridge')).toEqual({ token });
+    expect(await bridge.call('ping', {})).toMatchObject({ v: 1 });
   });
 });

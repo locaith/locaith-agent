@@ -97,7 +97,7 @@ export interface BrowserControllerDeps {
   /** (0.7.10) Đồng ý thông báo dữ liệu theo tài khoản + mức đã dùng của hạn mức (cùng bộ với bản VS Code). Vắng = không có thẻ đồng ý. */
   locaith?: LocaithGate;
   /**
-   * (0.7.12) Cầu nối VS Code: công tắc + danh sách trang đã cho phép (service worker giữ trạng thái — xem src/browser/link/linkSw.ts). Vắng = không có phần «Kết nối với VS Code» trong Cài đặt.
+   * (0.7.12) Cầu nối VS Code: công tắc + danh sách trang đã cho phép (service worker giữ trạng thái — xem src/browser/link/linkSw.ts). Vắng = không có phần «Kết nối với ứng dụng trên máy» trong Cài đặt.
    */
   link?: BrowserLinkHost;
   /** Gửi một đánh giá về Locaith (mặc định ở panel.tsx = `postRating`). Bỏ trống = không gửi gì (kiểm thử / chạy không mạng): đánh giá vẫn được ghi nhận và chờ gửi. */
